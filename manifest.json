@@ -1,0 +1,36 @@
+{
+  "name": "Nurture — Baby Tracker",
+  "short_name": "Nurture",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fff7f9",
+  "theme_color": "#fff7f9",
+  "orientation": "portrait-primary",
+  "description": "Free offline baby feeding and pumping tracker. Daily goals, milk stash manager with FIFO expiry, and bottle safety timers. Your data never leaves your phone.",
+  "categories": ["medical", "lifestyle", "parenting"],
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

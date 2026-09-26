@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Nurture — Baby Tracker</title>
+  <meta name="description" content="Nurture: a free offline baby feeding and pumping tracker. Daily goals, milk stash manager with FIFO expiry, and bottle safety timers. Your data never leaves your phone.">
+  <meta name="theme-color" content="#F5F0E6">
+  
+  <!-- Apple Touch & PWA Configuration -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Nurture">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app-viewport">
+    
+    <!-- Top Persistent Reminder Banner -->
+    <header class="reminder-banner state-upcoming" id="reminderBanner" role="region" aria-label="Pump Schedule Reminder">
+      <div class="reminder-left">
+        <div class="reminder-dot"></div>
+        <div class="reminder-title" id="reminderLabel">Calculating next pump...</div>
+      </div>
+      <button class="reminder-action-btn" id="reminderActionBtn">Pump Now</button>
+    </header>
+
+    <!-- Romantic App Header with Ribbon Bow & Floral Motif -->
+    <div class="app-header">
+      <div class="brand">
+        <div class="brand-icon-wrap">
+          <img src="icons/icon.svg" alt="App Logo" class="brand-icon">
+          <!-- Fine-Line Ribbon Bow Badge -->
+          <svg class="brand-bow-badge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 12c-2.5-3-5.5-3.5-7.5-1.5s-1 5 1.5 6.5l6-5z"/>
+            <path d="M12 12c2.5-3 5.5-3.5 7.5-1.5s1 5-1.5 6.5l-6-5z"/>
+            <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
+            <path d="M10 14l-3 6"/>
+            <path d="M14 14l3 6"/>
+          </svg>
+        </div>
+        <div class="brand-text-wrap">
+          <h1 class="brand-name" id="appBrandName">Nurture<span>.</span></h1>
+          <span class="brand-subtitle" id="appBrandSubtitle">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+            <span id="appBrandSubtitleText">Baby Tracker</span>
+          </span>
+        </div>
+      </div>
+      <div class="header-meta">
+        <!-- Clock theme indicator chip -->
+        <div class="theme-clock-chip" id="themeClockChip" title="Clock Theme Mode">
+          <svg id="themeClockIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+          <span id="themeClockLabel">Day</span>
+        </div>
+        <button class="unit-chip-toggle" id="unitToggleBtn" title="Toggle Unit (oz / mL)">oz</button>
+      </div>
+    </div>
+
+    <!-- Main Content Views -->
+    <main class="main-content">
+      
+      <!-- =================================================================
+           TAB 1: PUMPS (UNIFIED TRACK & TRENDS DASHBOARD)
+      ================================================================== -->
+      <section class="tab-pane active" id="tab-today" aria-label="Today Dashboard">
+        
+        <!-- TILE 1: DAILY GOAL & ANIMATED MILK BOTTLE -->
+        <div class="goal-bottle-tile" id="goalBottleTile">
+          
+          <!-- Animated SVG Milk Bottle Graphic with Fine-Line Floral Vine & Measurements -->
+          <div class="bottle-visual-wrapper">
+            <svg class="bottle-svg-canvas" viewBox="0 0 96 176" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="milkGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#FDFBF6" />
+                  <stop offset="35%" stop-color="#D9A179" />
+                  <stop offset="100%" stop-color="#B26E4B" />
+                </linearGradient>
+
+                <clipPath id="innerBottleClip">
+                  <path d="M 30 38 
+                           C 30 38, 16 52, 16 70 
+                           L 16 146 
+                           C 16 160, 24 164, 48 164 
+                           C 72 164, 80 160, 80 146 
+                           L 80 70 
+                           C 80 52, 66 38, 66 38 Z" />
+                </clipPath>
+              </defs>
+
+              <!-- Bottle Collar / Teat in Rose Gold -->
+              <rect x="35" y="10" width="26" height="12" rx="4" fill="var(--rose-border)" stroke="var(--border-gold)" stroke-width="1.8"/>
+              <path d="M 32 22 L 64 22 L 68 38 L 28 38 Z" fill="var(--bg-card-subtle)" stroke="var(--border-fine)" stroke-width="1.8"/>
+
+              <!-- Outer Bottle Glass Silhouette with Fine Line -->
+              <path d="M 30 38 
+                       C 30 38, 16 52, 16 70 
+                       L 16 146 
+                       C 16 160, 24 164, 48 164 
+                       C 72 164, 80 160, 80 146 
+                       L 80 70 
+                       C 80 52, 66 38, 66 38 Z" 
+                    fill="var(--bg-card-subtle)" 
+                    stroke="var(--border-fine)" 
+                    stroke-width="2" />
+
+              <!-- Liquid Area (Clipped inside bottle) -->
+              <g clip-path="url(#innerBottleClip)">
+                <rect id="bottleMilkLiquid" class="bottle-milk-liquid" x="14" y="160" width="68" height="0" />
+                <g id="liquidWaveSurface" style="display: none;">
+                  <path class="liquid-wave-layer" d="M 0 0 C 15 -3, 30 3, 45 0 C 60 -3, 75 3, 90 0 C 105 -3, 120 3, 135 0 L 135 15 L 0 15 Z" fill="#FDFBF6" opacity="0.9"/>
+                </g>
+              </g>
+
+              <!-- Delicate Fine-Line Floral Vine Accents on Left Edge -->
+              <path d="M 22 75 C 20 85, 23 95, 20 105 C 18 115, 22 125, 20 135" stroke="var(--rose-primary)" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+              <circle cx="21" cy="85" r="2.2" fill="var(--rose-primary)" opacity="0.5"/>
+              <circle cx="22" cy="105" r="2.2" fill="var(--rose-primary)" opacity="0.5"/>
+              <circle cx="19" cy="125" r="2.2" fill="var(--rose-primary)" opacity="0.5"/>
+
+              <!-- Rose Gold Measurement Scale Lines -->
+              <line x1="66" y1="130" x2="76" y2="130" stroke="var(--border-gold)" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="69" y1="102" x2="76" y2="102" stroke="var(--border-gold)" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="66" y1="74" x2="76" y2="74" stroke="var(--border-gold)" stroke-width="1.5" stroke-linecap="round"/>
+              <line x1="69" y1="50" x2="76" y2="50" stroke="var(--rose-primary)" stroke-width="2" stroke-linecap="round"/>
+
+              <!-- Delicate Glass Highlight -->
+              <path d="M 24 72 L 24 140" stroke="#ffffff" stroke-width="2" stroke-linecap="round" opacity="0.75"/>
+            </svg>
+          </div>
+
+          <!-- Goal Readout & Interactive Click-to-Edit Goal -->
+          <div class="goal-details-col">
+            <div class="goal-title-row">
+              <span class="goal-title-text">Daily Pumping Target</span>
+              <span class="goal-badge-pill" id="goalBadgePill">0% Goal</span>
+            </div>
+
+            <!-- Clickable Goal Fraction Display -->
+            <div class="goal-fraction-display" id="goalFractionDisplay" title="Tap target to edit goal directly">
+              <span id="goalCurrentValue">0</span> 
+              <span>/ </span>
+              <span id="goalTargetValue" class="goal-target-editable">24</span> 
+              <span class="unit-label-current" style="font-size: 1.1rem; color: var(--text-muted);">oz</span>
+              <input type="number" step="1" inputmode="decimal" id="goalTargetInput" class="stepper-number-input" style="display: none; width: 90px; height: 42px; font-size: 1.8rem;">
+            </div>
+
+            <div class="goal-subtext" id="goalSubtext">
+              24 oz remaining to hit daily goal
+            </div>
+            <div class="goal-next-pump" id="nextPumpLabel">Calculating schedule...</div>
+
+            <div class="goal-adjuster-row">
+              <span class="goal-label-btn">Target:</span>
+              <button class="goal-step-btn" onclick="window.nurtureApp.adjustDailyGoal(-1)">−</button>
+              <button class="goal-step-btn" onclick="window.nurtureApp.adjustDailyGoal(1)">+</button>
+              <span style="font-size: 0.72rem; color: var(--text-muted);">(or tap number to type)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- TILE 1b: TRACK PUMPING (quick duration logging under the pump goal) -->
+        <div class="card-tile pump-tracker-tile" id="pumpTrackerTile">
+          <div class="card-header-row">
+            <div class="card-title">Track pumping</div>
+            <span class="card-subtitle" id="pumpTrackerSub"></span>
+          </div>
+          <button class="pump-tracker-quick" id="pumpTrackerQuickBtn" onclick="window.nurtureApp.openManualPump()" title="Log a pump">
+            <span class="pump-tracker-num" id="pumpTrackerNum">0</span>
+            <span class="pump-tracker-caption">sessions today &mdash; tap to log a pump</span>
+          </button>
+          <div class="pump-tracker-hint">Pick 10 / 15 / 20 minutes or type your own &mdash; or run the pump timer just below &mdash; it logs itself.</div>
+        </div>
+
+        <!-- TILE 1c: HERO PUMP TIMER TILE (live session timer, sits under pump goal) -->
+        <div class="timer-hero-tile" id="timerHeroTile">
+          <div class="timer-status-badge" id="timerStatusBadge">
+            <span class="live-dot"></span>
+            <span id="timerStatusText">Ready for Next Pump</span>
+          </div>
+
+          <div class="timer-digits" id="timerDigits">00:00</div>
+
+          <!-- Pumping Output Stepper & Direct Number Entry Section -->
+          <div class="pump-output-section">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <span style="font-family: var(--font-serif); font-size: 0.92rem; font-weight: 700; font-style: italic; color: var(--text-secondary);">
+                Session Output:
+              </span>
+              <span style="font-size: 0.72rem; color: var(--rose-primary); font-weight: 600;">
+                (tap number to type)
+              </span>
+            </div>
+            
+            <div class="stepper-row">
+              <button class="stepper-btn" id="pumpMinusBtn" aria-label="Decrease volume">−</button>
+              
+              <!-- Direct Click-to-Type Display -->
+              <div class="stepper-val-display" id="stepperValDisplay" title="Tap to enter exact custom amount">
+                <div class="stepper-number" id="stepperPumpVal">3.5</div>
+                <input type="number" step="0.1" inputmode="decimal" id="stepperPumpInput" class="stepper-number-input" style="display: none;">
+                <div class="stepper-unit unit-label-current">oz</div>
+                <div class="stepper-hint-text">tap to type</div>
+              </div>
+
+              <button class="stepper-btn" id="pumpPlusBtn" aria-label="Increase volume">+</button>
+            </div>
+
+            <!-- Quick Increment Chips -->
+            <div class="chips-row">
+              <button class="chip-btn" data-delta="0.5">+0.5</button>
+              <button class="chip-btn" data-delta="1.0">+1.0</button>
+              <button class="chip-btn" data-delta="2.0">+2.0</button>
+              <button class="chip-btn" data-delta="3.0">+3.0</button>
+            </div>
+
+            <!-- Auto-save to Fridge / Freezer Stash -->
+            <div class="stash-destination-selector">
+              <span class="stash-dest-label">Auto-save milk to:</span>
+              <select class="stash-dest-select" id="stashDestSelect">
+                <option value="fridge">Refrigerator</option>
+                <option value="freezer">Freezer Stash</option>
+                <option value="deepFreezer">Deep Chest</option>
+                <option value="none">Don't store in stash</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Start / Stop Action Button -->
+          <button class="main-timer-action-btn start-btn" id="mainTimerBtn">
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span>Start Pumping</span>
+          </button>
+
+          <button class="timer-cancel-btn" id="cancelTimerBtn" style="display: none;">
+            Discard Timer
+          </button>
+
+          <button class="timer-cancel-btn" id="manualPumpBtn">
+            or log a pump manually
+          </button>
+        </div>
+
+        <!-- PRIMARY ACTION: log feed first, feeds list below it -->
+        <div class="today-action-row">
+          <button class="btn-primary" id="logFeedBtn">
+            Log feed
+          </button>
+        </div>
+
+        <!-- TILE 1d: TODAY'S FEEDS TRACKER (rows quick-edit) -->
+        <div class="card-tile feeds-tracker-tile" id="feedsTrackerTile">
+          <div class="card-header-row">
+            <div class="card-title">Today's Feeds</div>
+            <span class="card-subtitle" id="feedsTrackerCount"></span>
+          </div>
+          <div id="feedsTrackerRows" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- TILE 1e: THAW FROM STASH (frozen → thawed, ready for the feed flow) -->
+        <div class="card-tile thaw-tile" id="thawTile">
+          <div class="card-header-row">
+            <div class="card-title">Thaw from Stash</div>
+            <span class="card-subtitle">thawed milk is good 24h</span>
+          </div>
+          <div class="thaw-subheader">Frozen stash — tap to thaw (oldest first)</div>
+          <div id="thawFrozenRows" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Dynamically populated -->
+          </div>
+          <div id="thawMoreLine" style="margin-top: 6px;" hidden></div>
+          <div class="thaw-subheader" style="margin-top: 14px;">Thawed &amp; ready</div>
+          <div id="thawReadyRows" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <div class="arch-divider" aria-hidden="true">
+          <svg width="120" height="34" viewBox="0 0 120 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 45 32 L 45 18 A 15 15 0 0 1 75 18 L 75 32" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="6" y1="24" x2="34" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="86" y1="24" x2="114" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="60" cy="24" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+
+        <!-- URGENT ITEMS (rendered by renderTodayUrgent; hidden when all calm) -->
+        <div class="card-tile today-urgent" id="todayUrgentCard" hidden>
+          <div id="todayUrgentRows"></div>
+        </div>
+
+
+        <!-- TILE 3: EXPANDABLE PUMPS HISTORY ACCORDION -->
+        <div class="pumps-history-tile">
+          <div class="accordion-header" onclick="window.nurtureApp.togglePumpsAccordion()">
+            <div class="accordion-title">
+              <!-- Delicate Bow Motif Icon -->
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 12c-2.5-3-5.5-3.5-7.5-1.5s-1 5 1.5 6.5l6-5z"/>
+                <path d="M12 12c2.5-3 5.5-3.5 7.5-1.5s1 5-1.5 6.5l-6-5z"/>
+                <circle cx="12" cy="12" r="2.2" fill="currentColor"/>
+                <path d="M10 14l-3 6"/>
+                <path d="M14 14l3 6"/>
+              </svg>
+              <span id="accordionTodayHeader">Today's Activity: <strong>0 sessions</strong></span>
+            </div>
+            <div class="accordion-meta">
+              <svg class="accordion-chevron open" id="accordionChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+          </div>
+
+          <div class="accordion-content open" id="accordionPumpsList">
+            <!-- Filter Bar for Pumps vs Feeds -->
+            <div class="activity-filter-bar" id="activityFilterBar">
+              <button class="activity-filter-chip active" data-filter="all">All</button>
+              <button class="activity-filter-chip" data-filter="pumps">Pumps</button>
+              <button class="activity-filter-chip" data-filter="feeds">Feeds</button>
+            </div>
+            <div id="activitySessionsContainer">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <div class="arch-divider" aria-hidden="true">
+          <svg width="120" height="34" viewBox="0 0 120 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 45 32 L 45 18 A 15 15 0 0 1 75 18 L 75 32" stroke="currentColor" stroke-width="1.5"/>
+            <line x1="6" y1="24" x2="34" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="86" y1="24" x2="114" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+            <circle cx="60" cy="24" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+
+        <!-- TILE 4: SUPPLY TRENDS CHART & SUMMARY -->
+        <div class="chart-container-card">
+          <div class="card-header-row">
+            <div>
+              <div class="card-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+                  <polyline points="17 6 23 6 23 12"/>
+                </svg>
+                Supply Trends
+              </div>
+              <div class="card-subtitle">Daily pump yield (Past 7 days)</div>
+            </div>
+            <div style="font-size: 0.88rem; font-weight: 800; color: var(--rose-primary);" id="metricWeekAvg">
+              0 oz/d
+            </div>
+          </div>
+          <div id="chartSvgWrap" style="min-height: 150px; margin-top: 10px;"></div>
+
+          <button class="btn-secondary" id="exportCsvBtn" style="margin-top: 14px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+            </svg>
+            Export Log for Pediatrician (CSV)
+          </button>
+        </div>
+
+      </section>
+
+      <!-- =================================================================
+           TAB 2: INVENTORY (FIFO STASH)
+      ================================================================== -->
+      <section class="tab-pane" id="tab-inventory" aria-label="Milk Inventory">
+        
+        <!-- Stash Summary Grid -->
+        <div class="stash-summary-grid">
+          <div class="stash-metric-tile">
+            <div class="stash-metric-val" id="stashTotalVolume">0 oz</div>
+            <div class="stash-metric-label">Total Stash</div>
+          </div>
+          <div class="stash-metric-tile">
+            <div class="stash-metric-val" id="stashFridgeVolume">0 oz</div>
+            <div class="stash-metric-label">In Fridge</div>
+          </div>
+          <div class="stash-metric-tile">
+            <div class="stash-metric-val" id="stashFreezerVolume">0 oz</div>
+            <div class="stash-metric-label">In Freezers</div>
+          </div>
+        </div>
+
+        <!-- Filter Pills -->
+        <div class="filter-pills-row">
+          <button class="filter-pill active" data-filter="all">All Stash</button>
+          <button class="filter-pill" data-filter="fridge">Fridge</button>
+          <button class="filter-pill" data-filter="freezer">Freezer</button>
+          <button class="filter-pill" data-filter="deepFreezer">Deep Chest</button>
+          <button class="filter-pill" data-filter="archived">Archived</button>
+        </div>
+
+        <!-- Add Stored Milk Button -->
+        <button class="btn-secondary" id="openAddMilkModalBtn" style="border-color: var(--border-fine); color: var(--rose-primary);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Stored Milk Pouch
+        </button>
+
+        <!-- FIFO Item List -->
+        <div class="inventory-list" id="inventoryListContainer">
+          <!-- Dynamically populated -->
+        </div>
+
+      </section>
+
+      <!-- =================================================================
+           TAB 4: SETTINGS
+      ================================================================== -->
+      <section class="tab-pane" id="tab-settings" aria-label="App Settings">
+        
+        <div class="card-tile">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+            <span id="settingsPreferencesTitle">My Preferences</span>
+          </div>
+          
+          <div class="settings-section">
+            <!-- Profile Names -->
+            <div class="settings-row">
+              <div class="settings-label-wrap">
+                <div class="settings-label">Your Name (Parent)</div>
+                <div class="settings-desc">Used in greetings, goals, and dashboard.</div>
+              </div>
+              <div>
+                <input type="text" class="settings-input-control settings-name-input" id="settingParentNameInput" placeholder="Your name" value="">
+              </div>
+            </div>
+
+            <div class="settings-row">
+              <div class="settings-label-wrap">
+                <div class="settings-label">Baby's Name</div>
+                <div class="settings-desc">Displayed on brand header and bottles.</div>
+              </div>
+              <div>
+                <input type="text" class="settings-input-control settings-name-input" id="settingBabyNameInput" placeholder="Baby's name" value="">
+              </div>
+            </div>
+            <!-- Daily Goal Stepper -->
+            <div class="settings-row">
+              <div class="settings-label-wrap">
+                <div class="settings-label">Daily Pumping Target</div>
+                <div class="settings-desc">Goal for the animated filling bottle.</div>
+              </div>
+              <div>
+                <input type="number" step="1" class="settings-input-control" id="settingDailyGoalInput" value="24" min="4" max="80">
+              </div>
+            </div>
+
+            <!-- Theme Mode Selection -->
+            <div class="settings-row">
+              <div class="settings-label-wrap">
+                <div class="settings-label">Theme Schedule</div>
+                <div class="settings-desc">Auto checks clock: Light after 8:00 AM, Dark after 7:00 PM.</div>
+              </div>
+              <div>
+                <select class="settings-input-control" id="settingThemeSelect">
+                  <option value="auto">Auto (8am Light / 7pm Dark)</option>
+                  <option value="light">Always Light (Porcelain Pink)</option>
+                  <option value="dark">Always Dark (Night Mode)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Units -->
+            <div class="settings-row">
+              <div class="settings-label-wrap">
+                <div class="settings-label">Display Units</div>
+                <div class="settings-desc">Choose ounces (oz) or milliliters (mL).</div>
+              </div>
+              <div>
+                <select class="settings-input-control" id="settingUnitSelect" onchange="window.nurtureApp.setUnit(this.value)">
+                  <option value="oz">oz</option>
+                  <option value="mL">mL</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Pumping Interval -->
+            <div class="settings-row">
+              <div class="settings-label-wrap">
+                <div class="settings-label">Pumping Schedule Interval</div>
+                <div class="settings-desc">Calculates next due time from last pump.</div>
+              </div>
+              <div>
+                <select class="settings-input-control" id="settingIntervalSelect">
+                  <option value="120">2 Hours</option>
+                  <option value="150">2.5 Hours</option>
+                  <option value="180">3 Hours</option>
+                  <option value="210">3.5 Hours</option>
+                  <option value="240">4 Hours</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Gentle Sound Chime -->
+            <div class="settings-row">
+              <div class="settings-label-wrap">
+                <div class="settings-label">Gentle Audio Chimes</div>
+                <div class="settings-desc">Soft marimba tone for session completions.</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="soundToggle" checked>
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <button class="btn-secondary" id="testChimeBtn" style="height: 40px; font-size: 0.82rem;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              Play Sample Chime
+            </button>
+          </div>
+        </div>
+
+        <!-- Push Notifications Note -->
+        <div class="card-tile">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            Schedule Notifications
+          </div>
+          <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.45; margin: 8px 0 12px;">
+            The top in-app banner always tracks your overdue status. You can also enable browser push alerts.
+          </div>
+          <button class="btn-secondary" id="requestNotifyBtn">
+            Enable Best-Effort Push Notifications
+          </button>
+        </div>
+
+        <!-- Custom Storage Expiration Rules -->
+        <div class="card-tile">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+              <line x1="16" y1="2" x2="16" y2="6"/>
+              <line x1="8" y1="2" x2="8" y2="6"/>
+              <line x1="3" y1="10" x2="21" y2="10"/>
+            </svg>
+            Expiration Windows (CDC Defaults)
+          </div>
+          <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 12px;">
+            Adjust if your pediatrician recommends different storage timelines.
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-row">
+              <span class="settings-label">Refrigerator (Days)</span>
+              <input type="number" class="settings-input-control" id="settingWinFridge" value="4" min="1" max="10">
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Upright Freezer (Months)</span>
+              <input type="number" class="settings-input-control" id="settingWinFreezer" value="6" min="1" max="12">
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Deep Chest Freezer (Months)</span>
+              <input type="number" class="settings-input-control" id="settingWinDeepFreezer" value="12" min="1" max="24">
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Thawed Bottle in Fridge (Hours)</span>
+              <input type="number" class="settings-input-control" id="settingWinThawed" value="24" min="1" max="48">
+            </div>
+            <div class="settings-row">
+              <span class="settings-label">Started Bottle Feeding (Hours)</span>
+              <input type="number" class="settings-input-control" id="settingWinStarted" value="2" min="1" max="4">
+            </div>
+          </div>
+
+          <button class="btn-secondary" style="margin-top: 14px;" onclick="window.nurtureApp.saveStorageWindowSettings()">
+            Save Storage Windows
+          </button>
+        </div>
+
+        <!-- Backup and Reset Data -->
+        <div class="card-tile">
+          <div class="card-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Backup & Data Privacy
+          </div>
+          <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 12px;">
+            All data lives strictly on this device in IndexedDB. You can export a full backup anytime.
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <button class="btn-secondary" id="exportJsonBtn">
+              Download Full JSON Backup
+            </button>
+            <label class="btn-secondary" style="margin: 0; cursor: pointer;">
+              Restore from Backup File
+              <input type="file" id="importFileInput" accept=".json" style="display: none;">
+            </label>
+            <button class="btn-secondary" id="replayTourBtn" style="color: var(--rose-primary); border-color: var(--border-fine); margin-top: 4px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
+                <circle cx="12" cy="12" r="10"/>
+                <polygon points="10 8 16 12 10 16 10 8"/>
+              </svg>
+              Replay Welcome Tour
+            </button>
+            <button class="btn-secondary" id="clearAllDataBtn" style="color: var(--red-urgent); border-color: var(--red-border); margin-top: 4px;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+              </svg>
+              Reset All Saved Info (Clean Start)
+            </button>
+          </div>
+        </div>
+
+      </section>
+
+    </main>
+
+    <!-- Bottom Navigation Bar (4 Consolidated Tabs with Elevated Quick Feed) -->
+    <nav class="bottom-nav" role="navigation" aria-label="Main Navigation">
+      <button class="nav-item active" data-tab="today" aria-label="Today">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
+        </svg>
+        <span class="nav-label">Today</span>
+      </button>
+      <button class="nav-item" data-tab="inventory" aria-label="Stash Inventory">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+        <span class="nav-label">Stash</span>
+      </button>
+      <!-- Center Elevated Quick Feed Button -->
+      <button class="nav-quick-feed-btn" id="navQuickFeedBtn" aria-label="Quick Food Tracker" title="Quick Food Tracker">
+        <div class="quick-feed-icon-bubble">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
+            <circle cx="12" cy="14" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <span class="nav-label">Quick Feed</span>
+      </button>
+      <button class="nav-item" data-tab="settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        <span class="nav-label">Settings</span>
+      </button>
+    </nav>
+
+    <!-- =================================================================
+         MODAL: ADD STORED MILK POUCH
+    ================================================================== -->
+    <div class="modal-overlay" id="addMilkModal">
+      <div class="modal-sheet">
+        <div class="modal-sheet-handle"></div>
+        <div class="modal-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Add Stored Milk Pouch
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Pumped Date & Time</label>
+          <input type="datetime-local" class="form-input" id="modalPumpedAt">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Quantity (<span class="unit-label-current">oz</span>)</label>
+          <input type="number" step="0.25" class="form-input" id="modalMilkQty" value="4.0">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Storage Location</label>
+          <select class="form-select" id="modalMilkLoc">
+            <option value="fridge">Refrigerator (4 Days)</option>
+            <option value="freezer">Upright Freezer (6 Months)</option>
+            <option value="deepFreezer">Deep Chest Freezer (12 Months)</option>
+            <option value="room">Room Temp (4 Hours)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Notes / Label (Optional)</label>
+          <input type="text" class="form-input" id="modalMilkNotes" placeholder="e.g. Morning bag #14">
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-ghost" id="closeAddMilkBtn">Cancel</button>
+          <button class="btn-primary" id="saveNewMilkBtn">Save to Stash</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================
+         MODAL: EDIT ACTIVITY SESSION (pump / feed entries in the tracker)
+    ================================================================== -->
+    <div class="modal-overlay" id="editSessionModal">
+      <div class="modal-sheet">
+        <div class="modal-sheet-handle"></div>
+        <div class="modal-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>
+          </svg>
+          <span id="editSessionTitle">Edit Entry</span>
+        </div>
+
+        <div class="form-group" id="editFeedTypeGroup">
+          <label class="form-label">Feed Type</label>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="food-preset-pill" id="editFeedTypeFormula" data-feedtype="formula">Formula</button>
+            <button type="button" class="food-preset-pill" id="editFeedTypeBreastmilk" data-feedtype="breastmilk">Breast Milk</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Quantity (<span id="editSessionUnitLabel">oz</span>)</label>
+          <input type="number" step="0.1" min="0" class="form-input" id="editSessionQty">
+        </div>
+
+        <div class="form-group" id="editDurationGroup">
+          <label class="form-label">Duration (minutes)</label>
+          <input type="number" step="1" min="0" class="form-input" id="editSessionDuration">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Date &amp; Time</label>
+          <input type="datetime-local" class="form-input" id="editSessionTime">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Notes (Optional)</label>
+          <input type="text" class="form-input" id="editSessionNotes" placeholder="Add a note...">
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-ghost" id="closeEditSessionBtn">Cancel</button>
+          <button class="btn-primary" id="saveEditSessionBtn">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================
+         MODAL: MANUAL PUMP ENTRY (log duration + amount, no timer)
+    ================================================================== -->
+    <div class="modal-overlay" id="manualPumpModal">
+      <div class="modal-sheet">
+        <div class="modal-sheet-handle"></div>
+        <div class="modal-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+          <span>Log Pump</span>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Amount Pumped (<span id="manualPumpUnitLabel">oz</span>)</label>
+          <input type="number" step="0.1" min="0" inputmode="decimal" class="form-input" id="manualPumpQty" placeholder="e.g. 4.5">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Duration (minutes)</label>
+          <div class="chips-row" id="manualPumpDurationChips" style="margin-bottom: 10px;">
+            <button type="button" class="chip-btn" data-min="10">10</button>
+            <button type="button" class="chip-btn" data-min="15">15</button>
+            <button type="button" class="chip-btn" data-min="20">20</button>
+          </div>
+          <input type="number" step="1" min="1" inputmode="numeric" class="form-input" id="manualPumpDuration" placeholder="e.g. 20">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Date &amp; Time</label>
+          <input type="datetime-local" class="form-input" id="manualPumpTime">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Save milk to</label>
+          <select class="form-input" id="manualPumpDest">
+            <option value="fridge">Refrigerator</option>
+            <option value="freezer">Freezer Stash</option>
+            <option value="deepFreezer">Deep Chest</option>
+            <option value="none">Don't store in stash</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Notes (Optional)</label>
+          <input type="text" class="form-input" id="manualPumpNotes" placeholder="Add a note...">
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn-ghost" id="closeManualPumpBtn">Cancel</button>
+          <button class="btn-primary" id="saveManualPumpBtn">Log Pump</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- =================================================================
+         MODAL: WELCOME ONBOARDING FLOW
+    ================================================================== -->
+    <div class="onboarding-overlay" id="onboardingModal" style="display: none;" role="dialog" aria-modal="true" aria-label="Welcome to Nurture">
+      <div class="onboarding-card">
+        <!-- Delicate Ribbon Progress Header -->
+        <div class="onboarding-header">
+          <div class="onboarding-step-dots">
+            <span class="step-dot active" id="dotStep1"></span>
+            <span class="step-dot" id="dotStep2"></span>
+            <span class="step-dot" id="dotStep3"></span>
+            <span class="step-dot" id="dotStep4"></span>
+          </div>
+          <button class="onboarding-skip-btn" id="skipOnboardingBtn" title="Skip setup">Skip</button>
+        </div>
+
+        <!-- STEP 1: WARM WELCOME & NAMES -->
+        <div class="onboarding-step" id="onboardingStep1">
+          <div class="onboarding-hero-icon">
+            <img src="icons/apple-touch-icon.png" alt="Baby Bottle Crest" class="onboarding-crest-img">
+          </div>
+          <h2 class="onboarding-title" id="obStep1Title">Welcome</h2>
+          <div class="onboarding-subtitle">
+            Your peaceful, private space to track daily pumping, liquid gold stash, and baby feedings.
+          </div>
+
+          <!-- Name Inputs -->
+          <div class="onboarding-names-grid">
+            <div class="onboarding-field-group">
+              <label class="onboarding-field-label" for="obParentNameInput">Your Name</label>
+              <input type="text" id="obParentNameInput" class="onboarding-text-input" placeholder="e.g. Savannah" value="" autocomplete="given-name">
+            </div>
+            <div class="onboarding-field-group">
+              <label class="onboarding-field-label" for="obBabyNameInput">Baby's Name</label>
+              <input type="text" id="obBabyNameInput" class="onboarding-text-input" placeholder="e.g. Clara or Baby" value="" autocomplete="off">
+            </div>
+          </div>
+
+          <div class="onboarding-highlight-box">
+            <div class="highlight-item">
+              <span class="highlight-icon ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+              <div class="highlight-text"><strong>100% Private & Offline</strong> — Stored only on your device. No accounts, ads, or tracking.</div>
+            </div>
+            <div class="highlight-item">
+              <span class="highlight-icon ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg></span>
+              <div class="highlight-text"><strong>Focused on Pumping</strong> — Fast 1-tap logging with an animated bottle that tracks your daily goal.</div>
+            </div>
+          </div>
+
+          <button class="onboarding-primary-btn" id="onboardingNextBtn1">
+            <span>Personalize My Goals</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- STEP 2: PERSONALIZE GOALS & ROUTINE -->
+        <div class="onboarding-step" id="onboardingStep2" style="display: none;">
+          <div style="text-align: center;">
+            <span class="onboarding-badge-pill">Step 2 of 4</span>
+          </div>
+          <h2 class="onboarding-title">Your Daily Target</h2>
+          <div class="onboarding-subtitle">
+            Your animated milk bottle will rise with liquid gold throughout the day as you log pumps.
+          </div>
+
+          <!-- Goal Volume Input -->
+          <div class="onboarding-field-group">
+            <label class="onboarding-field-label">Daily Pumping Target Volume</label>
+            <div class="onboarding-goal-stepper">
+              <button class="onboarding-step-btn" id="obGoalMinus">−</button>
+              <div class="onboarding-goal-display">
+                <input type="number" id="obGoalInput" value="24" min="5" max="100" class="onboarding-num-input">
+                <span class="onboarding-unit-tag" id="obUnitTag">oz</span>
+              </div>
+              <button class="onboarding-step-btn" id="obGoalPlus">+</button>
+            </div>
+          </div>
+
+          <!-- Interval Selector -->
+          <div class="onboarding-field-group">
+            <label class="onboarding-field-label">How often do you pump?</label>
+            <div class="onboarding-chips-grid" id="obIntervalChips">
+              <button class="ob-chip" data-hours="2">Every 2h</button>
+              <button class="ob-chip" data-hours="2.5">Every 2.5h</button>
+              <button class="ob-chip active" data-hours="3">Every 3h</button>
+              <button class="ob-chip" data-hours="3.5">Every 3.5h</button>
+              <button class="ob-chip" data-hours="4">Every 4h</button>
+            </div>
+            <div class="onboarding-hint">The top banner reminds you when you're next due.</div>
+          </div>
+
+          <div class="onboarding-actions-row">
+            <button class="btn-ghost" id="onboardingBackBtn2">Back</button>
+            <button class="onboarding-primary-btn" id="onboardingNextBtn2" style="flex: 1;">
+              <span>Save to Phone</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 3: SAVE TO HOME SCREEN GUIDE -->
+        <div class="onboarding-step" id="onboardingStep3" style="display: none;">
+          <div style="text-align: center;">
+            <span class="onboarding-badge-pill">Step 3 of 4</span>
+          </div>
+          <h2 class="onboarding-title">Save to Your Home Screen</h2>
+          <div class="onboarding-subtitle">
+            Install this tracker on your phone so it opens full-screen like a real app, with no browser bars and full offline support.
+          </div>
+
+          <!-- Platform Selector Tabs -->
+          <div class="install-guide-tabs">
+            <button class="install-tab-btn active" id="tabInstallIos">iPhone (Safari)</button>
+            <button class="install-tab-btn" id="tabInstallAndroid">Android (Chrome)</button>
+          </div>
+
+          <!-- iPhone Instructions -->
+          <div class="install-steps-card" id="guideIosCard">
+            <div class="install-step-row">
+              <div class="install-step-num">1</div>
+              <div class="install-step-desc">
+                In <strong>Safari</strong>, tap the <strong>Share button</strong>
+                <svg class="share-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                  <polyline points="16 6 12 2 8 6"/>
+                  <line x1="12" y1="2" x2="12" y2="15"/>
+                </svg>
+                at the bottom of your phone screen.
+              </div>
+            </div>
+            <div class="install-step-row">
+              <div class="install-step-num">2</div>
+              <div class="install-step-desc">
+                Scroll down and tap <strong>"Add to Home Screen"</strong>
+                <span class="inline-badge">Add to Home Screen</span>
+              </div>
+            </div>
+            <div class="install-step-row">
+              <div class="install-step-num">3</div>
+              <div class="install-step-desc">
+                Tap <strong>Add</strong> in the top right. Our pink baby bottle icon will appear on your home screen!
+              </div>
+            </div>
+          </div>
+
+          <!-- Android Instructions -->
+          <div class="install-steps-card" id="guideAndroidCard" style="display: none;">
+            <div class="install-step-row">
+              <div class="install-step-num">1</div>
+              <div class="install-step-desc">
+                In <strong>Chrome</strong>, tap the <strong>three dots (⋮)</strong> menu in the top right corner.
+              </div>
+            </div>
+            <div class="install-step-row">
+              <div class="install-step-num">2</div>
+              <div class="install-step-desc">
+                Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.
+              </div>
+            </div>
+            <div class="install-step-row">
+              <div class="install-step-num">3</div>
+              <div class="install-step-desc">
+                Confirm, and the app icon will appear right on your home screen and app drawer!
+              </div>
+            </div>
+          </div>
+
+          <div class="onboarding-actions-row">
+            <button class="btn-ghost" id="onboardingBackBtn3">Back</button>
+            <button class="onboarding-primary-btn" id="onboardingNextBtn3" style="flex: 1;">
+              <span>How It Works</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- STEP 4: FEATURE HIGHLIGHTS & READY -->
+        <div class="onboarding-step" id="onboardingStep4" style="display: none;">
+          <div style="text-align: center;">
+            <span class="onboarding-badge-pill">Step 4 of 4</span>
+          </div>
+          <h2 class="onboarding-title" id="obFinishTitle">You're All Set</h2>
+          <div class="onboarding-subtitle" id="obFinishSubtitle">
+            Three quick tips to get the most out of your tracker:
+          </div>
+
+          <div class="onboarding-features-list">
+            <div class="feature-card">
+              <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg></div>
+              <div class="feature-details">
+                <div class="feature-name">Fast Direct Logging</div>
+                <div class="feature-desc">Start the pump timer, or simply tap the output digits to type exact amounts directly.</div>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="2.5" x2="12" y2="21.5"/><line x1="3.9" y1="7.5" x2="20.1" y2="16.5"/><line x1="20.1" y1="7.5" x2="3.9" y2="16.5"/></svg></div>
+              <div class="feature-details">
+                <div class="feature-name">Smart FIFO Milk Stash</div>
+                <div class="feature-desc">Auto-saves to fridge or freezer with automatic CDC expiration countdowns.</div>
+              </div>
+            </div>
+
+            <div class="feature-card">
+              <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8.5 8.5 0 0 1 10.5 4 8.5 8.5 0 1 0 20 13.5z"/></svg></div>
+              <div class="feature-details">
+                <div class="feature-name">3 AM Low Brightness</div>
+                <div class="feature-desc">Switches to soothing Vintage Rose Noir at 7:00 PM for comfortable night pumping.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="onboarding-actions-row">
+            <button class="btn-ghost" id="onboardingBackBtn4">Back</button>
+            <button class="onboarding-primary-btn" id="onboardingFinishBtn" style="flex: 1;">
+              <span>Start Tracking</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         FEED FLOW: guided bottom sheet (tap) + express gesture (hold)
+    ================================================================== -->
+    <div class="modal-overlay" id="feedFlowOverlay">
+      <div class="modal-sheet ff-sheet" role="dialog" aria-modal="true" aria-label="Log feed">
+        <div class="ff-grabber" aria-hidden="true"></div>
+        <div class="ff-header">
+          <div class="ff-title">Log feed</div>
+          <button class="ff-close" id="ffCloseBtn" aria-label="Close feed flow">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- STEP 1: type -->
+        <div class="ff-step active" id="ffStepType">
+          <p class="ff-step-hint">What kind of feed?</p>
+          <button class="ff-type-btn" id="ffTypeFormula">
+            <span class="ff-type-text"><strong>Formula</strong><small>Powder or ready-to-feed</small></span>
+            <span class="ff-type-check" aria-hidden="true">✓</span>
+          </button>
+          <button class="ff-type-btn" id="ffTypeBreastmilk">
+            <span class="ff-type-text"><strong>Breast milk</strong><small>Fresh or thawed</small></span>
+            <span class="ff-type-check" aria-hidden="true">✓</span>
+          </button>
+          <div class="ff-thawed-block" id="ffThawedBlock" hidden>
+            <p class="ff-step-hint">Or use thawed stash</p>
+            <div id="ffThawedSources" style="display: flex; flex-direction: column; gap: 8px;"></div>
+          </div>
+        </div>
+
+        <!-- STEP 2: amount -->
+        <div class="ff-step" id="ffStepAmount">
+          <button class="ff-back-link" id="ffBackToType">← Type</button>
+          <p class="ff-step-hint">How much?</p>
+          <div class="ff-amount-hero" id="ffAmountHero" title="Tap to type exact amount">
+            <span class="ff-amount-value" id="ffAmountValue">4.0</span><span class="ff-amount-unit" id="ffAmountUnit">oz</span>
+          </div>
+          <input type="number" class="ff-amount-input" id="ffAmountInput" hidden aria-label="Exact amount">
+          <input type="range" class="ff-amount-slider" id="ffAmountSlider" min="0" max="10" step="0.1" value="4" aria-label="Amount slider">
+          <div class="ff-preset-row" id="ffPresetRow"></div>
+          <p class="ff-step-hint">Feeding now? The live timer counts down the safety window (1h formula, 2h breast milk) so you know if the bottle is still good.</p>
+          <div class="ff-btn-row">
+            <button class="btn-primary" id="ffStartTimerBtn">Start live timer</button>
+            <button class="btn-secondary" id="ffAmountNext">Log finished feed</button>
+          </div>
+        </div>
+
+        <!-- STEP 3: review -->
+        <div class="ff-step" id="ffStepReview">
+          <p class="ff-step-hint">Look right?</p>
+          <div class="ff-review-card">
+            <div class="ff-review-row"><span>Type</span><strong id="ffReviewType">Formula</strong></div>
+            <div class="ff-review-row"><span>Amount</span><strong id="ffReviewAmount">4.0 oz</strong></div>
+            <div class="ff-review-row"><span>Time</span><strong id="ffReviewTime">—</strong></div>
+          </div>
+          <p class="ff-review-note">Nothing's saved until you confirm.</p>
+          <div class="ff-btn-row">
+            <button class="btn-secondary" id="ffBackToAmount">Adjust amount</button>
+            <button class="btn-primary" id="ffConfirmLog">Log feed ✓</button>
+          </div>
+        </div>
+
+        <!-- STEP 4: success -->
+        <div class="ff-step" id="ffStepSuccess">
+          <div class="ff-success-check" aria-hidden="true">✓</div>
+          <div class="ff-success-line" id="ffSuccessLine">Feed logged</div>
+          <div class="ff-success-tally" id="ffSuccessTally"></div>
+          <div class="ff-btn-row">
+            <button class="btn-primary" id="ffDoneBtn">Done</button>
+          </div>
+        </div>
+
+        <!-- EXPRESS PAD (press-and-hold gesture surface) -->
+        <div class="ff-express-pad" id="ffExpressPad" hidden>
+          <div class="ff-deadzone"><span>holds pick</span></div>
+          <div class="ff-express-hud">
+            <div class="ff-live-type" id="ffLiveType">Formula</div>
+            <div class="ff-live-readout" id="ffLiveReadout">0.0 oz</div>
+            <div class="ff-express-hint">Slide up / down for type &bull; left / right for amount<br>Lift to review</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================================
+         BOTTLE TIMER: setup → live feed → review & log
+    ================================================================== -->
+    <div class="modal-overlay" id="bottleOverlay">
+      <div class="modal-sheet ff-sheet" role="dialog" aria-modal="true" aria-label="Bottle timer">
+        <div class="ff-grabber" aria-hidden="true"></div>
+        <div class="ff-header">
+          <div class="ff-title" id="btTitle">Start bottle</div>
+          <button class="ff-close" id="btCloseBtn" aria-label="Close bottle timer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
+        <!-- SETUP -->
+        <div class="ff-step active" id="btStepSetup">
+          <p class="ff-step-hint">What's in the bottle?</p>
+          <button class="ff-type-btn is-selected" id="btTypeFormula">
+            <span class="ff-type-text"><strong>Formula</strong><small>Good for 1 hour once started</small></span>
+            <span class="ff-type-check" aria-hidden="true">✓</span>
+          </button>
+          <button class="ff-type-btn" id="btTypeBreastmilk">
+            <span class="ff-type-text"><strong>Breast milk</strong><small>Good for 2 hours once started</small></span>
+            <span class="ff-type-check" aria-hidden="true">✓</span>
+          </button>
+          <p class="ff-step-hint">Prepared amount</p>
+          <div class="ff-amount-hero" id="btAmountHero" title="Tap to type exact amount">
+            <span class="ff-amount-value" id="btAmountValue">4.0</span><span class="ff-amount-unit" id="btAmountUnit">oz</span>
+          </div>
+          <input type="number" class="ff-amount-input" id="btAmountInput" hidden aria-label="Exact prepared amount">
+          <input type="range" class="ff-amount-slider" id="btAmountSlider" min="0" max="10" step="0.1" value="4" aria-label="Prepared amount slider">
+          <div class="ff-preset-row" id="btPresetRow"></div>
+          <div class="ff-btn-row">
+            <button class="btn-primary" id="btStartBtn">Start timer ⏱</button>
+          </div>
+        </div>
+
+        <!-- LIVE -->
+        <div class="ff-step" id="btStepLive">
+          <div class="bt-live-label">FEEDING</div>
+          <div class="bt-elapsed" id="btElapsed">00:00</div>
+          <div class="bt-safety" id="btSafety">Good for 2h 0m</div>
+          <div class="bt-progress"><div class="bt-progress-fill" id="btProgressFill" style="width: 100%;"></div></div>
+          <div class="bt-meta" id="btLiveMeta"></div>
+          <div class="ff-btn-row">
+            <button class="btn-secondary" id="btCancelBtn">Cancel</button>
+            <button class="btn-primary" id="btStopBtn">Stop &amp; review</button>
+          </div>
+        </div>
+
+        <!-- REVIEW -->
+        <div class="ff-step" id="btStepReview">
+          <p class="ff-step-hint">How much was actually eaten?</p>
+          <div class="ff-amount-hero" id="btEatenHero" title="Tap to type exact amount">
+            <span class="ff-amount-value" id="btEatenValue">4.0</span><span class="ff-amount-unit" id="btEatenUnit">oz</span>
+          </div>
+          <input type="number" class="ff-amount-input" id="btEatenInput" hidden aria-label="Exact amount eaten">
+          <input type="range" class="ff-amount-slider" id="btEatenSlider" min="0" max="10" step="0.1" value="4" aria-label="Amount eaten slider">
+          <div class="bt-review-pace" id="btPaceLine"></div>
+          <div class="ff-btn-row">
+            <button class="btn-secondary" id="btBackToLive">Back</button>
+            <button class="btn-primary" id="btLogBtn">Log feed ✓</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Floating Celebration Toast -->
+    <div class="feed-toast" id="feedToast" aria-live="polite">
+      <div class="feed-toast-content">
+        <span class="feed-toast-icon" id="feedToastIcon">✓</span>
+        <div class="feed-toast-text">
+          <div class="feed-toast-title" id="feedToastTitle">Logged Successfully!</div>
+          <div class="feed-toast-desc" id="feedToastDesc">4.0 oz Formula recorded</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modules Entry Point -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
