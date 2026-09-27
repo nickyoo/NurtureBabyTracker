@@ -1240,6 +1240,100 @@ body {
   text-align: right;
 }
 
+.session-item-right.has-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.session-item-right.is-hint {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.session-action-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.session-group-header {
+  margin: 10px 0 6px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.note-italic-muted {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.note-italic-secondary {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.empty-state-msg {
+  text-align: center;
+  padding: 20px 10px;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.btn-history-toggle {
+  height: 38px;
+  font-size: 0.78rem;
+  margin-top: 8px;
+}
+
+.empty-stash-msg {
+  text-align: center;
+  padding: 36px 20px;
+  color: var(--text-muted);
+}
+
+.empty-stash-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.empty-stash-sub {
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.inv-qty-unit {
+  font-size: 0.85rem;
+  color: var(--rose-primary);
+  font-weight: 700;
+}
+
+.inv-status-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.thaw-action-btn {
+  flex: 0 0 auto;
+  width: auto;
+  padding: 0 14px;
+}
+
+.btn-more-stash {
+  font-size: 0.78rem;
+}
+
 .session-vol-tag {
   font-family: var(--font-heading);
   font-size: 1.15rem;
@@ -1869,6 +1963,14 @@ input:checked + .slider:before {
 .nav-quick-feed-btn:active .quick-feed-icon-bubble {
   transform: scale(0.92);
   box-shadow: 0 2px 8px var(--rose-glow);
+}
+
+.nav-quick-feed-btn.active .quick-feed-icon-bubble {
+  box-shadow: 0 4px 20px var(--rose-glow), inset 0 1px 1.5px rgba(255, 255, 255, 0.6), 0 0 0 3px var(--bg-app), 0 0 0 4.5px var(--rose-primary);
+}
+
+.nav-quick-feed-btn.active .nav-label {
+  font-weight: 800;
 }
 
 .quick-feed-icon-bubble svg {
@@ -2928,6 +3030,29 @@ input:checked + .slider:before {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.06); opacity: 0.85; }
 }
+@keyframes pulse-badge {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(196, 68, 68, 0.35); }
+  50% { box-shadow: 0 0 0 4px rgba(196, 68, 68, 0.18); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* ——— Respect reduced-motion preference: kill infinite/attention animations,
+   shorten everything else instead of disabling motion outright ——— */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
 
 /* ——— Center Quick Feed button: no long-press callout / text selection during express gesture ——— */
 #navQuickFeedBtn {
@@ -3041,3 +3166,39 @@ input:checked + .slider:before {
 .highlight-icon.ob-icon-svg svg { width: 18px; height: 18px; }
 .today-urgent-icon svg { width: 22px; height: 22px; display: block; }
 .feed-toast-icon { font-size: 1.4rem; line-height: 1; }
+
+/* -------------------------------------------------------------
+   SHARED UTILITY CLASSES (replacing former inline style="" soup —
+   these back the dynamically-populated row containers and small
+   one-off text/layout tweaks that used to live in index.html)
+------------------------------------------------------------- */
+.u-flex-col-gap8 { display: flex; flex-direction: column; gap: 8px; }
+.u-flex-row-gap8 { display: flex; gap: 8px; }
+.u-flex-between { display: flex; justify-content: space-between; align-items: center; }
+.u-center { text-align: center; }
+.u-flex-1 { flex: 1; }
+.u-icon-sm { width: 16px; height: 16px; }
+.u-mt-4 { margin-top: 4px; }
+.u-mt-6 { margin-top: 6px; }
+.u-mt-10 { margin-top: 10px; }
+.u-mt-14 { margin-top: 14px; }
+.u-mb-10 { margin-bottom: 10px; }
+.u-mb-12 { margin-bottom: 12px; }
+.u-text-caption { font-size: 0.76rem; color: var(--text-muted); }
+.u-text-caption-lg { font-size: 0.78rem; color: var(--text-secondary); line-height: 1.45; }
+.u-text-hint-rose { font-size: 0.72rem; color: var(--rose-primary); font-weight: 600; }
+.u-text-hint-muted { font-size: 0.72rem; color: var(--text-muted); }
+.visually-hidden-input { display: none; }
+
+/* One-off component styles (were inline on a single element each) */
+.goal-target-input-size { width: 90px; height: 42px; font-size: 1.8rem; }
+.goal-unit-label { font-size: 1.1rem; color: var(--text-muted); }
+.pump-output-header { display: flex; justify-content: space-between; align-items: center; }
+.pump-output-title { font-family: var(--font-serif); font-size: 0.92rem; font-weight: 700; font-style: italic; color: var(--text-secondary); }
+.chart-week-avg { font-size: 0.88rem; font-weight: 800; color: var(--rose-primary); }
+.chart-svg-wrap { min-height: 150px; margin-top: 10px; }
+.add-milk-btn { border-color: var(--border-fine); color: var(--rose-primary); }
+.test-chime-btn { height: 40px; font-size: 0.82rem; }
+.rose-link-btn { color: var(--rose-primary); border-color: var(--border-fine); }
+.danger-btn { color: var(--red-urgent); border-color: var(--red-border); }
+.restore-backup-label { margin: 0; cursor: pointer; }

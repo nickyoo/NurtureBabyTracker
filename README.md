@@ -3,11 +3,12 @@
 A free, offline-first progressive web app for tracking breast-milk pumping and feeding. No account, no backend, no tracking — all data lives in IndexedDB on the device.
 
 **Features**
+- Four tabs: **Pump** (goal, timer, trends, activity history), **Feed** (log feed, today's feeds, thaw from stash — each tab surfaces only the urgent items relevant to it, at the top), **Stash** (FIFO inventory), **Settings**
 - Pump session timer with one-tap output logging
-- Daily pumping goal with an animated bottle-fill progress visual, plus a next-pump-due readout and an "urgents" strip (pump overdue, thawed milk expiring, low stash)
-- Today's Feeds tracker right under the goal — every feed row quick-edits via the tracker-entry editor
-- Thaw-from-stash tile on the main page (shows only when frozen stash exists): frozen stash (oldest first) thaws into a "Thawed & ready" stash that feeds straight into the feed flow as a bottle-ready source
-- Feed logging in two speeds: a guided bottom-sheet flow (pick type → set amount with a 0.1oz slider, tap-to-type, or preset chips → **Start live timer** as the primary path for a feeding in progress, with a CDC safety countdown that answers "is this bottle still good," or Log finished feed for the "Look right?" review) and an **express gesture** — press-and-hold the center + button, slide up/down for formula vs breast milk (with a sticky, hysteresis-locked type picker), left/right for ounces, lift to review
+- Daily pumping goal with an animated bottle-fill progress visual, plus a next-pump-due readout
+- Today's Feeds tracker on the Feed tab — every feed row quick-edits via the tracker-entry editor
+- Thaw-from-stash tile on the Feed tab (shows only when frozen stash exists): frozen stash (oldest first) thaws into a "Thawed & ready" stash that feeds straight into the feed flow as a bottle-ready source
+- Feed logging in two speeds: a guided bottom-sheet flow (pick type → set amount with a 0.1oz slider, tap-to-type, or preset chips → **Start live timer** as the primary path for a feeding in progress, with a CDC safety countdown that answers "is this bottle still good," or Log finished feed for the "Look right?" review) and an **express gesture** — press-and-hold the elevated Feed nav button, slide up/down for formula vs breast milk (with a sticky, hysteresis-locked type picker), left/right for ounces, lift to review
 - Bottle timer: from inside the feed flow, watch the elapsed feed time alongside the per-type CDC safety countdown (formula 1h, breast milk 2h from first feed), then log how much was actually eaten — pace (oz/min) is recorded with the feed
 - Milk stash manager (fridge / freezer / deep freezer / thawed / room temp) with FIFO ordering and CDC-based expiration windows
 - 7-day supply trends chart (SVG, no dependencies)
@@ -15,6 +16,7 @@ A free, offline-first progressive web app for tracking breast-milk pumping and f
 - Tracker entries are editable (Edit button on any session)
 - CSV export for the pediatrician, JSON backup / restore
 - 4-step onboarding: names, daily target, and an Add-to-Home-Screen install guide (iOS + Android)
+- Respects `prefers-reduced-motion`; pinch-zoom is not disabled
 
 **Run it**
 
@@ -44,11 +46,14 @@ manifest.json     PWA manifest (installable, standalone)
 sw.js             Service worker — offline-first cache
 css/style.css     All styling
 js/
-  app.js          Orchestrator: screens, onboarding, settings
+  app.js          Orchestrator: tabs, dashboard/inventory rendering, feed flow,
+                  bottle timer, settings UI, global delegated action dispatch
+  onboarding.js   4-step welcome/setup wizard (composed into App)
   db.js           IndexedDB layer (NurtureDB) + collision-safe IDs
   timer.js        Pump timer with wall-clock restore
   inventory.js    FIFO stash engine + expiration math
-  bottles.js      Bottle safety countdowns
+  bottles.js      Legacy bottle-status helper — superseded by the bottle-timer
+                  logic in app.js; kept only because it still has passing tests
   reminders.js    Pump schedule + local notifications
   trends.js       Daily aggregates + SVG chart
   export.js       CSV export + JSON backup/restore

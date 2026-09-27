@@ -6,6 +6,7 @@ import { inventory, InventoryManager, THAWED_LOCATION, FROZEN_LOCATIONS, shouldS
 import { reminders } from './reminders.js';
 import { TrendsManager } from './trends.js';
 import { ExportManager } from './export.js';
+import { OnboardingController } from './onboarding.js';
 
 /**
  * Inline SVG replacements for decorative emoji in UI copy. Nick asked for a
@@ -167,7 +168,7 @@ export function getBottleTimerStatus(startTs, feedType, nowTs) {
 
 export class App {
   constructor() {
-    this.currentTab = 'today';
+    this.currentTab = 'pump';
     this.pumpsAccordionOpen = true;
     this.showOlderHistory = false;
     this.activityFilter = 'all'; // 'all' | 'pumps' | 'feeds'
@@ -188,6 +189,7 @@ export class App {
         startedBottleHours: 2
       }
     };
+    this.onboarding = new OnboardingController(this);
   }
 
   async init() {
@@ -203,6 +205,7 @@ export class App {
     // 4. Bind Navigation & Global Events
     this.bindNavigation();
     this.bindGlobalModals();
+    this.bindGlobalActions();
 
     // 5. Initialize Core Subsystems
     await this.initTimerUI();
@@ -217,13 +220,13 @@ export class App {
     this.initActivityFilter();
 
     // 7. Onboarding & First Launch check
-    this.initOnboardingEvents();
+    this.onboarding.initEvents();
     await this.checkFirstLaunch();
 
     // 8. Live refresh loops for countdowns and theme clock checks
     setInterval(() => {
       this.checkClockTheme();
-      if (this.currentTab === 'today') this.updateBottleFillLevel();
+      if (this.currentTab === 'pump') this.updateBottleFillLevel();
       if (this.currentTab === 'inventory') this.renderInventory();
     }, 20000);
   }
@@ -428,16 +431,48 @@ export class App {
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tabName);
     });
+    const quickFeedBtn = document.getElementById('navQuickFeedBtn');
+    if (quickFeedBtn) quickFeedBtn.classList.toggle('active', tabName === 'feed');
 
     document.querySelectorAll('.tab-pane').forEach(pane => {
       pane.classList.toggle('active', pane.id === `tab-${tabName}`);
     });
 
-    if (tabName === 'today') this.renderTodayDashboard();
+    if (tabName === 'pump' || tabName === 'feed') this.renderTodayDashboard();
     if (tabName === 'inventory') this.renderInventory();
     if (tabName === 'settings') this.renderSettingsForm();
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  // --- GLOBAL DELEGATED ACTION DISPATCH ---
+  // Every dynamically-rendered row (session entries, inventory tiles, thaw
+  // rows, thawed-source chips) and a handful of static buttons carry a
+  // data-action (+ data-id / data-delta / data-tab as needed) instead of an
+  // inline onclick="" string. One listener here replaces what used to be
+  // ~18 separate onclick="window.nurtureApp...." attributes.
+  bindGlobalActions() {
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-action]');
+      if (!el) return;
+      const id = el.dataset.id;
+      switch (el.dataset.action) {
+        case 'edit-session': this.openEditSession(id); break;
+        case 'delete-session': this.deleteSession(id); break;
+        case 'toggle-older-history': this.toggleOlderHistory(); break;
+        case 'toggle-pumps-accordion': this.togglePumpsAccordion(); break;
+        case 'thaw-item': this.thawItem(id); break;
+        case 'mark-used': this.markUsedItem(id); break;
+        case 'discard-item': this.discardItem(id); break;
+        case 'open-feed-flow': this.openFeedFlow(); break;
+        case 'open-manual-pump': this.openManualPump(); break;
+        case 'pick-thawed-source': this.pickThawedSource(id); break;
+        case 'switch-tab': this.switchTab(el.dataset.tab); break;
+        case 'adjust-goal': this.adjustDailyGoal(parseFloat(el.dataset.delta)); break;
+        case 'save-storage-windows': this.saveStorageWindowSettings(); break;
+        default: break;
+      }
+    });
   }
 
   // --- ONBOARDING & FIRST LAUNCH CHECK ---
@@ -453,234 +488,11 @@ export class App {
     const completedSetting = await db.getSetting('onboarding_completed', false);
     const completedLocal = localStorage.getItem('onboarding_completed') === 'true';
     if (!completedSetting && !completedLocal) {
-      this.showOnboardingModal();
+      this.onboarding.showModal();
     }
   }
 
-  // --- ONBOARDING FLOW LOGIC ---
-  showOnboardingModal() {
-    const modal = document.getElementById('onboardingModal');
-    if (!modal) return;
-    this.onboardingState = {
-      step: 1,
-      parentName: this.settings.parentName || '',
-      babyName: (this.settings.babyName && this.settings.babyName.toLowerCase() !== 'baby') ? this.settings.babyName : '',
-      goal: Number(this.settings.dailyGoalOz) || 24,
-      interval: Number(this.settings.reminderIntervalHours) || 3,
-      unit: this.settings.units || 'oz'
-    };
-
-    const parentInput = document.getElementById('obParentNameInput');
-    const babyInput = document.getElementById('obBabyNameInput');
-    if (parentInput) parentInput.value = this.onboardingState.parentName;
-    if (babyInput) babyInput.value = this.onboardingState.babyName;
-
-    const goalInput = document.getElementById('obGoalInput');
-    const unitTag = document.getElementById('obUnitTag');
-    if (goalInput) goalInput.value = this.onboardingState.goal;
-    if (unitTag) unitTag.textContent = this.onboardingState.unit;
-
-    this.setOnboardingStep(1);
-    modal.style.display = 'flex';
-  }
-
-  hideOnboardingModal() {
-    const modal = document.getElementById('onboardingModal');
-    if (modal) modal.style.display = 'none';
-  }
-
-  setOnboardingStep(step) {
-    if (!this.onboardingState) {
-      this.onboardingState = {
-        step: 1,
-        parentName: this.settings.parentName || '',
-        babyName: this.settings.babyName || '',
-        goal: 24,
-        interval: 3,
-        unit: 'oz'
-      };
-    }
-
-    // Read current names from Step 1 inputs if present
-    const parentInput = document.getElementById('obParentNameInput');
-    const babyInput = document.getElementById('obBabyNameInput');
-    if (parentInput && parentInput.value.trim()) {
-      this.onboardingState.parentName = parentInput.value.trim();
-    }
-    if (babyInput && babyInput.value.trim()) {
-      this.onboardingState.babyName = babyInput.value.trim();
-    }
-
-    // Dynamic greeting update when entering Step 4
-    if (step === 4) {
-      const p = (this.onboardingState.parentName || '').trim();
-      const b = (this.onboardingState.babyName || '').trim();
-      const finishTitle = document.getElementById('obFinishTitle');
-      if (finishTitle) finishTitle.textContent = p ? `You're All Set, ${p}` : `You're All Set`;
-      const finishSubtitle = document.getElementById('obFinishSubtitle');
-      if (finishSubtitle) finishSubtitle.textContent = b ? `Ready to nurture ${b} with ease. Three quick tips:` : `Ready to nurture your little one with ease. Three quick tips:`;
-    }
-
-    this.onboardingState.step = step;
-    for (let i = 1; i <= 4; i++) {
-      const stepEl = document.getElementById(`onboardingStep${i}`);
-      const dotEl = document.getElementById(`dotStep${i}`);
-      if (stepEl) stepEl.style.display = (i === step) ? 'block' : 'none';
-      if (dotEl) {
-        if (i === step) dotEl.classList.add('active');
-        else dotEl.classList.remove('active');
-      }
-    }
-  }
-
-  async finishOnboarding() {
-    // 1. Immediately hide the modal so user is never stuck
-    this.hideOnboardingModal();
-
-    // 2. Clean URL query string if ?reset=true was used
-    if (window.location.search.includes('reset')) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    try {
-      const parentInput = document.getElementById('obParentNameInput');
-      const babyInput = document.getElementById('obBabyNameInput');
-      const pName = (parentInput && parentInput.value.trim()) || (this.onboardingState && this.onboardingState.parentName) || this.settings.parentName || '';
-      const bName = (babyInput && babyInput.value.trim()) || (this.onboardingState && this.onboardingState.babyName) || this.settings.babyName || '';
-
-      const goalInput = document.getElementById('obGoalInput');
-      if (goalInput) {
-        const val = parseFloat(goalInput.value);
-        if (!isNaN(val) && val > 0) {
-          this.onboardingState.goal = Math.round(val);
-        }
-      }
-
-      const goalVal = (this.onboardingState && this.onboardingState.goal) || 24;
-      const intervalVal = (this.onboardingState && this.onboardingState.interval) || 3;
-      const unitVal = (this.onboardingState && this.onboardingState.unit) || 'oz';
-
-      await db.setSetting('parentName', pName);
-      await db.setSetting('babyName', bName);
-      await db.setSetting('dailyPumpingGoal', goalVal);
-      await db.setSetting('reminderIntervalHours', intervalVal);
-      await db.setSetting('preferredUnit', unitVal);
-      await db.setSetting('onboarding_completed', true);
-      localStorage.setItem('onboarding_completed', 'true');
-
-      this.settings.parentName = pName;
-      this.settings.babyName = bName;
-      this.settings.dailyGoalOz = goalVal;
-      this.settings.reminderIntervalHours = intervalVal;
-      this.settings.units = unitVal;
-
-      this.updateNamesUI();
-
-      const goalDisplayEl = document.getElementById('goalTargetValue');
-      if (goalDisplayEl) goalDisplayEl.textContent = goalVal;
-      const settingsGoalInput = document.getElementById('settingDailyGoalInput');
-      if (settingsGoalInput) settingsGoalInput.value = goalVal;
-      const settingsIntervalInput = document.getElementById('settingReminderInterval');
-      if (settingsIntervalInput) settingsIntervalInput.value = intervalVal;
-    } catch (e) {
-      console.warn('Failed to save onboarding settings', e);
-    }
-
-    try {
-      if (typeof audio.playMilestoneChime === 'function') {
-        audio.playMilestoneChime();
-      } else if (typeof audio.playChime === 'function') {
-        audio.playChime('complete');
-      }
-    } catch (e) {
-      // Ignore audio error
-    }
-
-    try {
-      await this.renderTodayDashboard();
-      reminders.init();
-    } catch (e) {
-      console.warn('Post-onboarding render warning', e);
-    }
-  }
-
-  initOnboardingEvents() {
-    const next1 = document.getElementById('onboardingNextBtn1');
-    if (next1) next1.onclick = () => this.setOnboardingStep(2);
-
-    const goalMinus = document.getElementById('obGoalMinus');
-    const goalPlus = document.getElementById('obGoalPlus');
-    const goalInput = document.getElementById('obGoalInput');
-    if (goalMinus && goalInput) {
-      goalMinus.onclick = () => {
-        let v = parseInt(goalInput.value) || 24;
-        if (v > 5) {
-          goalInput.value = v - 1;
-          this.onboardingState.goal = v - 1;
-        }
-      };
-    }
-    if (goalPlus && goalInput) {
-      goalPlus.onclick = () => {
-        let v = parseInt(goalInput.value) || 24;
-        if (v < 120) {
-          goalInput.value = v + 1;
-          this.onboardingState.goal = v + 1;
-        }
-      };
-    }
-
-    const chipsWrap = document.getElementById('obIntervalChips');
-    if (chipsWrap) {
-      chipsWrap.querySelectorAll('.ob-chip').forEach(chip => {
-        chip.onclick = () => {
-          chipsWrap.querySelectorAll('.ob-chip').forEach(c => c.classList.remove('active'));
-          chip.classList.add('active');
-          if (this.onboardingState) {
-            this.onboardingState.interval = parseFloat(chip.getAttribute('data-hours')) || 3;
-          }
-        };
-      });
-    }
-
-    const back2 = document.getElementById('onboardingBackBtn2');
-    if (back2) back2.onclick = () => this.setOnboardingStep(1);
-    const next2 = document.getElementById('onboardingNextBtn2');
-    if (next2) next2.onclick = () => this.setOnboardingStep(3);
-
-    // Step 3 platform tabs (iPhone vs Android)
-    const tabIos = document.getElementById('tabInstallIos');
-    const tabAndroid = document.getElementById('tabInstallAndroid');
-    const cardIos = document.getElementById('guideIosCard');
-    const cardAndroid = document.getElementById('guideAndroidCard');
-    if (tabIos && tabAndroid && cardIos && cardAndroid) {
-      tabIos.onclick = () => {
-        tabIos.classList.add('active');
-        tabAndroid.classList.remove('active');
-        cardIos.style.display = 'flex';
-        cardAndroid.style.display = 'none';
-      };
-      tabAndroid.onclick = () => {
-        tabAndroid.classList.add('active');
-        tabIos.classList.remove('active');
-        cardAndroid.style.display = 'flex';
-        cardIos.style.display = 'none';
-      };
-    }
-
-    const back3 = document.getElementById('onboardingBackBtn3');
-    if (back3) back3.onclick = () => this.setOnboardingStep(2);
-    const next3 = document.getElementById('onboardingNextBtn3');
-    if (next3) next3.onclick = () => this.setOnboardingStep(4);
-
-    const back4 = document.getElementById('onboardingBackBtn4');
-    if (back4) back4.onclick = () => this.setOnboardingStep(3);
-    const finishBtn = document.getElementById('onboardingFinishBtn');
-    if (finishBtn) finishBtn.onclick = () => this.finishOnboarding();
-
-    const skipBtn = document.getElementById('skipOnboardingBtn');
-    if (skipBtn) skipBtn.onclick = () => this.finishOnboarding();
-  }
+  // --- ONBOARDING FLOW LOGIC (js/onboarding.js — this.onboarding) ---
 
   // --- TOP REMINDER BANNER ---
   async initReminders() {
@@ -690,7 +502,7 @@ export class App {
 
     if (actionBtn) {
       actionBtn.addEventListener('click', () => {
-        this.switchTab('today');
+        this.switchTab('pump');
         if (!timer.active) {
           timer.start();
         }
@@ -1082,7 +894,7 @@ export class App {
 
       if (!filteredSessions || filteredSessions.length === 0) {
         contentWrap.innerHTML = `
-          <div style="text-align: center; padding: 20px 10px; color: var(--text-muted); font-size: 0.82rem;">
+          <div class="empty-state-msg">
             No ${this.activityFilter === 'all' ? 'activity' : this.activityFilter} recorded yet today.
           </div>
         `;
@@ -1095,7 +907,7 @@ export class App {
       let html = '';
       if (displayedGroups.length === 0) {
         html += `
-          <div style="text-align: center; padding: 20px 10px; color: var(--text-muted); font-size: 0.82rem;">
+          <div class="empty-state-msg">
             No ${this.activityFilter === 'all' ? 'activity' : this.activityFilter} recorded today.
           </div>
         `;
@@ -1116,7 +928,7 @@ export class App {
           }
 
           return `
-            <div class="session-group-header" style="margin: 10px 0 6px; display: flex; justify-content: space-between; font-size: 0.76rem; font-weight: 700; color: var(--text-muted);">
+            <div class="session-group-header">
               <span>${group.title}</span>
               <span>${summaryTag}</span>
             </div>
@@ -1139,9 +951,9 @@ export class App {
                         <div class="session-sub-title">${timeStr} • ${s.notes || (isFormula ? 'Formula Feeding' : 'Breast Milk Feeding')}</div>
                       </div>
                     </div>
-                    <div class="session-item-right" style="display: flex; gap: 2px;">
-                      <button style="background: none; border: none; color: var(--text-muted); font-size: 0.74rem; cursor: pointer; padding: 4px;" onclick="window.nurtureApp.openEditSession('${s.id}')">Edit</button>
-                      <button style="background: none; border: none; color: var(--text-muted); font-size: 0.74rem; cursor: pointer; padding: 4px;" onclick="window.nurtureApp.deleteSession('${s.id}')">Delete</button>
+                    <div class="session-item-right has-actions">
+                      <button class="session-action-btn" data-action="edit-session" data-id="${s.id}">Edit</button>
+                      <button class="session-action-btn" data-action="delete-session" data-id="${s.id}">Delete</button>
                     </div>
                   </div>
                 `;
@@ -1161,12 +973,12 @@ export class App {
                           <span class="session-badge-tag breastmilk">Pump</span>
                         </div>
                         <div class="session-sub-title">${timeStr} • ${durationMin} min duration</div>
-                        ${s.notes ? `<div style="font-size: 0.72rem; color: var(--text-muted); font-style: italic;">"${s.notes}"</div>` : ''}
+                        ${s.notes ? `<div class="note-italic-muted">"${s.notes}"</div>` : ''}
                       </div>
                     </div>
-                    <div class="session-item-right" style="display: flex; gap: 2px;">
-                      <button style="background: none; border: none; color: var(--text-muted); font-size: 0.74rem; cursor: pointer; padding: 4px;" onclick="window.nurtureApp.openEditSession('${s.id}')">Edit</button>
-                      <button style="background: none; border: none; color: var(--text-muted); font-size: 0.74rem; cursor: pointer; padding: 4px;" onclick="window.nurtureApp.deleteSession('${s.id}')">Delete</button>
+                    <div class="session-item-right has-actions">
+                      <button class="session-action-btn" data-action="edit-session" data-id="${s.id}">Edit</button>
+                      <button class="session-action-btn" data-action="delete-session" data-id="${s.id}">Delete</button>
                     </div>
                   </div>
                 `;
@@ -1180,7 +992,7 @@ export class App {
       const hasOlder = groups.some(g => g.title !== 'Today');
       if (hasOlder) {
         html += `
-          <button class="btn-secondary" style="height: 38px; font-size: 0.78rem; margin-top: 8px;" onclick="window.nurtureApp.toggleOlderHistory()">
+          <button class="btn-secondary btn-history-toggle" data-action="toggle-older-history">
             ${this.showOlderHistory ? 'Hide Previous Days' : 'Show Previous Days (' + (groups.length - 1) + ' days)'}
           </button>
         `;
@@ -1365,9 +1177,9 @@ export class App {
 
     if (!items || items.length === 0) {
       listContainer.innerHTML = `
-        <div class="card-tile" style="text-align: center; padding: 36px 20px; color: var(--text-muted);">
-          <div style="font-size: 1.1rem; font-weight: 700; color: var(--text-secondary);">No milk stored in this view</div>
-          <div style="font-size: 0.8rem; margin-top: 4px;">Tap "Add Stored Milk Pouch" to record a pouch.</div>
+        <div class="card-tile empty-stash-msg">
+          <div class="empty-stash-title">No milk stored in this view</div>
+          <div class="empty-stash-sub">Tap "Add Stored Milk Pouch" to record a pouch.</div>
         </div>
       `;
       return;
@@ -1409,7 +1221,7 @@ export class App {
           ` : ''}
           <div class="inv-card-top">
             <div class="inv-qty-title">
-              ${displayQty} <span style="font-size: 0.85rem; color: var(--rose-primary); font-weight: 700;">${displayUnit}</span>
+              ${displayQty} <span class="inv-qty-unit">${displayUnit}</span>
             </div>
             <div class="inv-countdown-pill ${urgency.badgeClass}">
               ${urgency.label}
@@ -1427,25 +1239,25 @@ export class App {
             </div>
           </div>
 
-          ${item.notes ? `<div style="font-size: 0.78rem; color: var(--text-secondary); font-style: italic;">"${item.notes}"</div>` : ''}
+          ${item.notes ? `<div class="note-italic-secondary">"${item.notes}"</div>` : ''}
 
           ${item.status === 'active' ? `
             <div class="inv-card-actions">
               ${FROZEN_LOCATIONS.includes(item.location) ? `
-              <button class="inv-action-btn thaw-btn" onclick="window.nurtureApp.thawItem('${item.id}')">
+              <button class="inv-action-btn thaw-btn" data-action="thaw-item" data-id="${item.id}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
                 </svg>
                 Thaw
               </button>
               ` : ''}
-              <button class="inv-action-btn" onclick="window.nurtureApp.markUsedItem('${item.id}')">
+              <button class="inv-action-btn" data-action="mark-used" data-id="${item.id}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
                 Used
               </button>
-              <button class="inv-action-btn" onclick="window.nurtureApp.discardItem('${item.id}')">
+              <button class="inv-action-btn" data-action="discard-item" data-id="${item.id}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"/>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -1454,7 +1266,7 @@ export class App {
               </button>
             </div>
           ` : `
-            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-top: 4px;">
+            <div class="inv-status-label">
               Status: ${item.status}
             </div>
           `}
@@ -1509,7 +1321,7 @@ export class App {
 
     if (feeds.length === 0) {
       wrap.innerHTML = `
-        <div style="text-align: center; padding: 18px 10px; color: var(--text-muted); font-size: 0.82rem;">
+        <div class="empty-state-msg">
           No feeds logged yet today \u2014 tap Log feed to start.
         </div>`;
       return;
@@ -1520,7 +1332,7 @@ export class App {
       const timeStr = new Date(s.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       return `
         <div class="session-item-tile feeds-tracker-row" role="button" tabindex="0"
-             title="Tap to quick-edit" onclick="window.nurtureApp.openEditSession('${s.id}')">
+             title="Tap to quick-edit" data-action="edit-session" data-id="${s.id}">
           <div class="session-item-left">
             <div class="session-item-icon ${isFormula ? 'formula-feed-icon' : 'breastmilk-feed-icon'}">
               ${isFormula ? ICON_SVG_BOTTLE : ICON_SVG_DROPLET}
@@ -1533,7 +1345,7 @@ export class App {
               <div class="session-sub-title">${timeStr}${s.notes ? ` \u2022 ${this._escapeHtml(s.notes)}` : ''}</div>
             </div>
           </div>
-          <div class="session-item-right" style="color: var(--text-muted); font-size: 0.74rem;">Edit \u203A</div>
+          <div class="session-item-right is-hint">Edit \u203A</div>
         </div>`;
     }).join('');
   }
@@ -1571,15 +1383,15 @@ export class App {
                   <div class="session-sub-title">Pumped ${pumped}${item.notes ? ` \u2022 ${this._escapeHtml(item.notes)}` : ''}</div>
                 </div>
               </div>
-              <button class="inv-action-btn thaw-btn" style="flex: 0 0 auto; width: auto; padding: 0 14px;"
-                      onclick="window.nurtureApp.thawItem('${item.id}')">Thaw</button>
+              <button class="inv-action-btn thaw-btn thaw-action-btn"
+                      data-action="thaw-item" data-id="${item.id}">Thaw</button>
             </div>`;
         }).join('');
 
     if (moreEl) {
       if (frozen.length > MAX_FROZEN) {
         moreEl.hidden = false;
-        moreEl.innerHTML = `<button class="btn-ghost" style="font-size: 0.78rem;" onclick="window.nurtureApp.switchTab('inventory')">+ ${frozen.length - MAX_FROZEN} more in Stash \u2192</button>`;
+        moreEl.innerHTML = `<button class="btn-ghost btn-more-stash" data-action="switch-tab" data-tab="inventory">+ ${frozen.length - MAX_FROZEN} more in Stash \u2192</button>`;
       } else {
         moreEl.hidden = true;
       }
@@ -1603,8 +1415,8 @@ export class App {
                   <div class="session-sub-title">${sub}</div>
                 </div>
               </div>
-              <button class="inv-action-btn" style="flex: 0 0 auto; width: auto; padding: 0 14px;"
-                      onclick="window.nurtureApp.openFeedFlow()">Feed</button>
+              <button class="inv-action-btn thaw-action-btn"
+                      data-action="open-feed-flow">Feed</button>
             </div>`;
         }).join('');
   }
@@ -1626,7 +1438,7 @@ export class App {
       const urgency = InventoryManager.getUrgency(item.expiresAt);
       const tone = urgency.level === 'expired' ? 'badge-expired' : urgency.badgeClass;
       return `
-        <button type="button" class="ff-thawed-chip" onclick="window.nurtureApp.pickThawedSource('${item.id}')">
+        <button type="button" class="ff-thawed-chip" data-action="pick-thawed-source" data-id="${item.id}">
           <span class="ff-thawed-qty">${this._ffAmtStr(prefill.amountOz)} breast milk</span>
           <span class="inv-countdown-pill ${tone}">${this._escapeHtml(urgency.label)}</span>
         </button>`;
@@ -1729,6 +1541,12 @@ export class App {
       };
       babyNameInput.addEventListener('change', saveBaby);
       babyNameInput.addEventListener('blur', saveBaby);
+    }
+
+    const unitSelect = document.getElementById('settingUnitSelect');
+    if (unitSelect) {
+      unitSelect.value = this.settings.units;
+      unitSelect.addEventListener('change', (e) => this.setUnit(e.target.value));
     }
 
     const themeSelect = document.getElementById('settingThemeSelect');
@@ -1839,7 +1657,7 @@ export class App {
     const replayTourBtn = document.getElementById('replayTourBtn');
     if (replayTourBtn) {
       replayTourBtn.addEventListener('click', () => {
-        this.showOnboardingModal();
+        this.onboarding.showModal();
       });
     }
   }
@@ -2027,7 +1845,7 @@ export class App {
         const wasHold = holdFired;
         cancelHold();
         downPos = null;
-        if (!wasHold) this.openFeedFlow();
+        if (!wasHold) this.switchTab('feed');
       });
       fab.addEventListener('pointercancel', () => { cancelHold(); downPos = null; });
     }
@@ -2658,17 +2476,23 @@ export class App {
     }
   }
 
-  // --- TODAY URGENT STRIP (next-pump-due, bottle expiring, low stash) ---
+  // --- URGENT STRIPS (split by relevance: pump-overdue on the Pump tab;
+  // thawed-milk-expiring / low-stash on the Feed tab, since those are what
+  // you'd act on from that screen) ---
   async renderTodayUrgent() {
-    const card = document.getElementById('todayUrgentCard');
-    const rows = document.getElementById('todayUrgentRows');
-    if (!card || !rows) return;
-    const items = [];
+    const pumpCard = document.getElementById('pumpUrgentCard');
+    const pumpRows = document.getElementById('pumpUrgentRows');
+    const feedCard = document.getElementById('feedUrgentCard');
+    const feedRows = document.getElementById('feedUrgentRows');
+    if (!pumpCard || !pumpRows || !feedCard || !feedRows) return;
+
+    const pumpItems = [];
+    const feedItems = [];
 
     try {
       const sched = await reminders.calculateSchedule();
       if (sched.hasSession && (sched.status === 'overdue' || sched.status === 'due-soon')) {
-        items.push({
+        pumpItems.push({
           tone: sched.status === 'overdue' ? 'tone-overdue' : 'tone-warn',
           icon: ICON_SVG_CLOCK,
           text: sched.label
@@ -2685,7 +2509,7 @@ export class App {
         .find(({ u }) => u.level === 'expired' || u.level === 'red' || u.level === 'yellow');
       if (urgent) {
         const disp = this._displayQty(urgent.item, this.settings.units);
-        items.push({
+        feedItems.push({
           tone: (urgent.u.level === 'expired' || urgent.u.level === 'red') ? 'tone-overdue' : 'tone-warn',
           icon: ICON_SVG_SNOWFLAKE,
           text: `Thawed milk: ${disp.qty} ${disp.qtyUnit} — ${urgent.u.label}`
@@ -2699,7 +2523,7 @@ export class App {
       const summary = await inventory.getStashSummary();
       if (summary.totalOz < 12) {
         const disp = this._ffIsMl() ? Math.round(summary.totalOz * 29.5735) : summary.totalOz;
-        items.push({
+        feedItems.push({
           tone: 'tone-warn',
           icon: ICON_SVG_SNOWFLAKE,
           text: `Low stash: ${disp} ${this.settings.units} left`
@@ -2709,16 +2533,20 @@ export class App {
       console.warn('Urgent strip: stash check failed:', e);
     }
 
-    if (items.length === 0) {
-      card.hidden = true;
-      return;
-    }
-    card.hidden = false;
-    rows.innerHTML = items.map(i => `
-      <div class="today-urgent-row ${i.tone}">
-        <span class="today-urgent-icon" aria-hidden="true">${i.icon}</span>
-        <span class="today-urgent-text">${i.text}</span>
-      </div>`).join('');
+    const paint = (card, rows, items) => {
+      if (items.length === 0) {
+        card.hidden = true;
+        return;
+      }
+      card.hidden = false;
+      rows.innerHTML = items.map(i => `
+        <div class="today-urgent-row ${i.tone}">
+          <span class="today-urgent-icon" aria-hidden="true">${i.icon}</span>
+          <span class="today-urgent-text">${i.text}</span>
+        </div>`).join('');
+    };
+    paint(pumpCard, pumpRows, pumpItems);
+    paint(feedCard, feedRows, feedItems);
   }
   initActivityFilter() {
     const filterChips = document.querySelectorAll('.activity-filter-chip');
