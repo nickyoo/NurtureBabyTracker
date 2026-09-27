@@ -1,12 +1,13 @@
 // Nurture — Master Application Orchestrator
 import { db, newId } from './db.js';
 import { sound } from './audio.js';
-import { timer, normalizePumpDuration } from './timer.js';
+import { timer } from './timer.js';
 import { inventory, InventoryManager, THAWED_LOCATION, FROZEN_LOCATIONS, shouldShowThawTile } from './inventory.js';
 import { reminders } from './reminders.js';
 import { TrendsManager } from './trends.js';
 import { OnboardingController } from './onboarding.js';
 import { SettingsView } from './settingsView.js';
+import { PumpTimerView } from './pumpTimerView.js';
 
 /**
  * Inline SVG replacements for decorative emoji in UI copy. Nick asked for a
@@ -191,6 +192,7 @@ export class App {
     };
     this.onboarding = new OnboardingController(this);
     this.settingsView = new SettingsView(this);
+    this.pumpTimerView = new PumpTimerView(this);
   }
 
   async init() {
@@ -209,7 +211,7 @@ export class App {
     this.bindGlobalActions();
 
     // 5. Initialize Core Subsystems
-    await this.initTimerUI();
+    await this.pumpTimerView.initEvents();
     await this.initReminders();
     await this.renderTodayDashboard();
     await this.renderInventory();
@@ -360,7 +362,7 @@ export class App {
     this.updateUnitLabels();
     this.renderTodayDashboard();
     this.renderInventory();
-    this.updateTimerDisplay(timer.getDisplayData());
+    this.pumpTimerView.updateDisplay(timer.getDisplayData());
   }
 
   async adjustDailyGoal(deltaOz) {
@@ -466,7 +468,7 @@ export class App {
         case 'mark-used': this.markUsedItem(id); break;
         case 'discard-item': this.discardItem(id); break;
         case 'open-feed-flow': this.openFeedFlow(); break;
-        case 'open-manual-pump': this.openManualPump(); break;
+        case 'open-manual-pump': this.pumpTimerView.openManualPump(); break;
         case 'pick-thawed-source': this.pickThawedSource(id); break;
         case 'switch-tab': this.switchTab(el.dataset.tab); break;
         case 'adjust-goal': this.adjustDailyGoal(parseFloat(el.dataset.delta)); break;
@@ -555,200 +557,7 @@ export class App {
     reminders.start();
   }
 
-  // --- TIMER SUBSYSTEM ---
-  async initTimerUI() {
-    const mainTimerBtn = document.getElementById('mainTimerBtn');
-    if (mainTimerBtn) {
-      mainTimerBtn.addEventListener('click', async () => {
-        if (!timer.active) {
-          timer.start();
-        } else {
-          await timer.stopAndSave({
-            units: this.settings.units,
-            storageWindows: this.settings.storageWindows
-          });
-          await this.renderTodayDashboard();
-          await this.renderInventory();
-          await reminders.updateStatus();
-        }
-      });
-    }
-
-    const cancelTimerBtn = document.getElementById('cancelTimerBtn');
-    if (cancelTimerBtn) {
-      cancelTimerBtn.addEventListener('click', () => {
-        if (confirm('Discard current timer without saving?')) {
-          timer.cancel();
-        }
-      });
-    }
-
-    const pumpMinusBtn = document.getElementById('pumpMinusBtn');
-    const pumpPlusBtn = document.getElementById('pumpPlusBtn');
-    if (pumpMinusBtn) {
-      pumpMinusBtn.addEventListener('click', () => {
-        timer.adjustPumpOutput(this.settings.units === 'oz' ? -0.5 : -15, this.settings.units);
-      });
-    }
-    if (pumpPlusBtn) {
-      pumpPlusBtn.addEventListener('click', () => {
-        timer.adjustPumpOutput(this.settings.units === 'oz' ? 0.5 : 15, this.settings.units);
-      });
-    }
-
-    document.querySelectorAll('.chip-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const delta = parseFloat(btn.dataset.delta);
-        timer.adjustPumpOutput(delta, this.settings.units);
-      });
-    });
-
-    const stashDestSelect = document.getElementById('stashDestSelect');
-    if (stashDestSelect) {
-      stashDestSelect.addEventListener('change', (e) => {
-        timer.setStoreDestination(e.target.value);
-      });
-    }
-
-    // Direct Click-to-Type for Pump Output Number
-    const stepperValDisplay = document.getElementById('stepperValDisplay');
-    const stepperPumpVal = document.getElementById('stepperPumpVal');
-    const stepperPumpInput = document.getElementById('stepperPumpInput');
-
-    if (stepperValDisplay && stepperPumpVal && stepperPumpInput) {
-      const showPumpInput = () => {
-        stepperPumpVal.style.display = 'none';
-        stepperPumpInput.style.display = 'block';
-        stepperPumpInput.value = this.settings.units === 'oz' ? timer.pumpOutputOz : timer.pumpOutputMl;
-        stepperPumpInput.focus();
-        stepperPumpInput.select();
-      };
-
-      const commitPumpInput = () => {
-        if (stepperPumpInput.style.display !== 'none') {
-          const val = parseFloat(stepperPumpInput.value);
-          if (!isNaN(val) && val > 0) {
-            timer.setPumpOutput(val, this.settings.units);
-          }
-          stepperPumpInput.style.display = 'none';
-          stepperPumpVal.style.display = 'block';
-        }
-      };
-
-      stepperValDisplay.addEventListener('click', (e) => {
-        if (e.target !== stepperPumpInput) {
-          showPumpInput();
-        }
-      });
-
-      stepperPumpInput.addEventListener('blur', commitPumpInput);
-      stepperPumpInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          commitPumpInput();
-          stepperPumpInput.blur();
-        } else if (e.key === 'Escape') {
-          stepperPumpInput.style.display = 'none';
-          stepperPumpVal.style.display = 'block';
-        }
-      });
-    }
-
-    // Direct Click-to-Type for Daily Goal
-    const goalFractionDisplay = document.getElementById('goalFractionDisplay');
-    const goalTargetValue = document.getElementById('goalTargetValue');
-    const goalTargetInput = document.getElementById('goalTargetInput');
-
-    if (goalFractionDisplay && goalTargetValue && goalTargetInput) {
-      const showGoalInput = () => {
-        goalTargetValue.style.display = 'none';
-        goalTargetInput.style.display = 'inline-block';
-        goalTargetInput.value = this.settings.units === 'oz' 
-          ? this.settings.dailyGoalOz 
-          : Math.round(this.settings.dailyGoalOz * 29.5735);
-        goalTargetInput.focus();
-        goalTargetInput.select();
-      };
-
-      const commitGoalInput = async () => {
-        if (goalTargetInput.style.display !== 'none') {
-          const val = parseFloat(goalTargetInput.value);
-          if (!isNaN(val) && val > 0) {
-            const goalInOz = this.settings.units === 'mL' ? (val / 29.5735) : val;
-            this.settings.dailyGoalOz = Math.round(goalInOz * 10) / 10;
-            await db.setSetting('dailyGoalOz', this.settings.dailyGoalOz);
-            sound.playChime('tick');
-            this.updateBottleFillLevel();
-          }
-          goalTargetInput.style.display = 'none';
-          goalTargetValue.style.display = 'inline';
-        }
-      };
-
-      goalTargetValue.addEventListener('click', (e) => {
-        e.stopPropagation();
-        showGoalInput();
-      });
-
-      goalTargetInput.addEventListener('blur', commitGoalInput);
-      goalTargetInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-          commitGoalInput();
-          goalTargetInput.blur();
-        } else if (e.key === 'Escape') {
-          goalTargetInput.style.display = 'none';
-          goalTargetValue.style.display = 'inline';
-        }
-      });
-    }
-
-    timer.setCallbacks({
-      onTick: (data) => this.updateTimerDisplay(data),
-      onStateChange: () => this.updateTimerDisplay(timer.getDisplayData()),
-      onSaved: () => {
-        this.updateTimerDisplay(timer.getDisplayData());
-      }
-    });
-
-    this.updateTimerDisplay(timer.getDisplayData());
-  }
-
-  updateTimerDisplay(data) {
-    const digitsEl = document.getElementById('timerDigits');
-    const heroTile = document.getElementById('timerHeroTile');
-    const statusText = document.getElementById('timerStatusText');
-    const actionBtn = document.getElementById('mainTimerBtn');
-    const cancelBtn = document.getElementById('cancelTimerBtn');
-
-    digitsEl.textContent = data.formattedTotal;
-    cancelBtn.style.display = data.active ? 'inline-block' : 'none';
-
-    if (heroTile) {
-      heroTile.classList.toggle('active', data.active);
-    }
-
-    if (data.active) {
-      actionBtn.className = 'main-timer-action-btn stop-btn';
-      actionBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-        <span>Finish & Save (${this.settings.units === 'oz' ? data.pumpOutputOz.toFixed(1) + ' oz' : data.pumpOutputMl + ' mL'})</span>
-      `;
-      statusText.textContent = 'Pumping Session in Progress';
-    } else {
-      actionBtn.className = 'main-timer-action-btn start-btn';
-      actionBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <span>Start Pumping</span>
-      `;
-      statusText.textContent = 'Ready for Next Pump';
-    }
-
-    const pumpValEl = document.getElementById('stepperPumpVal');
-    if (pumpValEl) {
-      pumpValEl.textContent = this.settings.units === 'oz'
-        ? data.pumpOutputOz.toFixed(1)
-        : data.pumpOutputMl;
-    }
-  }
+  // --- TIMER SUBSYSTEM (js/pumpTimerView.js — this.pumpTimerView) ---
 
   // --- MERGED PUMPS DASHBOARD (GOAL BOTTLE + ACCORDION + TRENDS) ---
   async renderTodayDashboard() {
@@ -1090,47 +899,7 @@ export class App {
     await this.updateQuickFoodTally();
   }
 
-  // --- MANUAL PUMP ENTRY (log duration + amount, no timer) ---
-  openManualPump() {
-    document.getElementById('manualPumpUnitLabel').textContent = this.settings.units;
-    document.getElementById('manualPumpQty').value = '';
-    document.getElementById('manualPumpDuration').value = '';
-    document.getElementById('manualPumpNotes').value = '';
-    document.getElementById('manualPumpDest').value = timer.storeDestination || 'fridge';
-    const now = new Date();
-    document.getElementById('manualPumpTime').value =
-      new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-    document.getElementById('manualPumpModal').classList.add('open');
-  }
-
-  closeManualPump() {
-    document.getElementById('manualPumpModal').classList.remove('open');
-  }
-
-  async saveManualPump() {
-    const qty = parseFloat(document.getElementById('manualPumpQty').value);
-    if (!qty || qty <= 0) { alert('Please enter a valid amount.'); return; }
-    const durationMin = normalizePumpDuration(document.getElementById('manualPumpDuration').value);
-    if (durationMin === null) { alert('Please enter a valid duration.'); return; }
-
-    const timeVal = document.getElementById('manualPumpTime').value;
-    const startTime = timeVal ? new Date(timeVal).getTime() : Date.now();
-    if (isNaN(startTime)) { alert('Please enter a valid date and time.'); return; }
-
-    await timer.logManualPump({
-      quantity: qty,
-      durationMin,
-      unit: this.settings.units,
-      startTime,
-      notes: document.getElementById('manualPumpNotes').value.trim(),
-      storeDestination: document.getElementById('manualPumpDest').value
-    });
-
-    this.closeManualPump();
-    await this.renderTodayDashboard();
-    await reminders.updateStatus();
-    await this.updateQuickFoodTally();
-  }
+  // --- MANUAL PUMP ENTRY (js/pumpTimerView.js — this.pumpTimerView) ---
 
   // 3. Render 7-day Supply Trends Chart
   async renderTrendsChart() {
@@ -1575,32 +1344,6 @@ export class App {
       });
     }
 
-    // Manual pump entry modal (log duration + amount, no timer)
-    const manualPumpBtn = document.getElementById('manualPumpBtn');
-    if (manualPumpBtn) {
-      manualPumpBtn.addEventListener('click', () => this.openManualPump());
-    }
-    const manualPumpModal = document.getElementById('manualPumpModal');
-    if (manualPumpModal) {
-      document.getElementById('closeManualPumpBtn').addEventListener('click', () => this.closeManualPump());
-      document.getElementById('saveManualPumpBtn').addEventListener('click', () => this.saveManualPump());
-      // Quick-duration chips (10 / 15 / 20 min) fill the typed duration field.
-      manualPumpModal.querySelectorAll('#manualPumpDurationChips .chip-btn').forEach(chip => {
-        chip.addEventListener('click', () => {
-          const minutes = normalizePumpDuration(chip.dataset.min);
-          if (minutes !== null) {
-            document.getElementById('manualPumpDuration').value = String(minutes);
-            sound.playChime('tick');
-          }
-        });
-      });
-      manualPumpModal.addEventListener('click', (e) => {
-        if (e.target === manualPumpModal) this.closeManualPump();
-      });
-      window.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && manualPumpModal.classList.contains('open')) this.closeManualPump();
-      });
-    }
   }
 
   // --- FEED FLOW SUBSYSTEM (guided bottom sheet + express press-and-hold) ---
