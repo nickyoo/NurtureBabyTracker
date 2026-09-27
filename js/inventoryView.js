@@ -161,7 +161,7 @@ export class InventoryView {
     }
     await this.app.renderTodayDashboard();
     await this.render();
-    this.app._ffRenderThawedSources();
+    this.app.feedFlow._ffRenderThawedSources();
   }
 
   initEvents() {
