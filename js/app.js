@@ -8,6 +8,7 @@ import { TrendsManager } from './trends.js';
 import { OnboardingController } from './onboarding.js';
 import { SettingsView } from './settingsView.js';
 import { PumpTimerView } from './pumpTimerView.js';
+import { InventoryView } from './inventoryView.js';
 
 /**
  * Inline SVG replacements for decorative emoji in UI copy. Nick asked for a
@@ -193,6 +194,7 @@ export class App {
     this.onboarding = new OnboardingController(this);
     this.settingsView = new SettingsView(this);
     this.pumpTimerView = new PumpTimerView(this);
+    this.inventoryView = new InventoryView(this);
   }
 
   async init() {
@@ -208,6 +210,7 @@ export class App {
     // 4. Bind Navigation & Global Events
     this.bindNavigation();
     this.bindGlobalModals();
+    this.inventoryView.initEvents();
     this.bindGlobalActions();
 
     // 5. Initialize Core Subsystems
@@ -464,9 +467,9 @@ export class App {
         case 'delete-session': this.deleteSession(id); break;
         case 'toggle-older-history': this.toggleOlderHistory(); break;
         case 'toggle-pumps-accordion': this.togglePumpsAccordion(); break;
-        case 'thaw-item': this.thawItem(id); break;
-        case 'mark-used': this.markUsedItem(id); break;
-        case 'discard-item': this.discardItem(id); break;
+        case 'thaw-item': this.inventoryView.thawItem(id); break;
+        case 'mark-used': this.inventoryView.markUsedItem(id); break;
+        case 'discard-item': this.inventoryView.discardItem(id); break;
         case 'open-feed-flow': this.openFeedFlow(); break;
         case 'open-manual-pump': this.pumpTimerView.openManualPump(); break;
         case 'pick-thawed-source': this.pickThawedSource(id); break;
@@ -916,158 +919,11 @@ export class App {
     if (avgEl) avgEl.textContent = `${avgDailyWeek} ${unit}/d`;
   }
 
-  // --- INVENTORY SUBSYSTEM (FIFO) ---
-  async renderInventory() {
-    const listContainer = document.getElementById('inventoryListContainer');
-    if (!listContainer) return;
-
-    const summary = await inventory.getStashSummary();
-    const unit = this.settings.units;
-    const isMl = unit === 'mL';
-    const totalDisplay = isMl ? Math.round(summary.totalOz * 29.5735) : summary.totalOz;
-    const fridgeDisplay = isMl ? Math.round(summary.fridgeOz * 29.5735) : summary.fridgeOz;
-    const freezerDisplay = isMl ? Math.round((summary.freezerOz + summary.deepFreezerOz) * 29.5735) : Math.round((summary.freezerOz + summary.deepFreezerOz) * 10) / 10;
-
-    const totEl = document.getElementById('stashTotalVolume');
-    const frEl = document.getElementById('stashFridgeVolume');
-    const fzEl = document.getElementById('stashFreezerVolume');
-    if (totEl) totEl.textContent = `${totalDisplay} ${unit}`;
-    if (frEl) frEl.textContent = `${fridgeDisplay} ${unit}`;
-    if (fzEl) fzEl.textContent = `${freezerDisplay} ${unit}`;
-
-    document.querySelectorAll('.filter-pill').forEach(pill => {
-      pill.classList.toggle('active', pill.dataset.filter === inventory.currentFilter);
-      pill.onclick = () => {
-        inventory.currentFilter = pill.dataset.filter;
-        this.renderInventory();
-      };
-    });
-
-    const items = await inventory.getFilteredItems();
-
-    if (!items || items.length === 0) {
-      listContainer.innerHTML = `
-        <div class="card-tile empty-stash-msg">
-          <div class="empty-stash-title">No milk stored in this view</div>
-          <div class="empty-stash-sub">Tap "Add Stored Milk Pouch" to record a pouch.</div>
-        </div>
-      `;
-      return;
-    }
-
-    listContainer.innerHTML = items.map((item, index) => {
-      const isFifoFirst = (index === 0 && item.status === 'active' && inventory.currentFilter !== 'archived');
-      const urgency = InventoryManager.getUrgency(item.expiresAt);
-      const pumpDateStr = new Date(item.pumpedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-      const pumpTimeStr = new Date(item.pumpedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-
-      const locLabels = {
-        fridge: 'Refrigerator',
-        freezer: 'Freezer',
-        deepFreezer: 'Deep Chest',
-        room: 'Room Temp',
-        [THAWED_LOCATION]: 'Thawed (Fridge)'
-      };
-
-      const locName = locLabels[item.location] || item.location;
-
-      let displayQty = item.quantity;
-      let displayUnit = item.unit || 'oz';
-      if (this.settings.units === 'mL' && displayUnit === 'oz') {
-        displayQty = Math.round(item.quantity * 29.5735);
-        displayUnit = 'mL';
-      } else if (this.settings.units === 'oz' && displayUnit === 'mL') {
-        displayQty = Math.round((item.quantity / 29.5735) * 10) / 10;
-        displayUnit = 'oz';
-      }
-
-      return `
-        <div class="inventory-tile ${isFifoFirst ? 'fifo-first' : ''}" data-id="${item.id}">
-          ${isFifoFirst ? `
-            <div class="fifo-badge">
-              <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              Use Next (FIFO)
-            </div>
-          ` : ''}
-          <div class="inv-card-top">
-            <div class="inv-qty-title">
-              ${displayQty} <span class="inv-qty-unit">${displayUnit}</span>
-            </div>
-            <div class="inv-countdown-pill ${urgency.badgeClass}">
-              ${urgency.label}
-            </div>
-          </div>
-
-          <div class="inv-dates-row">
-            <div><span>Pumped:</span> ${pumpDateStr} (${pumpTimeStr})</div>
-            <div class="inv-location-tag">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="2" width="18" height="20" rx="2" ry="2"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
-              </svg>
-              ${locName}
-            </div>
-          </div>
-
-          ${item.notes ? `<div class="note-italic-secondary">"${item.notes}"</div>` : ''}
-
-          ${item.status === 'active' ? `
-            <div class="inv-card-actions">
-              ${FROZEN_LOCATIONS.includes(item.location) ? `
-              <button class="inv-action-btn thaw-btn" data-action="thaw-item" data-id="${item.id}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
-                </svg>
-                Thaw
-              </button>
-              ` : ''}
-              <button class="inv-action-btn" data-action="mark-used" data-id="${item.id}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                Used
-              </button>
-              <button class="inv-action-btn" data-action="discard-item" data-id="${item.id}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <polyline points="3 6 5 6 21 6"/>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-                </svg>
-                Discard
-              </button>
-            </div>
-          ` : `
-            <div class="inv-status-label">
-              Status: ${item.status}
-            </div>
-          `}
-        </div>
-      `;
-    }).join('');
-  }
-
-  async markUsedItem(id) {
-    await inventory.markUsed(id);
-    this.renderInventory();
-  }
-
-  async discardItem(id) {
-    if (confirm('Archive / Discard this item?')) {
-      await inventory.markDiscarded(id);
-      this.renderInventory();
-    }
-  }
-
-  // --- THAW FROM STASH (main page section) ---
-  async thawItem(id) {
-    if (!confirm('Thaw this pouch? It moves from your frozen stash into the thawed stash, ready for the next feed.')) return;
-    const thawed = await inventory.thawItem(id);
-    if (!thawed) {
-      alert('That pouch could not be thawed.');
-      return;
-    }
-    await this.renderTodayDashboard();
-    await this.renderInventory();
-    this._ffRenderThawedSources();
+  // --- INVENTORY SUBSYSTEM (js/inventoryView.js — this.inventoryView) ---
+  // Thin facade: many controllers (settings, pump timer, feed flow, dashboard)
+  // call app.renderInventory() as a stable cross-cutting refresh point.
+  renderInventory() {
+    return this.inventoryView.render();
   }
 
   // --- TODAY'S FEEDS TRACKER (under the pump goal; rows quick-edit) ---
@@ -1286,48 +1142,7 @@ export class App {
 
   // --- MODAL DIALOGS ---
   bindGlobalModals() {
-    const addMilkBtn = document.getElementById('openAddMilkModalBtn');
-    const addMilkModal = document.getElementById('addMilkModal');
-    const closeAddMilkBtn = document.getElementById('closeAddMilkBtn');
-    const saveNewMilkBtn = document.getElementById('saveNewMilkBtn');
-
-    if (addMilkBtn && addMilkModal) {
-      addMilkBtn.addEventListener('click', () => {
-        const now = new Date();
-        const localIso = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-        document.getElementById('modalPumpedAt').value = localIso;
-        document.getElementById('modalMilkQty').value = this.settings.units === 'oz' ? 4.0 : 120;
-        addMilkModal.classList.add('open');
-      });
-
-      closeAddMilkBtn.addEventListener('click', () => addMilkModal.classList.remove('open'));
-
-      saveNewMilkBtn.addEventListener('click', async () => {
-        const pumpedAtVal = document.getElementById('modalPumpedAt').value;
-        const qtyVal = parseFloat(document.getElementById('modalMilkQty').value);
-        const locVal = document.getElementById('modalMilkLoc').value;
-        const notesVal = document.getElementById('modalMilkNotes').value;
-
-        if (!qtyVal || qtyVal <= 0) {
-          alert('Please enter a valid milk volume.');
-          return;
-        }
-
-        const pumpedAt = pumpedAtVal ? new Date(pumpedAtVal).getTime() : Date.now();
-
-        await inventory.addItem({
-          pumpedAt,
-          quantity: qtyVal,
-          unit: this.settings.units,
-          location: locVal,
-          notes: notesVal,
-          storageWindows: this.settings.storageWindows
-        });
-
-        addMilkModal.classList.remove('open');
-        this.renderInventory();
-      });
-    }
+    // Add Stored Milk Pouch modal (js/inventoryView.js — this.inventoryView)
 
     // Edit activity session modal (tracker entries)
     const editSessionModal = document.getElementById('editSessionModal');
