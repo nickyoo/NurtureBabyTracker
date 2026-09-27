@@ -5,8 +5,8 @@ import { timer, normalizePumpDuration } from './timer.js';
 import { inventory, InventoryManager, THAWED_LOCATION, FROZEN_LOCATIONS, shouldShowThawTile } from './inventory.js';
 import { reminders } from './reminders.js';
 import { TrendsManager } from './trends.js';
-import { ExportManager } from './export.js';
 import { OnboardingController } from './onboarding.js';
+import { SettingsView } from './settingsView.js';
 
 /**
  * Inline SVG replacements for decorative emoji in UI copy. Nick asked for a
@@ -190,6 +190,7 @@ export class App {
       }
     };
     this.onboarding = new OnboardingController(this);
+    this.settingsView = new SettingsView(this);
   }
 
   async init() {
@@ -212,7 +213,7 @@ export class App {
     await this.initReminders();
     await this.renderTodayDashboard();
     await this.renderInventory();
-    await this.initSettingsUI();
+    await this.settingsView.initEvents();
 
     // 6. Quick Food Tracker Subsystem & Activity Filters
     this.initFeedFlow();
@@ -440,7 +441,7 @@ export class App {
 
     if (tabName === 'pump' || tabName === 'feed') this.renderTodayDashboard();
     if (tabName === 'inventory') this.renderInventory();
-    if (tabName === 'settings') this.renderSettingsForm();
+    if (tabName === 'settings') this.settingsView.renderForm();
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -469,7 +470,7 @@ export class App {
         case 'pick-thawed-source': this.pickThawedSource(id); break;
         case 'switch-tab': this.switchTab(el.dataset.tab); break;
         case 'adjust-goal': this.adjustDailyGoal(parseFloat(el.dataset.delta)); break;
-        case 'save-storage-windows': this.saveStorageWindowSettings(); break;
+        case 'save-storage-windows': this.settingsView.saveStorageWindows(); break;
         default: break;
       }
     });
@@ -1512,194 +1513,7 @@ export class App {
     return { qty, qtyUnit };
   }
 
-  // --- SETTINGS SUBSYSTEM ---
-  async initSettingsUI() {
-    const parentNameInput = document.getElementById('settingParentNameInput');
-    if (parentNameInput) {
-      parentNameInput.value = this.settings.parentName || '';
-      const saveParent = async () => {
-        const val = parentNameInput.value.trim() || '';
-        parentNameInput.value = val;
-        this.settings.parentName = val;
-        await db.setSetting('parentName', val);
-        this.updateNamesUI();
-        this.updateBottleFillLevel();
-      };
-      parentNameInput.addEventListener('change', saveParent);
-      parentNameInput.addEventListener('blur', saveParent);
-    }
-
-    const babyNameInput = document.getElementById('settingBabyNameInput');
-    if (babyNameInput) {
-      babyNameInput.value = this.settings.babyName || '';
-      const saveBaby = async () => {
-        const val = babyNameInput.value.trim() || '';
-        babyNameInput.value = val;
-        this.settings.babyName = val;
-        await db.setSetting('babyName', val);
-        this.updateNamesUI();
-      };
-      babyNameInput.addEventListener('change', saveBaby);
-      babyNameInput.addEventListener('blur', saveBaby);
-    }
-
-    const unitSelect = document.getElementById('settingUnitSelect');
-    if (unitSelect) {
-      unitSelect.value = this.settings.units;
-      unitSelect.addEventListener('change', (e) => this.setUnit(e.target.value));
-    }
-
-    const themeSelect = document.getElementById('settingThemeSelect');
-    if (themeSelect) {
-      themeSelect.value = this.settings.themeMode || 'auto';
-      themeSelect.addEventListener('change', async (e) => {
-        await this.setThemeMode(e.target.value);
-      });
-    }
-
-    const soundToggle = document.getElementById('soundToggle');
-    if (soundToggle) {
-      soundToggle.checked = this.settings.soundEnabled;
-      soundToggle.addEventListener('change', async (e) => {
-        this.settings.soundEnabled = e.target.checked;
-        sound.setEnabled(e.target.checked);
-        await db.setSetting('soundEnabled', e.target.checked);
-        if (e.target.checked) sound.playChime('complete');
-      });
-    }
-
-    const goalInput = document.getElementById('settingDailyGoalInput');
-    if (goalInput) {
-      goalInput.value = this.settings.dailyGoalOz;
-      goalInput.addEventListener('change', async (e) => {
-        const val = parseFloat(e.target.value) || 24.0;
-        this.settings.dailyGoalOz = val;
-        await db.setSetting('dailyGoalOz', val);
-        this.updateBottleFillLevel();
-      });
-    }
-
-    const intervalSelect = document.getElementById('settingIntervalSelect');
-    if (intervalSelect) {
-      intervalSelect.value = this.settings.pumpIntervalMinutes;
-      intervalSelect.addEventListener('change', async (e) => {
-        const val = parseInt(e.target.value, 10);
-        this.settings.pumpIntervalMinutes = val;
-        await db.setSetting('pumpIntervalMinutes', val);
-        await reminders.updateStatus();
-      });
-    }
-
-    const notifyBtn = document.getElementById('requestNotifyBtn');
-    if (notifyBtn) {
-      notifyBtn.addEventListener('click', async () => {
-        const res = await ReminderManager.requestNotificationPermission();
-        if (res.permission === 'granted') {
-          alert('Notifications enabled! We will ping you for due sessions when available.');
-        } else if (res.permission === 'denied') {
-          alert('Notifications were blocked. Please enable them in your browser/system settings if desired.');
-        } else {
-          alert('Notification permission status: ' + res.permission);
-        }
-      });
-    }
-
-    const testChimeBtn = document.getElementById('testChimeBtn');
-    if (testChimeBtn) {
-      testChimeBtn.addEventListener('click', () => {
-        sound.playChime('complete');
-      });
-    }
-
-    const exportCsvBtn = document.getElementById('exportCsvBtn');
-    if (exportCsvBtn) {
-      exportCsvBtn.addEventListener('click', () => {
-        ExportManager.exportSessionsCsv();
-      });
-    }
-
-    const exportJsonBtn = document.getElementById('exportJsonBtn');
-    if (exportJsonBtn) {
-      exportJsonBtn.addEventListener('click', () => {
-        ExportManager.exportJsonBackup();
-      });
-    }
-
-    const importFileInput = document.getElementById('importFileInput');
-    if (importFileInput) {
-      importFileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          try {
-            await ExportManager.importJsonBackup(file);
-            alert('Data restored successfully!');
-            location.reload();
-          } catch (err) {
-            alert('Failed to restore backup: ' + err.message);
-          }
-        }
-      });
-    }
-
-    const clearDataBtn = document.getElementById('clearAllDataBtn');
-    if (clearDataBtn) {
-      clearDataBtn.addEventListener('click', async () => {
-        const pName = this.settings.parentName || 'you';
-        if (confirm(`Are you sure you want to reset all saved info? This will wipe all test sessions, stash items, and bottle clocks so ${pName} can start completely fresh.`)) {
-          await db.resetAllData();
-          localStorage.removeItem('onboarding_completed');
-          alert(`All data has been reset cleanly for ${pName}.`);
-          location.reload();
-        }
-      });
-    }
-
-    const replayTourBtn = document.getElementById('replayTourBtn');
-    if (replayTourBtn) {
-      replayTourBtn.addEventListener('click', () => {
-        this.onboarding.showModal();
-      });
-    }
-  }
-
-  renderSettingsForm() {
-    const pInput = document.getElementById('settingParentNameInput');
-    const bInput = document.getElementById('settingBabyNameInput');
-    if (pInput && document.activeElement !== pInput) pInput.value = this.settings.parentName || '';
-    if (bInput && document.activeElement !== bInput) bInput.value = this.settings.babyName || '';
-
-    const windows = this.settings.storageWindows || {};
-    const winFridge = document.getElementById('settingWinFridge');
-    const winFreezer = document.getElementById('settingWinFreezer');
-    const winDeepFreezer = document.getElementById('settingWinDeepFreezer');
-    const winThawed = document.getElementById('settingWinThawed');
-    const winStarted = document.getElementById('settingWinStarted');
-    const goalInput = document.getElementById('settingDailyGoalInput');
-
-    if (goalInput) goalInput.value = this.settings.dailyGoalOz;
-    if (winFridge) winFridge.value = windows.fridgeDays || 4;
-    if (winFreezer) winFreezer.value = windows.freezerMonths || 6;
-    if (winDeepFreezer) winDeepFreezer.value = windows.deepFreezerMonths || 12;
-    if (winThawed) winThawed.value = windows.thawedBottleHours || 24;
-    if (winStarted) winStarted.value = windows.startedBottleHours || 2;
-  }
-
-  async saveStorageWindowSettings() {
-    const windows = {
-      roomTempHours: 4,
-      fridgeDays: parseInt(document.getElementById('settingWinFridge').value, 10) || 4,
-      freezerMonths: parseInt(document.getElementById('settingWinFreezer').value, 10) || 6,
-      deepFreezerMonths: parseInt(document.getElementById('settingWinDeepFreezer').value, 10) || 12,
-      thawedBottleHours: parseInt(document.getElementById('settingWinThawed').value, 10) || 24,
-      startedBottleHours: parseInt(document.getElementById('settingWinStarted').value, 10) || 2
-    };
-
-    this.settings.storageWindows = windows;
-    await db.setSetting('storageWindows', windows);
-    sound.playChime('tick');
-    alert('Storage expiration rules saved.');
-    this.renderInventory();
-  }
+  // --- SETTINGS SUBSYSTEM (js/settingsView.js — this.settingsView) ---
 
   // --- MODAL DIALOGS ---
   bindGlobalModals() {
