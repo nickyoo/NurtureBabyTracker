@@ -1,17 +1,15 @@
 // Nurture — Master Application Orchestrator
-import { db, newId } from './db.js';
+import { db } from './db.js';
 import { sound } from './audio.js';
 import { timer } from './timer.js';
-import { inventory, InventoryManager, THAWED_LOCATION, FROZEN_LOCATIONS, shouldShowThawTile } from './inventory.js';
+import { THAWED_LOCATION } from './inventory.js';
 import { reminders } from './reminders.js';
-import { TrendsManager } from './trends.js';
 import { OnboardingController } from './onboarding.js';
 import { SettingsView } from './settingsView.js';
 import { PumpTimerView } from './pumpTimerView.js';
 import { InventoryView } from './inventoryView.js';
 import { DashboardView } from './dashboardView.js';
 import { FeedFlowController } from './feedFlow.js';
-import { escapeHtml } from './viewHelpers.js';
 
 /**
  * Pure merge for editing a logged session (pump or feed).
@@ -201,7 +199,6 @@ export class App {
 
     // 4. Bind Navigation & Global Events
     this.bindNavigation();
-    this.bindGlobalModals();
     this.inventoryView.initEvents();
     this.dashboardView.initEditSessionModal();
     this.bindGlobalActions();
@@ -583,12 +580,7 @@ export class App {
   }
 
   // --- SETTINGS SUBSYSTEM (js/settingsView.js — this.settingsView) ---
-
-  // --- MODAL DIALOGS ---
-  bindGlobalModals() {
-    // Add Stored Milk Pouch modal (js/inventoryView.js — this.inventoryView)
-    // Edit activity session modal (js/dashboardView.js — this.dashboardView)
-  }
+  // --- MODAL DIALOGS: Add Milk (js/inventoryView.js), Edit Session (js/dashboardView.js) ---
 
   // --- FEED FLOW + BOTTLE TIMER (js/feedFlow.js — this.feedFlow) ---
   // Thin facade: called from many places (dashboard, pump timer, inventory).

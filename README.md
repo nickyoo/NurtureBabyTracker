@@ -46,18 +46,34 @@ manifest.json     PWA manifest (installable, standalone)
 sw.js             Service worker — offline-first cache
 css/style.css     All styling
 js/
-  app.js          Orchestrator: tabs, dashboard/inventory rendering, feed flow,
-                  bottle timer, settings UI, global delegated action dispatch
-  onboarding.js   4-step welcome/setup wizard (composed into App)
-  db.js           IndexedDB layer (NurtureDB) + collision-safe IDs
-  timer.js        Pump timer with wall-clock restore
-  inventory.js    FIFO stash engine + expiration math
-  bottles.js      Legacy bottle-status helper — superseded by the bottle-timer
-                  logic in app.js; kept only because it still has passing tests
-  reminders.js    Pump schedule + local notifications
-  trends.js       Daily aggregates + SVG chart
-  export.js       CSV export + JSON backup/restore
-  audio.js        Soft chime synthesizer (baby-sleep-safe)
+  app.js            Thin orchestrator: shared settings state, navigation/tab
+                    switching, theme engine, the global delegated action
+                    dispatch, and the pure exported helpers the unit tests
+                    import directly (applySessionEdits, feed-flow math, etc.)
+  onboarding.js     4-step welcome/setup wizard (composed into App)
+  settingsView.js   Settings tab: preferences form, storage-window rules,
+                    backup/reset
+  pumpTimerView.js  Pump tab hero timer tile + the manual-pump modal
+  inventoryView.js  Stash tab: FIFO list + thaw/mark-used/discard actions
+                    (the shared inventory-mutation actions other views call)
+  dashboardView.js  Goal-bottle fill, activity history, trends chart, feeds
+                    tracker, thaw-from-stash tile, split urgent strips, and
+                    the session-edit modal
+  feedFlow.js       Guided feed-logging sheet, the press-and-hold express
+                    gesture, and the live bottle timer (per-type CDC safety
+                    countdown, persisted across reload)
+  viewHelpers.js    Small pure display helpers (escapeHtml, displayQty)
+                    shared between dashboardView.js and feedFlow.js
+  db.js             IndexedDB layer (NurtureDB) + collision-safe IDs
+  timer.js          Pump timer with wall-clock restore
+  inventory.js      FIFO stash engine + expiration math
+  bottles.js        Legacy bottle-status helper — superseded by the live
+                    bottle-timer in feedFlow.js; kept only because it still
+                    has passing tests
+  reminders.js      Pump schedule + local notifications
+  trends.js         Daily aggregates + SVG chart
+  export.js         CSV export + JSON backup/restore
+  audio.js          Soft chime synthesizer (baby-sleep-safe)
 icons/            PWA icons
 tests/            Unit tests (node:test)
 ```
