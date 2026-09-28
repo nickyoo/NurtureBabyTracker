@@ -77,7 +77,7 @@
     <main class="main-content">
       
       <!-- =================================================================
-           TAB 1: PUMP DASHBOARD (TRACK & TRENDS)
+           TAB 1: PUMP DASHBOARD (GOAL, TIMER, LOG FEED)
       ================================================================== -->
       <section class="tab-pane active" id="tab-pump" aria-label="Pumping Dashboard">
 
@@ -265,14 +265,30 @@
           </button>
         </div>
 
-        <div class="arch-divider" aria-hidden="true">
-          <svg width="120" height="34" viewBox="0 0 120 34" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M 45 32 L 45 18 A 15 15 0 0 1 75 18 L 75 32" stroke="currentColor" stroke-width="1.5"/>
-            <line x1="6" y1="24" x2="34" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            <line x1="86" y1="24" x2="114" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            <circle cx="60" cy="24" r="2" fill="currentColor"/>
-          </svg>
+        <!-- PRIMARY ACTION: log feed first, feeds list below it -->
+        <div class="today-action-row">
+          <button class="btn-primary" id="logFeedBtn">
+            Log feed
+          </button>
         </div>
+
+        <!-- TODAY'S FEEDS TRACKER (rows quick-edit) -->
+        <div class="card-tile feeds-tracker-tile" id="feedsTrackerTile">
+          <div class="card-header-row">
+            <div class="card-title">Today's Feeds</div>
+            <span class="card-subtitle" id="feedsTrackerCount"></span>
+          </div>
+          <div id="feedsTrackerRows" class="u-flex-col-gap8">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- =================================================================
+           TAB 2: HISTORY (TODAY'S ACTIVITY, SUPPLY TRENDS)
+      ================================================================== -->
+      <section class="tab-pane" id="tab-history" aria-label="Activity History">
 
         <!-- TILE 3: EXPANDABLE PUMPS HISTORY ACCORDION -->
         <div class="pumps-history-tile">
@@ -350,31 +366,13 @@
       </section>
 
       <!-- =================================================================
-           TAB 2: FEED (LOG FEED, TODAY'S FEEDS, THAW FROM STASH)
+           TAB 3: INVENTORY (FIFO STASH)
       ================================================================== -->
-      <section class="tab-pane" id="tab-feed" aria-label="Feeding">
+      <section class="tab-pane" id="tab-inventory" aria-label="Milk Inventory">
 
-        <!-- URGENT ITEMS: feed-relevant only (thawed milk expiring / low stash) -->
-        <div class="card-tile today-urgent" id="feedUrgentCard" hidden>
-          <div id="feedUrgentRows"></div>
-        </div>
-
-        <!-- PRIMARY ACTION: log feed first, feeds list below it -->
-        <div class="today-action-row">
-          <button class="btn-primary" id="logFeedBtn">
-            Log feed
-          </button>
-        </div>
-
-        <!-- TODAY'S FEEDS TRACKER (rows quick-edit) -->
-        <div class="card-tile feeds-tracker-tile" id="feedsTrackerTile">
-          <div class="card-header-row">
-            <div class="card-title">Today's Feeds</div>
-            <span class="card-subtitle" id="feedsTrackerCount"></span>
-          </div>
-          <div id="feedsTrackerRows" class="u-flex-col-gap8">
-            <!-- Dynamically populated -->
-          </div>
+        <!-- URGENT ITEMS: stash-relevant (thawed milk expiring / low stash) -->
+        <div class="card-tile today-urgent" id="stashUrgentCard" hidden>
+          <div id="stashUrgentRows"></div>
         </div>
 
         <!-- THAW FROM STASH (frozen → thawed, ready for the feed flow) -->
@@ -394,13 +392,6 @@
           </div>
         </div>
 
-      </section>
-
-      <!-- =================================================================
-           TAB 3: INVENTORY (FIFO STASH)
-      ================================================================== -->
-      <section class="tab-pane" id="tab-inventory" aria-label="Milk Inventory">
-        
         <!-- Stash Summary Grid -->
         <div class="stash-summary-grid">
           <div class="stash-metric-tile">
@@ -659,13 +650,20 @@
 
     </main>
 
-    <!-- Bottom Navigation Bar (4 Consolidated Tabs with Elevated Quick Feed) -->
+    <!-- Bottom Navigation Bar (4 evenly-styled tabs) -->
     <nav class="bottom-nav" role="navigation" aria-label="Main Navigation">
       <button class="nav-item active" data-tab="pump" aria-label="Pump">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
         </svg>
         <span class="nav-label">Pump</span>
+      </button>
+      <button class="nav-item" data-tab="history" aria-label="Activity History">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 7 12 12 15.5 14"/>
+        </svg>
+        <span class="nav-label">History</span>
       </button>
       <button class="nav-item" data-tab="inventory" aria-label="Stash Inventory">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -674,17 +672,6 @@
           <line x1="12" y1="22.08" x2="12" y2="12"/>
         </svg>
         <span class="nav-label">Stash</span>
-      </button>
-      <!-- Feed tab, in the elevated nav slot: tap opens the Feed tab, hold opens
-           the express press-and-hold gesture as a fast path (see initFeedFlow). -->
-      <button class="nav-quick-feed-btn" id="navQuickFeedBtn" data-tab="feed" aria-label="Feed" title="Feed — tap to open, hold to log with the express gesture">
-        <div class="quick-feed-icon-bubble">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
-            <circle cx="12" cy="14" r="2" fill="currentColor"/>
-          </svg>
-        </div>
-        <span class="nav-label">Feed</span>
       </button>
       <button class="nav-item" data-tab="settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

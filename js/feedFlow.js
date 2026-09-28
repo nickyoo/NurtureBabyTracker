@@ -70,14 +70,14 @@ export class FeedFlowController {
     this.feedFlow = { step: 'type', type: null, amountOz: 4.0 };
     this._express = null;
 
-    // Center button: quick tap -> guided flow, press-and-hold (~320ms) -> express
-    const fab = document.getElementById('navQuickFeedBtn');
-    if (fab) {
+    // Log feed button: quick tap -> guided flow, press-and-hold (~320ms) -> express
+    const logBtn = document.getElementById('logFeedBtn');
+    if (logBtn) {
       let holdTimer = null;
       let holdFired = false;
       let downPos = null;
-      fab.addEventListener('contextmenu', e => e.preventDefault());
-      fab.addEventListener('pointerdown', e => {
+      logBtn.addEventListener('contextmenu', e => e.preventDefault());
+      logBtn.addEventListener('pointerdown', e => {
         holdFired = false;
         downPos = { x: e.clientX, y: e.clientY };
         holdTimer = setTimeout(() => {
@@ -88,20 +88,17 @@ export class FeedFlowController {
       const cancelHold = () => {
         if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
       };
-      fab.addEventListener('pointermove', e => {
+      logBtn.addEventListener('pointermove', e => {
         if (downPos && Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 12) cancelHold();
       });
-      fab.addEventListener('pointerup', () => {
+      logBtn.addEventListener('pointerup', () => {
         const wasHold = holdFired;
         cancelHold();
         downPos = null;
-        if (!wasHold) this.app.switchTab('feed');
+        if (!wasHold) this.openFeedFlow();
       });
-      fab.addEventListener('pointercancel', () => { cancelHold(); downPos = null; });
+      logBtn.addEventListener('pointercancel', () => { cancelHold(); downPos = null; });
     }
-
-    const logBtn = document.getElementById('logFeedBtn');
-    if (logBtn) logBtn.addEventListener('click', () => this.openFeedFlow());
 
     const overlay = document.getElementById('feedFlowOverlay');
     if (overlay) {

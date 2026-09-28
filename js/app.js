@@ -427,15 +427,18 @@ export class App {
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.tab === tabName);
     });
-    const quickFeedBtn = document.getElementById('navQuickFeedBtn');
-    if (quickFeedBtn) quickFeedBtn.classList.toggle('active', tabName === 'feed');
 
     document.querySelectorAll('.tab-pane').forEach(pane => {
       pane.classList.toggle('active', pane.id === `tab-${tabName}`);
     });
 
-    if (tabName === 'pump' || tabName === 'feed') this.renderTodayDashboard();
-    if (tabName === 'inventory') this.renderInventory();
+    // Pump/History/Stash all show data that can change from any other tab
+    // (a feed logged on Pump affects History's accordion and Stash's thaw
+    // tile, etc.), so refresh both cross-cutting renders on any of the three.
+    if (tabName === 'pump' || tabName === 'history' || tabName === 'inventory') {
+      this.renderTodayDashboard();
+      this.renderInventory();
+    }
     if (tabName === 'settings') this.settingsView.renderForm();
 
     window.scrollTo({ top: 0, behavior: 'smooth' });

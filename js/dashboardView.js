@@ -483,7 +483,7 @@ export class DashboardView {
     if (moreEl) {
       if (frozen.length > MAX_FROZEN) {
         moreEl.hidden = false;
-        moreEl.innerHTML = `<button class="btn-ghost btn-more-stash" data-action="switch-tab" data-tab="inventory">+ ${frozen.length - MAX_FROZEN} more in Stash →</button>`;
+        moreEl.innerHTML = `<a class="btn-ghost btn-more-stash" href="#inventoryListContainer">+ ${frozen.length - MAX_FROZEN} more below in Stash ↓</a>`;
       } else {
         moreEl.hidden = true;
       }
@@ -514,18 +514,18 @@ export class DashboardView {
   }
 
   // --- URGENT STRIPS (split by relevance: pump-overdue on the Pump tab;
-  // thawed-milk-expiring / low-stash on the Feed tab, since those are what
+  // thawed-milk-expiring / low-stash on the Stash tab, since those are what
   // you'd act on from that screen) ---
   async renderTodayUrgent() {
     const app = this.app;
     const pumpCard = document.getElementById('pumpUrgentCard');
     const pumpRows = document.getElementById('pumpUrgentRows');
-    const feedCard = document.getElementById('feedUrgentCard');
-    const feedRows = document.getElementById('feedUrgentRows');
-    if (!pumpCard || !pumpRows || !feedCard || !feedRows) return;
+    const stashCard = document.getElementById('stashUrgentCard');
+    const stashRows = document.getElementById('stashUrgentRows');
+    if (!pumpCard || !pumpRows || !stashCard || !stashRows) return;
 
     const pumpItems = [];
-    const feedItems = [];
+    const stashItems = [];
 
     try {
       const sched = await reminders.calculateSchedule();
@@ -547,7 +547,7 @@ export class DashboardView {
         .find(({ u }) => u.level === 'expired' || u.level === 'red' || u.level === 'yellow');
       if (urgent) {
         const disp = displayQty(urgent.item, app.settings.units);
-        feedItems.push({
+        stashItems.push({
           tone: (urgent.u.level === 'expired' || urgent.u.level === 'red') ? 'tone-overdue' : 'tone-warn',
           icon: ICON_SVG_SNOWFLAKE,
           text: `Thawed milk: ${disp.qty} ${disp.qtyUnit} — ${urgent.u.label}`
@@ -561,7 +561,7 @@ export class DashboardView {
       const summary = await inventory.getStashSummary();
       if (summary.totalOz < 12) {
         const disp = app.settings.units === 'mL' ? Math.round(summary.totalOz * 29.5735) : summary.totalOz;
-        feedItems.push({
+        stashItems.push({
           tone: 'tone-warn',
           icon: ICON_SVG_SNOWFLAKE,
           text: `Low stash: ${disp} ${app.settings.units} left`
@@ -584,7 +584,7 @@ export class DashboardView {
         </div>`).join('');
     };
     paint(pumpCard, pumpRows, pumpItems);
-    paint(feedCard, feedRows, feedItems);
+    paint(stashCard, stashRows, stashItems);
   }
 
   initActivityFilter() {
