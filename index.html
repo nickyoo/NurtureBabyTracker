@@ -81,6 +81,24 @@
       ================================================================== -->
       <section class="tab-pane active" id="tab-pump" aria-label="Pumping Dashboard">
 
+        <!-- INSTALL BANNER: prompts saving to home screen, hidden once installed/dismissed -->
+        <div class="install-banner" id="installBanner" hidden>
+          <div class="install-banner-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
+              <circle cx="12" cy="14" r="2" fill="currentColor"/>
+            </svg>
+          </div>
+          <div class="install-banner-text">
+            <strong>Save to your phone</strong>
+            <span>Add to your Home Screen — opens instantly, works offline, feels like a real app.</span>
+          </div>
+          <button class="install-banner-cta" id="installBannerCta">Install</button>
+          <button class="install-banner-dismiss" id="installBannerDismiss" aria-label="Dismiss install banner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+
         <!-- URGENT ITEMS: pump-relevant only (overdue / due soon) -->
         <div class="card-tile today-urgent" id="pumpUrgentCard" hidden>
           <div id="pumpUrgentRows"></div>
@@ -629,6 +647,13 @@
               Restore from Backup File
               <input type="file" id="importFileInput" accept=".json" class="visually-hidden-input">
             </label>
+            <button class="btn-secondary rose-link-btn u-mt-4" id="settingsInstallBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="u-icon-sm">
+                <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
+                <circle cx="12" cy="14" r="2" fill="currentColor"/>
+              </svg>
+              Save to Home Screen
+            </button>
             <button class="btn-secondary rose-link-btn u-mt-4" id="replayTourBtn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="u-icon-sm">
                 <circle cx="12" cy="12" r="10"/>
@@ -1226,6 +1251,81 @@
         <div class="feed-toast-text">
           <div class="feed-toast-title" id="feedToastTitle">Logged Successfully!</div>
           <div class="feed-toast-desc" id="feedToastDesc">4.0 oz Formula recorded</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Install-to-Home-Screen Guide (standalone, reachable from banner + Settings) -->
+    <div class="modal-overlay" id="installGuideModal">
+      <div class="modal-sheet" role="dialog" aria-modal="true" aria-label="Save to your home screen">
+        <div class="modal-sheet-handle"></div>
+        <div class="modal-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="u-icon-sm">
+            <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
+            <circle cx="12" cy="14" r="2" fill="currentColor"/>
+          </svg>
+          <span>Save to Your Home Screen</span>
+        </div>
+        <div class="onboarding-subtitle">
+          Install this tracker on your phone so it opens full-screen like a real app, with no browser bars and full offline support.
+        </div>
+
+        <div class="install-guide-tabs">
+          <button class="install-tab-btn active" id="tabGuideIos">iPhone (Safari)</button>
+          <button class="install-tab-btn" id="tabGuideAndroid">Android (Chrome)</button>
+        </div>
+
+        <div class="install-steps-card" id="guideIosCard2">
+          <div class="install-step-row">
+            <div class="install-step-num">1</div>
+            <div class="install-step-desc">
+              In <strong>Safari</strong>, tap the <strong>Share button</strong>
+              <svg class="share-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                <polyline points="16 6 12 2 8 6"/>
+                <line x1="12" y1="2" x2="12" y2="15"/>
+              </svg>
+              at the bottom of your phone screen.
+            </div>
+          </div>
+          <div class="install-step-row">
+            <div class="install-step-num">2</div>
+            <div class="install-step-desc">
+              Scroll down and tap <strong>"Add to Home Screen"</strong>
+              <span class="inline-badge">Add to Home Screen</span>
+            </div>
+          </div>
+          <div class="install-step-row">
+            <div class="install-step-num">3</div>
+            <div class="install-step-desc">
+              Tap <strong>Add</strong> in the top right. Our pink baby bottle icon will appear on your home screen!
+            </div>
+          </div>
+        </div>
+
+        <div class="install-steps-card" id="guideAndroidCard2" style="display: none;">
+          <div class="install-step-row">
+            <div class="install-step-num">1</div>
+            <div class="install-step-desc">
+              In <strong>Chrome</strong>, tap the <strong>three dots (⋮)</strong> menu in the top right corner.
+            </div>
+          </div>
+          <div class="install-step-row">
+            <div class="install-step-num">2</div>
+            <div class="install-step-desc">
+              Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.
+            </div>
+          </div>
+          <div class="install-step-row">
+            <div class="install-step-num">3</div>
+            <div class="install-step-desc">
+              Confirm, and the app icon will appear right on your home screen and app drawer!
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="onboarding-primary-btn u-flex-1" id="installGuideCloseBtn">Got it</button>
         </div>
       </div>
     </div>

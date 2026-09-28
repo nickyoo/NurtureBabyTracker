@@ -2582,6 +2582,83 @@ input:checked + .slider:before {
   margin-top: 4px;
 }
 
+.install-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--rose-gradient);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-lg, 16px);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  box-shadow: 0 3px 14px var(--rose-glow);
+}
+
+.install-banner-icon {
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(253, 251, 246, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FDFBF6;
+}
+
+.install-banner-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.install-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #FDFBF6;
+}
+
+.install-banner-text strong {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.install-banner-text span {
+  font-size: 0.76rem;
+  line-height: 1.3;
+  opacity: 0.92;
+}
+
+.install-banner-cta {
+  flex-shrink: 0;
+  background: #FDFBF6;
+  color: var(--rose-primary);
+  border: none;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.82rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.install-banner-dismiss {
+  flex-shrink: 0;
+  background: transparent;
+  border: none;
+  color: #FDFBF6;
+  opacity: 0.75;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+}
+
+.install-banner-dismiss svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* =============================================================
    SALON THEME — Today screen additions, Feed Flow & Bottle Timer
    (new prototype components; appended Sep 24 2026)

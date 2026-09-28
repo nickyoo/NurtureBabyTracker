@@ -62,6 +62,9 @@ js/
   feedFlow.js       Guided feed-logging sheet, the press-and-hold express
                     gesture, and the live bottle timer (per-type CDC safety
                     countdown, persisted across reload)
+  installPrompt.js  PWA install banner (Pump tab) + Settings entry point +
+                    manual iOS/Android install-guide modal, wired to the
+                    native beforeinstallprompt event where supported
   viewHelpers.js    Small pure display helpers (escapeHtml, displayQty)
                     shared between dashboardView.js and feedFlow.js
   db.js             IndexedDB layer (NurtureDB) + collision-safe IDs
