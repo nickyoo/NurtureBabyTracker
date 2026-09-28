@@ -650,7 +650,7 @@
 
     </main>
 
-    <!-- Bottom Navigation Bar (4 evenly-styled tabs) -->
+    <!-- Bottom Navigation Bar (4 tabs + elevated center Quick Feed action) -->
     <nav class="bottom-nav" role="navigation" aria-label="Main Navigation">
       <button class="nav-item active" data-tab="pump" aria-label="Pump">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -664,6 +664,17 @@
           <polyline points="12 7 12 12 15.5 14"/>
         </svg>
         <span class="nav-label">History</span>
+      </button>
+      <!-- Elevated center action: tap opens the guided feed flow directly,
+           press-and-hold opens the express gesture (see feedFlow.js). -->
+      <button class="nav-quick-feed-btn" id="quickFeedFab" aria-label="Quick Feed" title="Log a feed — tap to open, hold for the express gesture">
+        <div class="quick-feed-icon-bubble">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
+            <circle cx="12" cy="14" r="2" fill="currentColor"/>
+          </svg>
+        </div>
+        <span class="nav-label">Quick Feed</span>
       </button>
       <button class="nav-item" data-tab="inventory" aria-label="Stash Inventory">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

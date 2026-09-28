@@ -70,14 +70,15 @@ export class FeedFlowController {
     this.feedFlow = { step: 'type', type: null, amountOz: 4.0 };
     this._express = null;
 
-    // Log feed button: quick tap -> guided flow, press-and-hold (~320ms) -> express
-    const logBtn = document.getElementById('logFeedBtn');
-    if (logBtn) {
+    // Elevated center Quick Feed button: quick tap -> guided flow,
+    // press-and-hold (~320ms) -> express gesture.
+    const fab = document.getElementById('quickFeedFab');
+    if (fab) {
       let holdTimer = null;
       let holdFired = false;
       let downPos = null;
-      logBtn.addEventListener('contextmenu', e => e.preventDefault());
-      logBtn.addEventListener('pointerdown', e => {
+      fab.addEventListener('contextmenu', e => e.preventDefault());
+      fab.addEventListener('pointerdown', e => {
         holdFired = false;
         downPos = { x: e.clientX, y: e.clientY };
         holdTimer = setTimeout(() => {
@@ -88,17 +89,21 @@ export class FeedFlowController {
       const cancelHold = () => {
         if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
       };
-      logBtn.addEventListener('pointermove', e => {
+      fab.addEventListener('pointermove', e => {
         if (downPos && Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) > 12) cancelHold();
       });
-      logBtn.addEventListener('pointerup', () => {
+      fab.addEventListener('pointerup', () => {
         const wasHold = holdFired;
         cancelHold();
         downPos = null;
         if (!wasHold) this.openFeedFlow();
       });
-      logBtn.addEventListener('pointercancel', () => { cancelHold(); downPos = null; });
+      fab.addEventListener('pointercancel', () => { cancelHold(); downPos = null; });
     }
+
+    // Log feed button on the Pump tab: plain tap opens the guided flow.
+    const logBtn = document.getElementById('logFeedBtn');
+    if (logBtn) logBtn.addEventListener('click', () => this.openFeedFlow());
 
     const overlay = document.getElementById('feedFlowOverlay');
     if (overlay) {

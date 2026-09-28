@@ -1930,6 +1930,63 @@ input:checked + .slider:before {
   font-weight: 800;
 }
 
+/* Elevated Center Quick Feed Button in Nav */
+.nav-quick-feed-btn {
+  position: relative;
+  top: -10px;
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  z-index: 105;
+}
+
+.quick-feed-icon-bubble {
+  width: 46px;
+  height: 46px;
+  border-radius: var(--arch-radius-pill);
+  background: var(--rose-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  box-shadow: 0 4px 16px var(--rose-glow), inset 0 1px 1.5px rgba(255, 255, 255, 0.6);
+  border: 2.5px solid var(--bg-app);
+  transition: transform 0.2s var(--ease-spring), box-shadow 0.2s ease;
+}
+
+.nav-quick-feed-btn:active .quick-feed-icon-bubble {
+  transform: scale(0.92);
+  box-shadow: 0 2px 8px var(--rose-glow);
+}
+
+.quick-feed-icon-bubble svg {
+  width: 22px;
+  height: 22px;
+  stroke: #ffffff;
+}
+
+.nav-quick-feed-btn .nav-label {
+  font-family: var(--font-heading);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--rose-primary);
+  margin-top: 2px;
+}
+
+/* No long-press callout / text selection during the express gesture */
+#quickFeedFab {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
 /* -------------------------------------------------------------
    MODAL BOTTOM SHEET
 ------------------------------------------------------------- */
@@ -2995,14 +3052,6 @@ input:checked + .slider:before {
     transition-duration: 0.001ms !important;
     scroll-behavior: auto !important;
   }
-}
-
-/* ——— Log feed button: no long-press callout / text selection during express gesture ——— */
-#logFeedBtn {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  user-select: none;
-  touch-action: manipulation;
 }
 
 /* ——— Feed-flow step hint line ——— */
