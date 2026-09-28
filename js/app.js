@@ -10,6 +10,7 @@ import { PumpTimerView } from './pumpTimerView.js';
 import { InventoryView } from './inventoryView.js';
 import { DashboardView } from './dashboardView.js';
 import { FeedFlowController } from './feedFlow.js';
+import { InstallPromptController } from './installPrompt.js';
 
 /**
  * Pure merge for editing a logged session (pump or feed).
@@ -185,6 +186,7 @@ export class App {
     this.inventoryView = new InventoryView(this);
     this.dashboardView = new DashboardView(this);
     this.feedFlow = new FeedFlowController(this);
+    this.installPrompt = new InstallPromptController(this);
   }
 
   async init() {
@@ -218,6 +220,9 @@ export class App {
     // 7. Onboarding & First Launch check
     this.onboarding.initEvents();
     await this.checkFirstLaunch();
+
+    // 8. Install-to-home-screen banner + guide modal
+    this.installPrompt.initEvents();
 
     // 8. Live refresh loops for countdowns and theme clock checks
     setInterval(() => {

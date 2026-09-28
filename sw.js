@@ -1,5 +1,5 @@
 // Nurture PWA Service Worker — Offline First Shell Cache
-const CACHE_NAME = 'nurture-v1.5.0';
+const CACHE_NAME = 'nurture-v1.6.0';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -20,6 +20,7 @@ const ASSETS_TO_CACHE = [
   './js/inventoryView.js',
   './js/dashboardView.js',
   './js/feedFlow.js',
+  './js/installPrompt.js',
   './js/app.js',
   './icons/icon.svg',
   './icons/icon-192.png',
