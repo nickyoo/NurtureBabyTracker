@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Nurture — Baby Tracker</title>
   <meta name="description" content="Nurture: a free offline baby feeding and pumping tracker. Daily goals, milk stash manager with FIFO expiry, and bottle safety timers. Your data never leaves your phone.">
   <meta name="theme-color" content="#F5F0E6">
@@ -77,10 +77,15 @@
     <main class="main-content">
       
       <!-- =================================================================
-           TAB 1: PUMPS (UNIFIED TRACK & TRENDS DASHBOARD)
+           TAB 1: PUMP DASHBOARD (GOAL, TIMER, LOG FEED)
       ================================================================== -->
-      <section class="tab-pane active" id="tab-today" aria-label="Today Dashboard">
-        
+      <section class="tab-pane active" id="tab-pump" aria-label="Pumping Dashboard">
+
+        <!-- URGENT ITEMS: pump-relevant only (overdue / due soon) -->
+        <div class="card-tile today-urgent" id="pumpUrgentCard" hidden>
+          <div id="pumpUrgentRows"></div>
+        </div>
+
         <!-- TILE 1: DAILY GOAL & ANIMATED MILK BOTTLE -->
         <div class="goal-bottle-tile" id="goalBottleTile">
           
@@ -158,8 +163,8 @@
               <span id="goalCurrentValue">0</span> 
               <span>/ </span>
               <span id="goalTargetValue" class="goal-target-editable">24</span> 
-              <span class="unit-label-current" style="font-size: 1.1rem; color: var(--text-muted);">oz</span>
-              <input type="number" step="1" inputmode="decimal" id="goalTargetInput" class="stepper-number-input" style="display: none; width: 90px; height: 42px; font-size: 1.8rem;">
+              <span class="unit-label-current goal-unit-label">oz</span>
+              <input type="number" step="1" inputmode="decimal" id="goalTargetInput" class="stepper-number-input goal-target-input-size" style="display: none;">
             </div>
 
             <div class="goal-subtext" id="goalSubtext">
@@ -169,9 +174,9 @@
 
             <div class="goal-adjuster-row">
               <span class="goal-label-btn">Target:</span>
-              <button class="goal-step-btn" onclick="window.nurtureApp.adjustDailyGoal(-1)">−</button>
-              <button class="goal-step-btn" onclick="window.nurtureApp.adjustDailyGoal(1)">+</button>
-              <span style="font-size: 0.72rem; color: var(--text-muted);">(or tap number to type)</span>
+              <button class="goal-step-btn" data-action="adjust-goal" data-delta="-1">−</button>
+              <button class="goal-step-btn" data-action="adjust-goal" data-delta="1">+</button>
+              <span class="u-text-hint-muted">(or tap number to type)</span>
             </div>
           </div>
         </div>
@@ -182,7 +187,7 @@
             <div class="card-title">Track pumping</div>
             <span class="card-subtitle" id="pumpTrackerSub"></span>
           </div>
-          <button class="pump-tracker-quick" id="pumpTrackerQuickBtn" onclick="window.nurtureApp.openManualPump()" title="Log a pump">
+          <button class="pump-tracker-quick" id="pumpTrackerQuickBtn" data-action="open-manual-pump" title="Log a pump">
             <span class="pump-tracker-num" id="pumpTrackerNum">0</span>
             <span class="pump-tracker-caption">sessions today &mdash; tap to log a pump</span>
           </button>
@@ -200,11 +205,11 @@
 
           <!-- Pumping Output Stepper & Direct Number Entry Section -->
           <div class="pump-output-section">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="font-family: var(--font-serif); font-size: 0.92rem; font-weight: 700; font-style: italic; color: var(--text-secondary);">
+            <div class="pump-output-header">
+              <span class="pump-output-title">
                 Session Output:
               </span>
-              <span style="font-size: 0.72rem; color: var(--rose-primary); font-weight: 600;">
+              <span class="u-text-hint-rose">
                 (tap number to type)
               </span>
             </div>
@@ -267,52 +272,27 @@
           </button>
         </div>
 
-        <!-- TILE 1d: TODAY'S FEEDS TRACKER (rows quick-edit) -->
+        <!-- TODAY'S FEEDS TRACKER (rows quick-edit) -->
         <div class="card-tile feeds-tracker-tile" id="feedsTrackerTile">
           <div class="card-header-row">
             <div class="card-title">Today's Feeds</div>
             <span class="card-subtitle" id="feedsTrackerCount"></span>
           </div>
-          <div id="feedsTrackerRows" style="display: flex; flex-direction: column; gap: 8px;">
+          <div id="feedsTrackerRows" class="u-flex-col-gap8">
             <!-- Dynamically populated -->
           </div>
         </div>
 
-        <!-- TILE 1e: THAW FROM STASH (frozen → thawed, ready for the feed flow) -->
-        <div class="card-tile thaw-tile" id="thawTile">
-          <div class="card-header-row">
-            <div class="card-title">Thaw from Stash</div>
-            <span class="card-subtitle">thawed milk is good 24h</span>
-          </div>
-          <div class="thaw-subheader">Frozen stash — tap to thaw (oldest first)</div>
-          <div id="thawFrozenRows" style="display: flex; flex-direction: column; gap: 8px;">
-            <!-- Dynamically populated -->
-          </div>
-          <div id="thawMoreLine" style="margin-top: 6px;" hidden></div>
-          <div class="thaw-subheader" style="margin-top: 14px;">Thawed &amp; ready</div>
-          <div id="thawReadyRows" style="display: flex; flex-direction: column; gap: 8px;">
-            <!-- Dynamically populated -->
-          </div>
-        </div>
+      </section>
 
-        <div class="arch-divider" aria-hidden="true">
-          <svg width="120" height="34" viewBox="0 0 120 34" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M 45 32 L 45 18 A 15 15 0 0 1 75 18 L 75 32" stroke="currentColor" stroke-width="1.5"/>
-            <line x1="6" y1="24" x2="34" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            <line x1="86" y1="24" x2="114" y2="24" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-            <circle cx="60" cy="24" r="2" fill="currentColor"/>
-          </svg>
-        </div>
-
-        <!-- URGENT ITEMS (rendered by renderTodayUrgent; hidden when all calm) -->
-        <div class="card-tile today-urgent" id="todayUrgentCard" hidden>
-          <div id="todayUrgentRows"></div>
-        </div>
-
+      <!-- =================================================================
+           TAB 2: HISTORY (TODAY'S ACTIVITY, SUPPLY TRENDS)
+      ================================================================== -->
+      <section class="tab-pane" id="tab-history" aria-label="Activity History">
 
         <!-- TILE 3: EXPANDABLE PUMPS HISTORY ACCORDION -->
         <div class="pumps-history-tile">
-          <div class="accordion-header" onclick="window.nurtureApp.togglePumpsAccordion()">
+          <div class="accordion-header" data-action="toggle-pumps-accordion">
             <div class="accordion-title">
               <!-- Delicate Bow Motif Icon -->
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -366,13 +346,13 @@
               </div>
               <div class="card-subtitle">Daily pump yield (Past 7 days)</div>
             </div>
-            <div style="font-size: 0.88rem; font-weight: 800; color: var(--rose-primary);" id="metricWeekAvg">
+            <div class="chart-week-avg" id="metricWeekAvg">
               0 oz/d
             </div>
           </div>
-          <div id="chartSvgWrap" style="min-height: 150px; margin-top: 10px;"></div>
+          <div id="chartSvgWrap" class="chart-svg-wrap"></div>
 
-          <button class="btn-secondary" id="exportCsvBtn" style="margin-top: 14px;">
+          <button class="btn-secondary u-mt-14" id="exportCsvBtn">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
               <polyline points="14 2 14 8 20 8"/>
@@ -386,10 +366,32 @@
       </section>
 
       <!-- =================================================================
-           TAB 2: INVENTORY (FIFO STASH)
+           TAB 3: INVENTORY (FIFO STASH)
       ================================================================== -->
       <section class="tab-pane" id="tab-inventory" aria-label="Milk Inventory">
-        
+
+        <!-- URGENT ITEMS: stash-relevant (thawed milk expiring / low stash) -->
+        <div class="card-tile today-urgent" id="stashUrgentCard" hidden>
+          <div id="stashUrgentRows"></div>
+        </div>
+
+        <!-- THAW FROM STASH (frozen → thawed, ready for the feed flow) -->
+        <div class="card-tile thaw-tile" id="thawTile">
+          <div class="card-header-row">
+            <div class="card-title">Thaw from Stash</div>
+            <span class="card-subtitle">thawed milk is good 24h</span>
+          </div>
+          <div class="thaw-subheader">Frozen stash — tap to thaw (oldest first)</div>
+          <div id="thawFrozenRows" class="u-flex-col-gap8">
+            <!-- Dynamically populated -->
+          </div>
+          <div id="thawMoreLine" class="u-mt-6" hidden></div>
+          <div class="thaw-subheader u-mt-14">Thawed &amp; ready</div>
+          <div id="thawReadyRows" class="u-flex-col-gap8">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
         <!-- Stash Summary Grid -->
         <div class="stash-summary-grid">
           <div class="stash-metric-tile">
@@ -416,7 +418,7 @@
         </div>
 
         <!-- Add Stored Milk Button -->
-        <button class="btn-secondary" id="openAddMilkModalBtn" style="border-color: var(--border-fine); color: var(--rose-primary);">
+        <button class="btn-secondary add-milk-btn" id="openAddMilkModalBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="12" y1="5" x2="12" y2="19"/>
             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -499,7 +501,7 @@
                 <div class="settings-desc">Choose ounces (oz) or milliliters (mL).</div>
               </div>
               <div>
-                <select class="settings-input-control" id="settingUnitSelect" onchange="window.nurtureApp.setUnit(this.value)">
+                <select class="settings-input-control" id="settingUnitSelect">
                   <option value="oz">oz</option>
                   <option value="mL">mL</option>
                 </select>
@@ -535,7 +537,7 @@
               </label>
             </div>
 
-            <button class="btn-secondary" id="testChimeBtn" style="height: 40px; font-size: 0.82rem;">
+            <button class="btn-secondary test-chime-btn" id="testChimeBtn">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
                 <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -554,8 +556,8 @@
             </svg>
             Schedule Notifications
           </div>
-          <div style="font-size: 0.78rem; color: var(--text-secondary); line-height: 1.45; margin: 8px 0 12px;">
-            The top in-app banner always tracks your overdue status. You can also enable browser push alerts.
+          <div class="u-text-caption-lg" style="margin: 8px 0 12px;">
+            The top in-app banner always tracks your overdue status. Push notifications are best-effort: iOS Safari limits background alerts for installed web apps, so the in-app banner is the reliable signal — push is a bonus when your OS allows it.
           </div>
           <button class="btn-secondary" id="requestNotifyBtn">
             Enable Best-Effort Push Notifications
@@ -573,7 +575,7 @@
             </svg>
             Expiration Windows (CDC Defaults)
           </div>
-          <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 12px;">
+          <div class="u-text-caption u-mb-12">
             Adjust if your pediatrician recommends different storage timelines.
           </div>
 
@@ -600,7 +602,7 @@
             </div>
           </div>
 
-          <button class="btn-secondary" style="margin-top: 14px;" onclick="window.nurtureApp.saveStorageWindowSettings()">
+          <button class="btn-secondary u-mt-14" data-action="save-storage-windows">
             Save Storage Windows
           </button>
         </div>
@@ -615,27 +617,27 @@
             </svg>
             Backup & Data Privacy
           </div>
-          <div style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 12px;">
+          <div class="u-text-caption u-mb-12">
             All data lives strictly on this device in IndexedDB. You can export a full backup anytime.
           </div>
 
-          <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div class="u-flex-col-gap8">
             <button class="btn-secondary" id="exportJsonBtn">
               Download Full JSON Backup
             </button>
-            <label class="btn-secondary" style="margin: 0; cursor: pointer;">
+            <label class="btn-secondary restore-backup-label">
               Restore from Backup File
-              <input type="file" id="importFileInput" accept=".json" style="display: none;">
+              <input type="file" id="importFileInput" accept=".json" class="visually-hidden-input">
             </label>
-            <button class="btn-secondary" id="replayTourBtn" style="color: var(--rose-primary); border-color: var(--border-fine); margin-top: 4px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
+            <button class="btn-secondary rose-link-btn u-mt-4" id="replayTourBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="u-icon-sm">
                 <circle cx="12" cy="12" r="10"/>
                 <polygon points="10 8 16 12 10 16 10 8"/>
               </svg>
               Replay Welcome Tour
             </button>
-            <button class="btn-secondary" id="clearAllDataBtn" style="color: var(--red-urgent); border-color: var(--red-border); margin-top: 4px;">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;">
+            <button class="btn-secondary danger-btn u-mt-4" id="clearAllDataBtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="u-icon-sm">
                 <polyline points="3 6 5 6 21 6"/>
                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
               </svg>
@@ -648,13 +650,20 @@
 
     </main>
 
-    <!-- Bottom Navigation Bar (4 Consolidated Tabs with Elevated Quick Feed) -->
+    <!-- Bottom Navigation Bar (4 evenly-styled tabs) -->
     <nav class="bottom-nav" role="navigation" aria-label="Main Navigation">
-      <button class="nav-item active" data-tab="today" aria-label="Today">
+      <button class="nav-item active" data-tab="pump" aria-label="Pump">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
         </svg>
-        <span class="nav-label">Today</span>
+        <span class="nav-label">Pump</span>
+      </button>
+      <button class="nav-item" data-tab="history" aria-label="Activity History">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <polyline points="12 7 12 12 15.5 14"/>
+        </svg>
+        <span class="nav-label">History</span>
       </button>
       <button class="nav-item" data-tab="inventory" aria-label="Stash Inventory">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -663,16 +672,6 @@
           <line x1="12" y1="22.08" x2="12" y2="12"/>
         </svg>
         <span class="nav-label">Stash</span>
-      </button>
-      <!-- Center Elevated Quick Feed Button -->
-      <button class="nav-quick-feed-btn" id="navQuickFeedBtn" aria-label="Quick Food Tracker" title="Quick Food Tracker">
-        <div class="quick-feed-icon-bubble">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
-            <circle cx="12" cy="14" r="2" fill="currentColor"/>
-          </svg>
-        </div>
-        <span class="nav-label">Quick Feed</span>
       </button>
       <button class="nav-item" data-tab="settings" aria-label="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -744,7 +743,7 @@
 
         <div class="form-group" id="editFeedTypeGroup">
           <label class="form-label">Feed Type</label>
-          <div style="display: flex; gap: 8px;">
+          <div class="u-flex-row-gap8">
             <button type="button" class="food-preset-pill" id="editFeedTypeFormula" data-feedtype="formula">Formula</button>
             <button type="button" class="food-preset-pill" id="editFeedTypeBreastmilk" data-feedtype="breastmilk">Breast Milk</button>
           </div>
@@ -797,7 +796,7 @@
 
         <div class="form-group">
           <label class="form-label">Duration (minutes)</label>
-          <div class="chips-row" id="manualPumpDurationChips" style="margin-bottom: 10px;">
+          <div class="chips-row u-mb-10" id="manualPumpDurationChips">
             <button type="button" class="chip-btn" data-min="10">10</button>
             <button type="button" class="chip-btn" data-min="15">15</button>
             <button type="button" class="chip-btn" data-min="20">20</button>
@@ -877,7 +876,7 @@
             </div>
             <div class="highlight-item">
               <span class="highlight-icon ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg></span>
-              <div class="highlight-text"><strong>Focused on Pumping</strong> — Fast 1-tap logging with an animated bottle that tracks your daily goal.</div>
+              <div class="highlight-text"><strong>Pumping and feeding, together</strong> — 1-tap pump logging with an animated goal bottle, plus a dedicated feed tracker with safety timers.</div>
             </div>
           </div>
 
@@ -891,7 +890,7 @@
 
         <!-- STEP 2: PERSONALIZE GOALS & ROUTINE -->
         <div class="onboarding-step" id="onboardingStep2" style="display: none;">
-          <div style="text-align: center;">
+          <div class="u-center">
             <span class="onboarding-badge-pill">Step 2 of 4</span>
           </div>
           <h2 class="onboarding-title">Your Daily Target</h2>
@@ -927,7 +926,7 @@
 
           <div class="onboarding-actions-row">
             <button class="btn-ghost" id="onboardingBackBtn2">Back</button>
-            <button class="onboarding-primary-btn" id="onboardingNextBtn2" style="flex: 1;">
+            <button class="onboarding-primary-btn u-flex-1" id="onboardingNextBtn2">
               <span>Save to Phone</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
@@ -938,7 +937,7 @@
 
         <!-- STEP 3: SAVE TO HOME SCREEN GUIDE -->
         <div class="onboarding-step" id="onboardingStep3" style="display: none;">
-          <div style="text-align: center;">
+          <div class="u-center">
             <span class="onboarding-badge-pill">Step 3 of 4</span>
           </div>
           <h2 class="onboarding-title">Save to Your Home Screen</h2>
@@ -1005,7 +1004,7 @@
 
           <div class="onboarding-actions-row">
             <button class="btn-ghost" id="onboardingBackBtn3">Back</button>
-            <button class="onboarding-primary-btn" id="onboardingNextBtn3" style="flex: 1;">
+            <button class="onboarding-primary-btn u-flex-1" id="onboardingNextBtn3">
               <span>How It Works</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
@@ -1016,7 +1015,7 @@
 
         <!-- STEP 4: FEATURE HIGHLIGHTS & READY -->
         <div class="onboarding-step" id="onboardingStep4" style="display: none;">
-          <div style="text-align: center;">
+          <div class="u-center">
             <span class="onboarding-badge-pill">Step 4 of 4</span>
           </div>
           <h2 class="onboarding-title" id="obFinishTitle">You're All Set</h2>
@@ -1052,7 +1051,7 @@
 
           <div class="onboarding-actions-row">
             <button class="btn-ghost" id="onboardingBackBtn4">Back</button>
-            <button class="onboarding-primary-btn" id="onboardingFinishBtn" style="flex: 1;">
+            <button class="onboarding-primary-btn u-flex-1" id="onboardingFinishBtn">
               <span>Start Tracking</span>
             </button>
           </div>
@@ -1086,7 +1085,7 @@
           </button>
           <div class="ff-thawed-block" id="ffThawedBlock" hidden>
             <p class="ff-step-hint">Or use thawed stash</p>
-            <div id="ffThawedSources" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            <div id="ffThawedSources" class="u-flex-col-gap8"></div>
           </div>
         </div>
 

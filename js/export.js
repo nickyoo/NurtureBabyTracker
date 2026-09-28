@@ -21,6 +21,7 @@ export class ExportManager {
       const pad = (n) => String(n).padStart(2, '0');
       const dateStr = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}`;
       const startTimeStr = startDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const endTimeStr = endDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       let typeStr = 'Pumping';
       if (s.type === 'feed') {
         typeStr = s.feedType === 'formula' ? 'Feed (Formula)' : (s.feedType === 'breastmilk' ? 'Feed (Breast Milk)' : 'Feed');
