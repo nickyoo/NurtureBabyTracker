@@ -310,6 +310,8 @@ body {
   object-fit: cover;
   box-shadow: 0 3px 12px var(--rose-glow);
   border: 1px solid var(--border-fine);
+  transform-origin: bottom center;
+  animation: logoGrow 0.8s var(--ease-spring) both;
 }
 
 .brand-bow-badge {
@@ -320,6 +322,26 @@ body {
   height: 18px;
   color: var(--rose-primary);
   filter: drop-shadow(0 2px 4px rgba(178, 110, 75, 0.3));
+  transform-origin: center;
+  /* Blooms a beat after the icon finishes sprouting, like a bud opening
+     once the stem has grown — not simultaneous with it. */
+  animation: logoBloom 0.5s var(--ease-spring) 0.6s both;
+}
+
+/* The logo "growing in": starts low and small like a shoot pushing up from
+   soil, overshoots past full size, then settles — a plant's growth curve,
+   not a plain fade or a linear scale. */
+@keyframes logoGrow {
+  0% { transform: scale(0.15) translateY(6px); opacity: 0; }
+  55% { transform: scale(1.1) translateY(0); opacity: 1; }
+  75% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes logoBloom {
+  0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+  70% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 .brand-text-wrap {
@@ -2271,6 +2293,8 @@ input:checked + .slider:before {
   border-radius: 22px;
   box-shadow: 0 8px 24px var(--rose-glow);
   border: 1.5px solid var(--border-fine);
+  transform-origin: bottom center;
+  animation: logoGrow 0.8s var(--ease-spring) both;
 }
 
 .onboarding-badge-pill {
