@@ -19,6 +19,11 @@ export class InstallPromptController {
       e.preventDefault();
       this.deferredPrompt = e;
       this.updateBannerVisibility();
+      // This can fire after the onboarding carousel is already showing its
+      // install slide — flip it from the manual guide to the real prompt.
+      if (this.app.onboarding && typeof this.app.onboarding.syncInstallSlide === 'function') {
+        this.app.onboarding.syncInstallSlide();
+      }
     });
 
     window.addEventListener('appinstalled', () => {

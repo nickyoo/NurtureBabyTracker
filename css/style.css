@@ -2166,10 +2166,12 @@ input:checked + .slider:before {
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 410px;
+  max-height: calc(100dvh - 32px);
   padding: 24px 20px 20px;
   box-shadow: 0 20px 50px -10px rgba(140, 82, 50, 0.35);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   animation: modalPop 0.35s var(--ease-spring);
 }
 
@@ -2184,6 +2186,47 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* One-page swipeable carousel: every slide sits side by side in this track,
+   and onboarding.js scrolls it + keeps the viewport's height in sync with
+   whichever slide is active, rather than toggling display on full steps. */
+.onboarding-viewport {
+  overflow: hidden;
+  transition: height 0.32s var(--ease-spring);
+}
+
+.onboarding-track {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.onboarding-track::-webkit-scrollbar {
+  display: none;
+}
+
+.onboarding-step {
+  flex: 0 0 100%;
+  min-width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Same trap documented in the nickg-xyz README: an author rule setting
+   `display` on this class would tie with the browser's own [hidden] rule
+   and could win by source order. Keep this so a future flex tweak can't
+   silently un-hide the install slide for someone already standalone. */
+.onboarding-step[hidden] {
+  display: none;
+}
+
+.onboarding-native-install {
+  margin-bottom: 16px;
 }
 
 .step-dot {
