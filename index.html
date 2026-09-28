@@ -54,6 +54,12 @@
         </div>
       </div>
       <div class="header-meta">
+        <!-- Back to the nickg.xyz arcade. Hidden automatically when framed
+             inside the arcade's own player shell (see arcade-back in the
+             nickg-xyz repo); visible when this app is opened on its own. -->
+        <a class="arcade-back-pill" id="arcade-back" href="/" title="Back to the arcade" aria-label="Back to the arcade">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        </a>
         <!-- Clock theme indicator chip -->
         <div class="theme-clock-chip" id="themeClockChip" title="Clock Theme Mode">
           <svg id="themeClockIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

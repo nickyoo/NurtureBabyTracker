@@ -365,6 +365,30 @@ body {
   gap: 8px;
 }
 
+.arcade-back-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-fine);
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-tile);
+  text-decoration: none;
+  transition: transform 0.15s var(--ease-spring);
+}
+
+.arcade-back-pill:active {
+  transform: scale(0.94);
+}
+
+.arcade-back-pill svg {
+  width: 15px;
+  height: 15px;
+}
+
 .theme-clock-chip {
   display: flex;
   align-items: center;
