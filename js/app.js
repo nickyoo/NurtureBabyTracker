@@ -199,6 +199,11 @@ export class App {
     // 3. Service Worker
     this.registerServiceWorker();
 
+    // 3b. Install-to-home-screen banner + guide modal. Registered early so
+    // the `beforeinstallprompt` listener is live well before onboarding's
+    // install slide checks for it in step 7.
+    this.installPrompt.initEvents();
+
     // 4. Bind Navigation & Global Events
     this.bindNavigation();
     this.inventoryView.initEvents();
@@ -220,9 +225,6 @@ export class App {
     // 7. Onboarding & First Launch check
     this.onboarding.initEvents();
     await this.checkFirstLaunch();
-
-    // 8. Install-to-home-screen banner + guide modal
-    this.installPrompt.initEvents();
 
     // 8. Live refresh loops for countdowns and theme clock checks
     setInterval(() => {

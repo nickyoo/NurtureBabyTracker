@@ -310,6 +310,8 @@ body {
   object-fit: cover;
   box-shadow: 0 3px 12px var(--rose-glow);
   border: 1px solid var(--border-fine);
+  transform-origin: bottom center;
+  animation: logoGrow 0.8s var(--ease-spring) both;
 }
 
 .brand-bow-badge {
@@ -320,6 +322,26 @@ body {
   height: 18px;
   color: var(--rose-primary);
   filter: drop-shadow(0 2px 4px rgba(178, 110, 75, 0.3));
+  transform-origin: center;
+  /* Blooms a beat after the icon finishes sprouting, like a bud opening
+     once the stem has grown — not simultaneous with it. */
+  animation: logoBloom 0.5s var(--ease-spring) 0.6s both;
+}
+
+/* The logo "growing in": starts low and small like a shoot pushing up from
+   soil, overshoots past full size, then settles — a plant's growth curve,
+   not a plain fade or a linear scale. */
+@keyframes logoGrow {
+  0% { transform: scale(0.15) translateY(6px); opacity: 0; }
+  55% { transform: scale(1.1) translateY(0); opacity: 1; }
+  75% { transform: scale(0.95); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes logoBloom {
+  0% { transform: scale(0) rotate(-20deg); opacity: 0; }
+  70% { transform: scale(1.2) rotate(5deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
 .brand-text-wrap {
@@ -363,6 +385,30 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.arcade-back-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-fine);
+  color: var(--text-secondary);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-tile);
+  text-decoration: none;
+  transition: transform 0.15s var(--ease-spring);
+}
+
+.arcade-back-pill:active {
+  transform: scale(0.94);
+}
+
+.arcade-back-pill svg {
+  width: 15px;
+  height: 15px;
 }
 
 .theme-clock-chip {
@@ -2142,10 +2188,12 @@ input:checked + .slider:before {
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 410px;
+  max-height: calc(100dvh - 32px);
   padding: 24px 20px 20px;
   box-shadow: 0 20px 50px -10px rgba(140, 82, 50, 0.35);
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   animation: modalPop 0.35s var(--ease-spring);
 }
 
@@ -2160,6 +2208,47 @@ input:checked + .slider:before {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* One-page swipeable carousel: every slide sits side by side in this track,
+   and onboarding.js scrolls it + keeps the viewport's height in sync with
+   whichever slide is active, rather than toggling display on full steps. */
+.onboarding-viewport {
+  overflow: hidden;
+  transition: height 0.32s var(--ease-spring);
+}
+
+.onboarding-track {
+  display: flex;
+  align-items: flex-start;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.onboarding-track::-webkit-scrollbar {
+  display: none;
+}
+
+.onboarding-step {
+  flex: 0 0 100%;
+  min-width: 100%;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* Same trap documented in the nickg-xyz README: an author rule setting
+   `display` on this class would tie with the browser's own [hidden] rule
+   and could win by source order. Keep this so a future flex tweak can't
+   silently un-hide the install slide for someone already standalone. */
+.onboarding-step[hidden] {
+  display: none;
+}
+
+.onboarding-native-install {
+  margin-bottom: 16px;
 }
 
 .step-dot {
@@ -2204,6 +2293,8 @@ input:checked + .slider:before {
   border-radius: 22px;
   box-shadow: 0 8px 24px var(--rose-glow);
   border: 1.5px solid var(--border-fine);
+  transform-origin: bottom center;
+  animation: logoGrow 0.8s var(--ease-spring) both;
 }
 
 .onboarding-badge-pill {

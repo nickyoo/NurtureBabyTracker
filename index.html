@@ -54,6 +54,12 @@
         </div>
       </div>
       <div class="header-meta">
+        <!-- Back to the nickg.xyz arcade. Hidden automatically when framed
+             inside the arcade's own player shell (see arcade-back in the
+             nickg-xyz repo); visible when this app is opened on its own. -->
+        <a class="arcade-back-pill" id="arcade-back" href="/" title="Back to the arcade" aria-label="Back to the arcade">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        </a>
         <!-- Clock theme indicator chip -->
         <div class="theme-clock-chip" id="themeClockChip" title="Clock Theme Mode">
           <svg id="themeClockIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -874,222 +880,230 @@
       <div class="onboarding-card">
         <!-- Delicate Ribbon Progress Header -->
         <div class="onboarding-header">
-          <div class="onboarding-step-dots">
-            <span class="step-dot active" id="dotStep1"></span>
-            <span class="step-dot" id="dotStep2"></span>
-            <span class="step-dot" id="dotStep3"></span>
-            <span class="step-dot" id="dotStep4"></span>
-          </div>
+          <div class="onboarding-step-dots" id="onboardingDots"></div>
           <button class="onboarding-skip-btn" id="skipOnboardingBtn" title="Skip setup">Skip</button>
         </div>
 
-        <!-- STEP 1: WARM WELCOME & NAMES -->
-        <div class="onboarding-step" id="onboardingStep1">
-          <div class="onboarding-hero-icon">
-            <img src="icons/apple-touch-icon.png" alt="Baby Bottle Crest" class="onboarding-crest-img">
-          </div>
-          <h2 class="onboarding-title" id="obStep1Title">Welcome</h2>
-          <div class="onboarding-subtitle">
-            Your peaceful, private space to track daily pumping, liquid gold stash, and baby feedings.
-          </div>
+        <!-- Swipeable one-page carousel: every slide lives in the DOM at once,
+             side by side, and onboarding.js scrolls this track and keeps the
+             dots + card height in sync — rather than toggling display on
+             separate full-page steps the way the old wizard did. -->
+        <div class="onboarding-viewport" id="onboardingViewport">
+          <div class="onboarding-track" id="onboardingTrack">
 
-          <!-- Name Inputs -->
-          <div class="onboarding-names-grid">
-            <div class="onboarding-field-group">
-              <label class="onboarding-field-label" for="obParentNameInput">Your Name</label>
-              <input type="text" id="obParentNameInput" class="onboarding-text-input" placeholder="e.g. Savannah" value="" autocomplete="given-name">
-            </div>
-            <div class="onboarding-field-group">
-              <label class="onboarding-field-label" for="obBabyNameInput">Baby's Name</label>
-              <input type="text" id="obBabyNameInput" class="onboarding-text-input" placeholder="e.g. Clara or Baby" value="" autocomplete="off">
-            </div>
-          </div>
-
-          <div class="onboarding-highlight-box">
-            <div class="highlight-item">
-              <span class="highlight-icon ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
-              <div class="highlight-text"><strong>100% Private & Offline</strong> — Stored only on your device. No accounts, ads, or tracking.</div>
-            </div>
-            <div class="highlight-item">
-              <span class="highlight-icon ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg></span>
-              <div class="highlight-text"><strong>Pumping and feeding, together</strong> — 1-tap pump logging with an animated goal bottle, plus a dedicated feed tracker with safety timers.</div>
-            </div>
-          </div>
-
-          <button class="onboarding-primary-btn" id="onboardingNextBtn1">
-            <span>Personalize My Goals</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-            </svg>
-          </button>
-        </div>
-
-        <!-- STEP 2: PERSONALIZE GOALS & ROUTINE -->
-        <div class="onboarding-step" id="onboardingStep2" style="display: none;">
-          <div class="u-center">
-            <span class="onboarding-badge-pill">Step 2 of 4</span>
-          </div>
-          <h2 class="onboarding-title">Your Daily Target</h2>
-          <div class="onboarding-subtitle">
-            Your animated milk bottle will rise with liquid gold throughout the day as you log pumps.
-          </div>
-
-          <!-- Goal Volume Input -->
-          <div class="onboarding-field-group">
-            <label class="onboarding-field-label">Daily Pumping Target Volume</label>
-            <div class="onboarding-goal-stepper">
-              <button class="onboarding-step-btn" id="obGoalMinus">−</button>
-              <div class="onboarding-goal-display">
-                <input type="number" id="obGoalInput" value="24" min="5" max="100" class="onboarding-num-input">
-                <span class="onboarding-unit-tag" id="obUnitTag">oz</span>
+            <!-- SLIDE: SAVE TO HOME SCREEN — shown first. Skipped entirely
+                 when the app is already running installed (standalone). -->
+            <div class="onboarding-step" id="obSlideInstall">
+              <div class="onboarding-hero-icon">
+                <img src="icons/apple-touch-icon.png" alt="Baby Bottle Crest" class="onboarding-crest-img">
               </div>
-              <button class="onboarding-step-btn" id="obGoalPlus">+</button>
-            </div>
-          </div>
+              <h2 class="onboarding-title">Save Nurture to Your Home Screen</h2>
+              <div class="onboarding-subtitle">
+                One tap turns this into a full-screen app — no browser bars, opens instantly, works fully offline.
+              </div>
 
-          <!-- Interval Selector -->
-          <div class="onboarding-field-group">
-            <label class="onboarding-field-label">How often do you pump?</label>
-            <div class="onboarding-chips-grid" id="obIntervalChips">
-              <button class="ob-chip" data-hours="2">Every 2h</button>
-              <button class="ob-chip" data-hours="2.5">Every 2.5h</button>
-              <button class="ob-chip active" data-hours="3">Every 3h</button>
-              <button class="ob-chip" data-hours="3.5">Every 3.5h</button>
-              <button class="ob-chip" data-hours="4">Every 4h</button>
-            </div>
-            <div class="onboarding-hint">The top banner reminds you when you're next due.</div>
-          </div>
+              <!-- The real browser install prompt, when the platform offers one (Android/Chrome) -->
+              <div class="onboarding-native-install" id="obInstallNative" hidden>
+                <button class="onboarding-primary-btn" id="obInstallNowBtn">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
+                    <circle cx="12" cy="14" r="2" fill="currentColor"/>
+                  </svg>
+                  <span>Install Now</span>
+                </button>
+              </div>
 
-          <div class="onboarding-actions-row">
-            <button class="btn-ghost" id="onboardingBackBtn2">Back</button>
-            <button class="onboarding-primary-btn u-flex-1" id="onboardingNextBtn2">
-              <span>Save to Phone</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+              <!-- Manual guide, for platforms with no native prompt to trigger (iOS Safari) -->
+              <div class="onboarding-manual-install" id="obInstallManual">
+                <div class="install-guide-tabs">
+                  <button class="install-tab-btn active" id="tabInstallIos">iPhone (Safari)</button>
+                  <button class="install-tab-btn" id="tabInstallAndroid">Android (Chrome)</button>
+                </div>
 
-        <!-- STEP 3: SAVE TO HOME SCREEN GUIDE -->
-        <div class="onboarding-step" id="onboardingStep3" style="display: none;">
-          <div class="u-center">
-            <span class="onboarding-badge-pill">Step 3 of 4</span>
-          </div>
-          <h2 class="onboarding-title">Save to Your Home Screen</h2>
-          <div class="onboarding-subtitle">
-            Install this tracker on your phone so it opens full-screen like a real app, with no browser bars and full offline support.
-          </div>
+                <div class="install-steps-card" id="guideIosCard">
+                  <div class="install-step-row">
+                    <div class="install-step-num">1</div>
+                    <div class="install-step-desc">
+                      In <strong>Safari</strong>, tap the <strong>Share button</strong>
+                      <svg class="share-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
+                        <polyline points="16 6 12 2 8 6"/>
+                        <line x1="12" y1="2" x2="12" y2="15"/>
+                      </svg>
+                      at the bottom of your phone screen.
+                    </div>
+                  </div>
+                  <div class="install-step-row">
+                    <div class="install-step-num">2</div>
+                    <div class="install-step-desc">
+                      Scroll down and tap <strong>"Add to Home Screen"</strong>
+                      <span class="inline-badge">Add to Home Screen</span>
+                    </div>
+                  </div>
+                  <div class="install-step-row">
+                    <div class="install-step-num">3</div>
+                    <div class="install-step-desc">
+                      Tap <strong>Add</strong> in the top right. Our pink baby bottle icon will appear on your home screen!
+                    </div>
+                  </div>
+                </div>
 
-          <!-- Platform Selector Tabs -->
-          <div class="install-guide-tabs">
-            <button class="install-tab-btn active" id="tabInstallIos">iPhone (Safari)</button>
-            <button class="install-tab-btn" id="tabInstallAndroid">Android (Chrome)</button>
-          </div>
+                <div class="install-steps-card" id="guideAndroidCard" style="display: none;">
+                  <div class="install-step-row">
+                    <div class="install-step-num">1</div>
+                    <div class="install-step-desc">
+                      In <strong>Chrome</strong>, tap the <strong>three dots (⋮)</strong> menu in the top right corner.
+                    </div>
+                  </div>
+                  <div class="install-step-row">
+                    <div class="install-step-num">2</div>
+                    <div class="install-step-desc">
+                      Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.
+                    </div>
+                  </div>
+                  <div class="install-step-row">
+                    <div class="install-step-num">3</div>
+                    <div class="install-step-desc">
+                      Confirm, and the app icon will appear right on your home screen and app drawer!
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-          <!-- iPhone Instructions -->
-          <div class="install-steps-card" id="guideIosCard">
-            <div class="install-step-row">
-              <div class="install-step-num">1</div>
-              <div class="install-step-desc">
-                In <strong>Safari</strong>, tap the <strong>Share button</strong>
-                <svg class="share-icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/>
-                  <polyline points="16 6 12 2 8 6"/>
-                  <line x1="12" y1="2" x2="12" y2="15"/>
+              <button class="onboarding-primary-btn" id="obNextFromInstall">
+                <span>Continue</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
                 </svg>
-                at the bottom of your phone screen.
-              </div>
+              </button>
             </div>
-            <div class="install-step-row">
-              <div class="install-step-num">2</div>
-              <div class="install-step-desc">
-                Scroll down and tap <strong>"Add to Home Screen"</strong>
-                <span class="inline-badge">Add to Home Screen</span>
-              </div>
-            </div>
-            <div class="install-step-row">
-              <div class="install-step-num">3</div>
-              <div class="install-step-desc">
-                Tap <strong>Add</strong> in the top right. Our pink baby bottle icon will appear on your home screen!
-              </div>
-            </div>
-          </div>
 
-          <!-- Android Instructions -->
-          <div class="install-steps-card" id="guideAndroidCard" style="display: none;">
-            <div class="install-step-row">
-              <div class="install-step-num">1</div>
-              <div class="install-step-desc">
-                In <strong>Chrome</strong>, tap the <strong>three dots (⋮)</strong> menu in the top right corner.
+            <!-- SLIDE: WARM WELCOME & NAMES -->
+            <div class="onboarding-step" id="obSlideWelcome">
+              <h2 class="onboarding-title">Welcome</h2>
+              <div class="onboarding-subtitle">
+                Your peaceful, private space to track daily pumping, liquid gold stash, and baby feedings.
               </div>
-            </div>
-            <div class="install-step-row">
-              <div class="install-step-num">2</div>
-              <div class="install-step-desc">
-                Tap <strong>"Install app"</strong> or <strong>"Add to Home screen"</strong>.
+
+              <!-- Name Inputs -->
+              <div class="onboarding-names-grid">
+                <div class="onboarding-field-group">
+                  <label class="onboarding-field-label" for="obParentNameInput">Your Name</label>
+                  <input type="text" id="obParentNameInput" class="onboarding-text-input" placeholder="e.g. Savannah" value="" autocomplete="given-name">
+                </div>
+                <div class="onboarding-field-group">
+                  <label class="onboarding-field-label" for="obBabyNameInput">Baby's Name</label>
+                  <input type="text" id="obBabyNameInput" class="onboarding-text-input" placeholder="e.g. Clara or Baby" value="" autocomplete="off">
+                </div>
               </div>
-            </div>
-            <div class="install-step-row">
-              <div class="install-step-num">3</div>
-              <div class="install-step-desc">
-                Confirm, and the app icon will appear right on your home screen and app drawer!
+
+              <div class="onboarding-highlight-box">
+                <div class="highlight-item">
+                  <span class="highlight-icon ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+                  <div class="highlight-text"><strong>100% Private & Offline</strong> — Stored only on your device. No accounts, ads, or tracking.</div>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-icon ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg></span>
+                  <div class="highlight-text"><strong>Pumping and feeding, together</strong> — 1-tap pump logging with an animated goal bottle, plus a dedicated feed tracker with safety timers.</div>
+                </div>
               </div>
-            </div>
-          </div>
 
-          <div class="onboarding-actions-row">
-            <button class="btn-ghost" id="onboardingBackBtn3">Back</button>
-            <button class="onboarding-primary-btn u-flex-1" id="onboardingNextBtn3">
-              <span>How It Works</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
-              </svg>
-            </button>
-          </div>
-        </div>
-
-        <!-- STEP 4: FEATURE HIGHLIGHTS & READY -->
-        <div class="onboarding-step" id="onboardingStep4" style="display: none;">
-          <div class="u-center">
-            <span class="onboarding-badge-pill">Step 4 of 4</span>
-          </div>
-          <h2 class="onboarding-title" id="obFinishTitle">You're All Set</h2>
-          <div class="onboarding-subtitle" id="obFinishSubtitle">
-            Three quick tips to get the most out of your tracker:
-          </div>
-
-          <div class="onboarding-features-list">
-            <div class="feature-card">
-              <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg></div>
-              <div class="feature-details">
-                <div class="feature-name">Fast Direct Logging</div>
-                <div class="feature-desc">Start the pump timer, or simply tap the output digits to type exact amounts directly.</div>
+              <div class="onboarding-actions-row">
+                <button class="btn-ghost" id="obBackFromWelcome">Back</button>
+                <button class="onboarding-primary-btn u-flex-1" id="obNextFromWelcome">
+                  <span>Personalize My Goals</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </button>
               </div>
             </div>
 
-            <div class="feature-card">
-              <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="2.5" x2="12" y2="21.5"/><line x1="3.9" y1="7.5" x2="20.1" y2="16.5"/><line x1="20.1" y1="7.5" x2="3.9" y2="16.5"/></svg></div>
-              <div class="feature-details">
-                <div class="feature-name">Smart FIFO Milk Stash</div>
-                <div class="feature-desc">Auto-saves to fridge or freezer with automatic CDC expiration countdowns.</div>
+            <!-- SLIDE: PERSONALIZE GOALS & ROUTINE -->
+            <div class="onboarding-step" id="obSlideGoals">
+              <h2 class="onboarding-title">Your Daily Target</h2>
+              <div class="onboarding-subtitle">
+                Your animated milk bottle will rise with liquid gold throughout the day as you log pumps.
+              </div>
+
+              <!-- Goal Volume Input -->
+              <div class="onboarding-field-group">
+                <label class="onboarding-field-label">Daily Pumping Target Volume</label>
+                <div class="onboarding-goal-stepper">
+                  <button class="onboarding-step-btn" id="obGoalMinus">−</button>
+                  <div class="onboarding-goal-display">
+                    <input type="number" id="obGoalInput" value="24" min="5" max="100" class="onboarding-num-input">
+                    <span class="onboarding-unit-tag" id="obUnitTag">oz</span>
+                  </div>
+                  <button class="onboarding-step-btn" id="obGoalPlus">+</button>
+                </div>
+              </div>
+
+              <!-- Interval Selector -->
+              <div class="onboarding-field-group">
+                <label class="onboarding-field-label">How often do you pump?</label>
+                <div class="onboarding-chips-grid" id="obIntervalChips">
+                  <button class="ob-chip" data-hours="2">Every 2h</button>
+                  <button class="ob-chip" data-hours="2.5">Every 2.5h</button>
+                  <button class="ob-chip active" data-hours="3">Every 3h</button>
+                  <button class="ob-chip" data-hours="3.5">Every 3.5h</button>
+                  <button class="ob-chip" data-hours="4">Every 4h</button>
+                </div>
+                <div class="onboarding-hint">The top banner reminds you when you're next due.</div>
+              </div>
+
+              <div class="onboarding-actions-row">
+                <button class="btn-ghost" id="obBackFromGoals">Back</button>
+                <button class="onboarding-primary-btn u-flex-1" id="obNextFromGoals">
+                  <span>See What's Inside</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </button>
               </div>
             </div>
 
-            <div class="feature-card">
-              <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8.5 8.5 0 0 1 10.5 4 8.5 8.5 0 1 0 20 13.5z"/></svg></div>
-              <div class="feature-details">
-                <div class="feature-name">3 AM Low Brightness</div>
-                <div class="feature-desc">Switches to soothing Vintage Rose Noir at 7:00 PM for comfortable night pumping.</div>
+            <!-- SLIDE: FEATURE HIGHLIGHTS & READY -->
+            <div class="onboarding-step" id="obSlideFeatures">
+              <h2 class="onboarding-title" id="obFinishTitle">You're All Set</h2>
+              <div class="onboarding-subtitle" id="obFinishSubtitle">
+                Three quick tips to get the most out of your tracker:
+              </div>
+
+              <div class="onboarding-features-list">
+                <div class="feature-card">
+                  <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg></div>
+                  <div class="feature-details">
+                    <div class="feature-name">Fast Direct Logging</div>
+                    <div class="feature-desc">Start the pump timer, or simply tap the output digits to type exact amounts directly.</div>
+                  </div>
+                </div>
+
+                <div class="feature-card">
+                  <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><line x1="12" y1="2.5" x2="12" y2="21.5"/><line x1="3.9" y1="7.5" x2="20.1" y2="16.5"/><line x1="20.1" y1="7.5" x2="3.9" y2="16.5"/></svg></div>
+                  <div class="feature-details">
+                    <div class="feature-name">Smart FIFO Milk Stash</div>
+                    <div class="feature-desc">Auto-saves to fridge or freezer with automatic CDC expiration countdowns.</div>
+                  </div>
+                </div>
+
+                <div class="feature-card">
+                  <div class="feature-icon-bubble ob-icon-svg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A8.5 8.5 0 0 1 10.5 4 8.5 8.5 0 1 0 20 13.5z"/></svg></div>
+                  <div class="feature-details">
+                    <div class="feature-name">3 AM Low Brightness</div>
+                    <div class="feature-desc">Switches to soothing Vintage Rose Noir at 7:00 PM for comfortable night pumping.</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="onboarding-actions-row">
+                <button class="btn-ghost" id="obBackFromFeatures">Back</button>
+                <button class="onboarding-primary-btn u-flex-1" id="obFinishBtn">
+                  <span>Start Tracking</span>
+                </button>
               </div>
             </div>
-          </div>
 
-          <div class="onboarding-actions-row">
-            <button class="btn-ghost" id="onboardingBackBtn4">Back</button>
-            <button class="onboarding-primary-btn u-flex-1" id="onboardingFinishBtn">
-              <span>Start Tracking</span>
-            </button>
           </div>
         </div>
       </div>
