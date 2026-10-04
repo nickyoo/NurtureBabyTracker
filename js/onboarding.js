@@ -11,6 +11,18 @@ import { reminders } from './reminders.js';
 // carousel entirely (see showModal) when the app is already installed.
 const SLIDE_IDS = ['obSlideInstall', 'obSlideWelcome', 'obSlideGoals', 'obSlideFeatures'];
 
+/**
+ * What the onboarding screen's choices become in the app's settings. Pure, so it's unit-tested.
+ * `goal` is whole ounces, `interval` is hours between pumps (the chips offer 2 – 4 in half hours).
+ * Keys match App.loadSettings() and the reminder engine — onboarding used to save its choices
+ * under three other names that nothing ever read, so every answer was silently lost on reload.
+ */
+export function buildOnboardingSettings({ goal, interval } = {}) {
+  const dailyGoalOz = Number.isFinite(goal) && goal > 0 ? Math.round(goal) : 24;
+  const hours = Number.isFinite(interval) && interval > 0 ? interval : 3;
+  return { dailyGoalOz, pumpIntervalMinutes: Math.round(hours * 60) };
+}
+
 export class OnboardingController {
   constructor(app) {
     this.app = app;
@@ -18,6 +30,8 @@ export class OnboardingController {
     this.slides = [];
     this.index = 0;
     this._scrollRaf = null;
+    this._autoScrollTarget = null; // slide our own smooth scroll is heading to (null = none)
+    this._autoScrollTimer = null;
   }
 
   showModal() {
@@ -30,8 +44,7 @@ export class OnboardingController {
       parentName: settings.parentName || '',
       babyName: (settings.babyName && settings.babyName.toLowerCase() !== 'baby') ? settings.babyName : '',
       goal: Number(settings.dailyGoalOz) || 24,
-      interval: Number(settings.reminderIntervalHours) || 3,
-      unit: settings.units || 'oz'
+      interval: (Number(settings.pumpIntervalMinutes) || 180) / 60
     };
 
     const parentInput = document.getElementById('obParentNameInput');
@@ -39,10 +52,14 @@ export class OnboardingController {
     if (parentInput) parentInput.value = this.state.parentName;
     if (babyInput) babyInput.value = this.state.babyName;
 
+    // The goal is stored in ounces whatever the display unit is, and the field is labelled "oz".
     const goalInput = document.getElementById('obGoalInput');
-    const unitTag = document.getElementById('obUnitTag');
     if (goalInput) goalInput.value = this.state.goal;
-    if (unitTag) unitTag.textContent = this.state.unit;
+
+    // Highlight the interval that's actually set (replaying the tour used to always show "Every 3h").
+    document.querySelectorAll('#obIntervalChips .ob-chip').forEach((chip) => {
+      chip.classList.toggle('active', parseFloat(chip.dataset.hours) === this.state.interval);
+    });
 
     // Nothing for the install slide to ask of someone already running the
     // installed app — drop it, and drop the now-meaningless Back button
@@ -122,8 +139,31 @@ export class OnboardingController {
     if (!track || !this.slides.length) return;
     const clamped = Math.max(0, Math.min(index, this.slides.length - 1));
     const width = track.clientWidth;
+
+    // While OUR smooth scroll animates, the track passes through in-between positions. The scroll
+    // listener must not read those as "the person swiped back": it made the progress dot (and the
+    // card height) flicker backwards on every Continue tap, and a quick second tap then re-targeted
+    // the same slide. Ignore scroll events until we arrive (or a safety timeout, then resync).
+    clearTimeout(this._autoScrollTimer);
+    this._autoScrollTarget = opts.instant ? null : clamped;
+    if (!opts.instant) {
+      this._autoScrollTimer = setTimeout(() => {
+        this._autoScrollTarget = null;
+        this.syncIndexFromScroll();
+      }, 800);
+    }
+
     track.scrollTo({ left: clamped * width, behavior: opts.instant ? 'auto' : 'smooth' });
     this.setActiveIndex(clamped);
+  }
+
+  // Which slide is the track actually showing right now?
+  syncIndexFromScroll() {
+    const track = document.getElementById('onboardingTrack');
+    if (!track || !this.slides.length) return;
+    const width = track.clientWidth || 1;
+    const nearest = Math.round(track.scrollLeft / width);
+    this.setActiveIndex(Math.max(0, Math.min(nearest, this.slides.length - 1)));
   }
 
   // Keeps dots + card height live while the user is mid-swipe, not just
@@ -135,10 +175,16 @@ export class OnboardingController {
       if (this._scrollRaf) return;
       this._scrollRaf = requestAnimationFrame(() => {
         this._scrollRaf = null;
-        const width = track.clientWidth || 1;
-        const nearest = Math.round(track.scrollLeft / width);
-        const clamped = Math.max(0, Math.min(nearest, this.slides.length - 1));
-        this.setActiveIndex(clamped);
+        if (this._autoScrollTarget !== null) {
+          // Our own animation: hand control back to swipes only once we've arrived.
+          const width = track.clientWidth || 1;
+          if (Math.abs(track.scrollLeft - this._autoScrollTarget * width) <= 2) {
+            this._autoScrollTarget = null;
+            clearTimeout(this._autoScrollTimer);
+          }
+          return;
+        }
+        this.syncIndexFromScroll();
       });
     }, { passive: true });
   }
@@ -180,32 +226,27 @@ export class OnboardingController {
         }
       }
 
-      const goalVal = (this.state && this.state.goal) || 24;
-      const intervalVal = (this.state && this.state.interval) || 3;
-      const unitVal = (this.state && this.state.unit) || 'oz';
+      const { dailyGoalOz, pumpIntervalMinutes } = buildOnboardingSettings(this.state || {});
 
       await db.setSetting('parentName', pName);
       await db.setSetting('babyName', bName);
-      await db.setSetting('dailyPumpingGoal', goalVal);
-      await db.setSetting('reminderIntervalHours', intervalVal);
-      await db.setSetting('preferredUnit', unitVal);
+      await db.setSetting('dailyGoalOz', dailyGoalOz);
+      await db.setSetting('pumpIntervalMinutes', pumpIntervalMinutes);
       await db.setSetting('onboarding_completed', true);
       localStorage.setItem('onboarding_completed', 'true');
 
       settings.parentName = pName;
       settings.babyName = bName;
-      settings.dailyGoalOz = goalVal;
-      settings.reminderIntervalHours = intervalVal;
-      settings.units = unitVal;
+      settings.dailyGoalOz = dailyGoalOz;
+      settings.pumpIntervalMinutes = pumpIntervalMinutes;
 
       this.app.updateNamesUI();
 
-      const goalDisplayEl = document.getElementById('goalTargetValue');
-      if (goalDisplayEl) goalDisplayEl.textContent = goalVal;
+      // (the goal tile itself is repainted by renderTodayDashboard() below, in the right unit)
       const settingsGoalInput = document.getElementById('settingDailyGoalInput');
-      if (settingsGoalInput) settingsGoalInput.value = goalVal;
-      const settingsIntervalInput = document.getElementById('settingReminderInterval');
-      if (settingsIntervalInput) settingsIntervalInput.value = intervalVal;
+      if (settingsGoalInput) settingsGoalInput.value = dailyGoalOz;
+      const settingsIntervalSelect = document.getElementById('settingIntervalSelect');
+      if (settingsIntervalSelect) settingsIntervalSelect.value = String(pumpIntervalMinutes);
     } catch (e) {
       console.warn('Failed to save onboarding settings', e);
     }
@@ -222,7 +263,7 @@ export class OnboardingController {
 
     try {
       await this.app.renderTodayDashboard();
-      reminders.init();
+      await reminders.updateStatus();
     } catch (e) {
       console.warn('Post-onboarding render warning', e);
     }

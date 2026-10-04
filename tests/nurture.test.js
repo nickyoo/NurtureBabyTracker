@@ -552,3 +552,132 @@ test('resolveFeedTimerStart: safe defaults when the draft was never picked', () 
   const unknown = resolveFeedTimerStart({ type: 'weird', amountOz: 3 });
   assert.equal(unknown.type, 'formula'); // unknown type falls back to formula
 });
+
+// ============================================================================
+// Added with the browser-test audit: pure logic behind the bugs it found.
+// ============================================================================
+
+// ------------------------------------------------------------ escapeHtml ---
+const { escapeHtml } = await import('../js/viewHelpers.js');
+
+test('escapeHtml: neutralises everything that can open markup or break out of an attribute', () => {
+  assert.equal(escapeHtml('<img src=x onerror="alert(1)">'), '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+  assert.equal(escapeHtml(`"><script>'&`), '&quot;&gt;&lt;script&gt;&#39;&amp;');
+  assert.equal(escapeHtml('plain note, 4 oz'), 'plain note, 4 oz');
+});
+test('escapeHtml: null, undefined and numbers are safe to pass straight from stored data', () => {
+  assert.equal(escapeHtml(null), '');
+  assert.equal(escapeHtml(undefined), '');
+  assert.equal(escapeHtml(4.5), '4.5');
+  assert.equal(escapeHtml(0), '0');
+});
+
+// ------------------------------------------------- pump output (timer.js) ---
+const { resolvePumpQuantity, scaleOutputDelta, timer } = await import('../js/timer.js');
+
+test('resolvePumpQuantity: records the number in the unit the person was looking at', () => {
+  const engine = { pumpOutputOz: 3.5, pumpOutputMl: 104 };
+  assert.equal(resolvePumpQuantity('oz', engine), 3.5);
+  assert.equal(resolvePumpQuantity('mL', engine), 104); // was 3.5 "mL" — a 100 mL pump logged as 3.5
+  assert.equal(resolvePumpQuantity(undefined, engine), 3.5);
+});
+
+test('scaleOutputDelta: ounce-labelled chips add real amounts in mL mode', () => {
+  assert.deepEqual([0.5, 1, 2, 3].map((d) => scaleOutputDelta(d, 'mL')), [15, 30, 60, 90]);
+  assert.deepEqual([0.5, 1, 2, 3].map((d) => scaleOutputDelta(d, 'oz')), [0.5, 1, 2, 3]);
+});
+
+test('pump output: junk input is ignored instead of turning the amount into NaN', () => {
+  timer.setPumpOutput(4, 'oz');
+  for (const junk of [NaN, undefined, 'abc', null]) {
+    timer.adjustPumpOutput(junk, 'oz');
+    timer.adjustPumpOutput(junk, 'mL');
+    timer.setPumpOutput(junk, 'oz');
+    timer.setPumpOutput(junk, 'mL');
+  }
+  assert.equal(timer.pumpOutputOz, 4);
+  assert.ok(Number.isFinite(timer.pumpOutputMl));
+  timer.adjustPumpOutput(0.5, 'oz'); // and it still works afterwards
+  assert.equal(timer.pumpOutputOz, 4.5);
+});
+
+// --------------------------------------------------- backup file checks ---
+const { validateBackup } = await import('../js/db.js');
+
+test('validateBackup: accepts well-formed backups, including empty and partial ones', () => {
+  assert.equal(validateBackup({ version: 1 }), true);
+  assert.equal(validateBackup({
+    version: 1, sessions: [{ id: 's1', type: 'pump' }], inventory: [{ id: 7 }], bottles: [],
+    settings: [{ key: 'units', value: 'oz' }],
+  }), true);
+});
+
+test('validateBackup: refuses everything that could fail halfway through a restore (which would wipe the data first)', () => {
+  const bad = [
+    null, 'text', 42, [], {},                                    // not a backup at all / no version marker
+    { version: 1, sessions: 'oops' }, { version: 1, inventory: 7 }, { version: 1, settings: {} }, // lists that aren't lists
+    { version: 1, sessions: [{ type: 'pump', startTime: 1 }] },  // record with no id
+    { version: 1, sessions: [null] }, { version: 1, sessions: ['x'] },
+    { version: 1, sessions: [{ id: '' }] }, { version: 1, sessions: [{ id: {} }] },
+    { version: 1, settings: [{ value: 1 }] },                    // setting with no key
+  ];
+  for (const b of bad) assert.throws(() => validateBackup(b), /backup/i, `should reject ${JSON.stringify(b)}`);
+});
+
+test('validateBackup: the message says which part is damaged', () => {
+  assert.throws(() => validateBackup({ version: 1, sessions: [{ id: 'ok' }, { type: 'x' }] }), /sessions entry 2/);
+  assert.throws(() => validateBackup({ version: 1, inventory: 5 }), /"inventory" should be a list/);
+});
+
+// ----------------------------------------- onboarding → saved settings ---
+const { buildOnboardingSettings } = await import('../js/onboarding.js');
+const { migrateLegacySettings } = await import('../js/app.js');
+
+test('buildOnboardingSettings: hours become minutes under the keys the app actually reads', () => {
+  assert.deepEqual(buildOnboardingSettings({ goal: 30, interval: 2 }), { dailyGoalOz: 30, pumpIntervalMinutes: 120 });
+  assert.equal(buildOnboardingSettings({ goal: 24, interval: 2.5 }).pumpIntervalMinutes, 150);
+  assert.equal(buildOnboardingSettings({ goal: 24, interval: 3.5 }).pumpIntervalMinutes, 210);
+  assert.deepEqual(Object.keys(buildOnboardingSettings({})).sort(), ['dailyGoalOz', 'pumpIntervalMinutes']);
+});
+test('buildOnboardingSettings: rounds the goal and falls back to sane defaults for junk', () => {
+  assert.equal(buildOnboardingSettings({ goal: 27.6, interval: 3 }).dailyGoalOz, 28);
+  for (const goal of [0, -5, NaN, undefined, null]) assert.equal(buildOnboardingSettings({ goal }).dailyGoalOz, 24);
+  for (const interval of [0, -1, NaN, undefined]) assert.equal(buildOnboardingSettings({ interval }).pumpIntervalMinutes, 180);
+  assert.deepEqual(buildOnboardingSettings(), { dailyGoalOz: 24, pumpIntervalMinutes: 180 });
+});
+
+test('migrateLegacySettings: recovers goal + interval that older onboarding saved under names nothing read', () => {
+  const m = migrateLegacySettings({ dailyPumpingGoal: 30, reminderIntervalHours: 2, preferredUnit: 'oz', parentName: 'Sav' });
+  assert.equal(m.dailyGoalOz, 30);
+  assert.equal(m.pumpIntervalMinutes, 120);
+  assert.equal(m.parentName, 'Sav'); // everything else passes through
+});
+test('migrateLegacySettings: never overrides a value the person has set since', () => {
+  const m = migrateLegacySettings({ dailyGoalOz: 36, dailyPumpingGoal: 24, pumpIntervalMinutes: 240, reminderIntervalHours: 3 });
+  assert.equal(m.dailyGoalOz, 36);
+  assert.equal(m.pumpIntervalMinutes, 240);
+});
+test('migrateLegacySettings: ignores junk, leaves empty alone, and does not mutate its input', () => {
+  assert.deepEqual(migrateLegacySettings({}), {});
+  assert.deepEqual(migrateLegacySettings(), {});
+  const junk = migrateLegacySettings({ dailyPumpingGoal: 0, reminderIntervalHours: 'abc' });
+  assert.equal(junk.dailyGoalOz, undefined);
+  assert.equal(junk.pumpIntervalMinutes, undefined);
+  const input = { dailyPumpingGoal: 30 };
+  migrateLegacySettings(input);
+  assert.deepEqual(input, { dailyPumpingGoal: 30 });
+});
+
+// ------------------------------------------- editing a feed's type/notes ---
+test('applySessionEdits: the feed flow\'s own "Formula Feeding" label follows a type change (it used to go stale)', () => {
+  const fromFlow = { id: 'f', type: 'feed', feedType: 'formula', startTime: 1, outputQty: 4, notes: 'Formula Feeding' };
+  const switched = applySessionEdits(fromFlow, { feedType: 'breastmilk', notes: 'Formula Feeding' }); // the modal always sends the note field
+  assert.equal(switched.notes, 'Breast Milk Feeding');
+  assert.equal(applySessionEdits(switched, { feedType: 'formula', notes: switched.notes }).notes, 'Formula Feeding');
+});
+test('applySessionEdits: a note typed during the edit is never overwritten by the auto label', () => {
+  const fromFlow = { id: 'f', type: 'feed', feedType: 'formula', startTime: 1, outputQty: 4, notes: 'Formula Feeding' };
+  const edited = applySessionEdits(fromFlow, { feedType: 'breastmilk', notes: 'pumped at work' });
+  assert.equal(edited.feedType, 'breastmilk');
+  assert.equal(edited.notes, 'pumped at work');
+});

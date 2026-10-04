@@ -67,6 +67,9 @@ export class InstallPromptController {
       modal.addEventListener('click', e => {
         if (e.target === modal) modal.classList.remove('open');
       });
+      window.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && modal.classList.contains('open')) modal.classList.remove('open');
+      });
     }
 
     const tabIos = document.getElementById('tabGuideIos');

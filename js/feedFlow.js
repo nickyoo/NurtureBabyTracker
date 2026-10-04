@@ -99,6 +99,10 @@ export class FeedFlowController {
         if (!wasHold) this.openFeedFlow();
       });
       fab.addEventListener('pointercancel', () => { cancelHold(); downPos = null; });
+      // Keyboard (Enter/Space) and programmatic/assistive clicks never produce the pointer events
+      // above, so they used to do nothing — and on the History/Stash/Settings tabs this button is the
+      // only way to log a feed. Real taps/clicks have detail >= 1 and were already handled on pointerup.
+      fab.addEventListener('click', e => { if (!e.detail) this.openFeedFlow(); });
     }
 
     // Log feed button on the Pump tab: plain tap opens the guided flow.
@@ -184,6 +188,19 @@ export class FeedFlowController {
     });
     const pad = document.getElementById('ffExpressPad');
     if (pad) pad.hidden = step !== 'express';
+    // Paint the screens we're about to show from the REAL draft. The express gesture changes the
+    // type/amount without touching these widgets, so "Adjust amount" used to show an old amount and
+    // the wrong highlighted type — while a different one was what got logged.
+    if (step === 'type' || step === 'amount') this._ffRenderTypeSelection();
+    if (step === 'amount') this._ffSyncUnits();
+  }
+
+  _ffRenderTypeSelection() {
+    const type = this.feedFlow.type;
+    const fBtn = document.getElementById('ffTypeFormula');
+    if (fBtn) fBtn.classList.toggle('is-selected', type === 'formula');
+    const mBtn = document.getElementById('ffTypeBreastmilk');
+    if (mBtn) mBtn.classList.toggle('is-selected', type === 'breastmilk');
   }
 
   _ffPickType(type) {
@@ -267,7 +284,12 @@ export class FeedFlowController {
     };
     input.onkeydown = e => {
       if (e.key === 'Enter') done(true);
-      else if (e.key === 'Escape') done(false);
+      else if (e.key === 'Escape') {
+        // Escape cancels THIS edit only. Without stopPropagation it also reached the sheet's own
+        // Escape handler and closed the whole flow, throwing away everything entered so far.
+        e.stopPropagation();
+        done(false);
+      }
     };
     input.onblur = () => done(true);
   }
@@ -375,7 +397,7 @@ export class FeedFlowController {
       const urgency = InventoryManager.getUrgency(item.expiresAt);
       const tone = urgency.level === 'expired' ? 'badge-expired' : urgency.badgeClass;
       return `
-        <button type="button" class="ff-thawed-chip" data-action="pick-thawed-source" data-id="${item.id}">
+        <button type="button" class="ff-thawed-chip" data-action="pick-thawed-source" data-id="${escapeHtml(item.id)}">
           <span class="ff-thawed-qty">${this._ffAmtStr(prefill.amountOz)} breast milk</span>
           <span class="inv-countdown-pill ${tone}">${escapeHtml(urgency.label)}</span>
         </button>`;
@@ -516,6 +538,9 @@ export class FeedFlowController {
     if (closeBtn) {
       closeBtn.addEventListener('click', () => {
         if (!this.bottle.active) this.closeBottleSheet();
+        // A live feed must not be lost to a stray tap, but the ✕ must never be a dead button either:
+        // it asks "Cancel this bottle feed?" first, exactly like the Cancel button.
+        else this.cancelBottleTimer();
       });
     }
     window.addEventListener('keydown', e => {

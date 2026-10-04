@@ -19,6 +19,23 @@ export function normalizePumpDuration(v) {
 }
 
 /**
+ * The amount to record for a timed pump, in the unit the person was looking at.
+ * The engine tracks the output in both oz and mL; saving the oz number under an "mL" label
+ * (as this used to) logged a 100 mL pump as 3.5 mL.
+ */
+export function resolvePumpQuantity(units, { pumpOutputOz, pumpOutputMl }) {
+  return units === 'mL' ? pumpOutputMl : pumpOutputOz;
+}
+
+/**
+ * The quick-add chips are labelled in ounces (+0.5 … +3.0). In mL mode the same tap should add
+ * the same real amount (about 30 mL per ounce), not 0.5 mL. NaN in → NaN out (callers ignore it).
+ */
+export function scaleOutputDelta(deltaOz, units) {
+  return units === 'mL' ? Math.round(deltaOz * 30) : deltaOz;
+}
+
+/**
  * Pure builder for a pump session record. Duration is given in minutes;
  * startTime is epoch ms. Shared by the live timer and manual entry.
  */
@@ -167,6 +184,7 @@ class TimerEngine {
   }
 
   setPumpOutput(val, unit = 'oz') {
+    if (!Number.isFinite(parseFloat(val))) return; // never let junk turn the amount into NaN
     const num = Math.max(0.1, parseFloat(val) || 0);
     if (unit === 'oz') {
       this.pumpOutputOz = Math.round(num * 100) / 100;
@@ -180,6 +198,7 @@ class TimerEngine {
   }
 
   adjustPumpOutput(delta, unit = 'oz') {
+    if (!Number.isFinite(delta)) return; // NaN would stick forever: Math.max(0.25, NaN) is NaN
     if (unit === 'oz') {
       this.pumpOutputOz = Math.max(0.25, Math.round((this.pumpOutputOz + delta) * 100) / 100);
       this.pumpOutputMl = Math.round(this.pumpOutputOz * 29.5735);
@@ -201,7 +220,7 @@ class TimerEngine {
     this._recalcElapsedFromWallClock();
 
     const sessionRecord = buildPumpSession({
-      quantity: options.quantity !== undefined ? options.quantity : this.pumpOutputOz,
+      quantity: options.quantity !== undefined ? options.quantity : resolvePumpQuantity(options.units, this),
       durationMin: this.pumpSeconds / 60,
       unit: options.units || 'oz',
       startTime: this.startedAt,
@@ -221,6 +240,7 @@ class TimerEngine {
 
     this.active = false;
     this.startedAt = null;
+    this.pumpSeconds = 0; // the tile goes back to 00:00 (a reload already shows that)
     if (this.timerInterval) clearInterval(this.timerInterval);
     this._persistState();
 
@@ -256,6 +276,7 @@ class TimerEngine {
   cancel() {
     this.active = false;
     this.startedAt = null;
+    this.pumpSeconds = 0;
     if (this.timerInterval) clearInterval(this.timerInterval);
     this._persistState();
     if (this.callbacks.onStateChange) this.callbacks.onStateChange();

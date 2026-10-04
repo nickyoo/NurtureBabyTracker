@@ -1,7 +1,7 @@
 // Nurture — Master Application Orchestrator
 import { db } from './db.js';
 import { sound } from './audio.js';
-import { timer } from './timer.js';
+import { timer, scaleOutputDelta } from './timer.js';
 import { THAWED_LOCATION } from './inventory.js';
 import { reminders } from './reminders.js';
 import { OnboardingController } from './onboarding.js';
@@ -12,12 +12,37 @@ import { DashboardView } from './dashboardView.js';
 import { FeedFlowController } from './feedFlow.js';
 import { InstallPromptController } from './installPrompt.js';
 
+// The labels the app writes itself when a feed has no note of its own. Both spellings exist in the
+// wild: the feed flow writes "… Feeding", older entries say "… Bottle Feed".
+const AUTO_FEED_NOTES = [
+  { formula: 'Formula Feeding', breastmilk: 'Breast Milk Feeding' },
+  { formula: 'Formula Bottle Feed', breastmilk: 'Breast Milk Bottle Feed' },
+];
+
+/**
+ * Settings written by earlier versions of the onboarding screen under names nothing read
+ * (dailyPumpingGoal / reminderIntervalHours), so a person's chosen goal and pump interval were
+ * silently lost. Recover them — but only where the real setting was never set, so anything the
+ * person has changed since is left alone. Pure; returns a new object.
+ */
+export function migrateLegacySettings(saved = {}) {
+  const out = { ...saved };
+  if (out.dailyGoalOz === undefined && Number(saved.dailyPumpingGoal) > 0) {
+    out.dailyGoalOz = Number(saved.dailyPumpingGoal);
+  }
+  if (!out.pumpIntervalMinutes && Number(saved.reminderIntervalHours) > 0) {
+    out.pumpIntervalMinutes = Math.round(Number(saved.reminderIntervalHours) * 60);
+  }
+  return out;
+}
+
 /**
  * Pure merge for editing a logged session (pump or feed).
  * `edits` may contain: outputQty, startTime, notes, feedType ('formula'|'breastmilk'),
  * durationMin. Returns a new session object; never mutates the original.
- * Auto-generated feed notes ("Formula Bottle Feed" / "Breast Milk Bottle Feed")
- * follow a feedType change; user-written notes are left alone.
+ * Auto-generated feed notes ("Formula Feeding", "Breast Milk Bottle Feed", …) follow a
+ * feedType change; anything the person wrote — including a note typed during this very
+ * edit — is left alone.
  */
 export function applySessionEdits(original, edits = {}) {
   const updated = { ...original };
@@ -32,15 +57,10 @@ export function applySessionEdits(original, edits = {}) {
     updated.notes = edits.notes;
   }
   if (updated.type === 'feed' && edits.feedType !== undefined) {
-    const autoNotes = {
-      formula: 'Formula Bottle Feed',
-      breastmilk: 'Breast Milk Bottle Feed',
-    };
-    const wasAuto = Object.values(autoNotes).includes(original.notes);
     updated.feedType = edits.feedType;
-    if (wasAuto) {
-      updated.notes = autoNotes[edits.feedType] || original.notes;
-    }
+    // Judge the note AS EDITED: if it's still one of our own labels, keep it in step with the type.
+    const pair = AUTO_FEED_NOTES.find((p) => p.formula === updated.notes || p.breastmilk === updated.notes);
+    if (pair && pair[edits.feedType]) updated.notes = pair[edits.feedType];
   }
   if (updated.type === 'pump' && edits.durationMin !== undefined) {
     const durationSec = Math.max(0, Math.round(edits.durationMin * 60));
@@ -232,6 +252,10 @@ export class App {
       if (this.currentTab === 'pump') this.updateBottleFillLevel();
       if (this.currentTab === 'inventory') this.renderInventory();
     }, 20000);
+
+    // Startup is finished: handlers are bound and the views are rendered.
+    // The browser test suite waits on this rather than racing init().
+    document.documentElement.dataset.appReady = 'true';
   }
 
   // --- CLOCK-BASED THEME ENGINE ---
@@ -292,10 +316,16 @@ export class App {
 
   // --- SETTINGS MANAGEMENT ---
   async loadSettings() {
-    const saved = await db.getAllSettings();
+    const stored = await db.getAllSettings();
+    const saved = migrateLegacySettings(stored);
+    // Write recovered values back so the reminder engine (which reads the database directly) agrees.
+    for (const key of ['dailyGoalOz', 'pumpIntervalMinutes']) {
+      if (stored[key] === undefined && saved[key] !== undefined) await db.setSetting(key, saved[key]);
+    }
     if (saved.parentName) this.settings.parentName = saved.parentName;
     if (saved.babyName) this.settings.babyName = saved.babyName;
-    if (saved.units) this.settings.units = saved.units;
+    // Whitelisted: the unit is printed into HTML in many places, and a restored backup is untrusted input.
+    if (saved.units === 'oz' || saved.units === 'mL') this.settings.units = saved.units;
     if (saved.themeMode) this.settings.themeMode = saved.themeMode;
     if (saved.dailyGoalOz !== undefined) this.settings.dailyGoalOz = saved.dailyGoalOz;
     if (saved.pumpIntervalMinutes) this.settings.pumpIntervalMinutes = saved.pumpIntervalMinutes;
@@ -328,7 +358,12 @@ export class App {
     // Brand header
     const brandNameEl = document.getElementById('appBrandName');
     if (brandNameEl) {
-      brandNameEl.innerHTML = `${parentPossessive}<span>.</span>`;
+      // Built with text nodes, not innerHTML: the name is whatever the person (or a restored
+      // backup file) typed, and must never be interpreted as markup.
+      brandNameEl.textContent = parentPossessive;
+      const dot = document.createElement('span');
+      dot.textContent = '.';
+      brandNameEl.appendChild(dot);
     }
 
     const brandSubtitleEl = document.getElementById('appBrandSubtitleText');
@@ -354,11 +389,27 @@ export class App {
     if (bInput && document.activeElement !== bInput) {
       bInput.value = baby;
     }
+
+    this.fitHeader();
+  }
+
+  // Names too long to share a row with the unit/theme chips used to push those chips off the edge of
+  // a narrow phone, where they couldn't be tapped. Stack the chips under the brand — but ONLY when the
+  // header really overflows, so normal names keep the one-row layout exactly as designed.
+  fitHeader() {
+    const header = document.querySelector('.app-header');
+    if (!header) return;
+    header.classList.remove('is-stacked');
+    if (header.scrollWidth > header.clientWidth + 1) header.classList.add('is-stacked');
   }
 
   async setUnit(unit) {
     this.settings.units = unit;
     await db.setSetting('units', unit);
+    // Keep Settings → Display Units in step when the header chip changes the unit
+    // (it used to keep saying "oz", and picking "oz" there then did nothing).
+    const unitSelect = document.getElementById('settingUnitSelect');
+    if (unitSelect) unitSelect.value = unit;
     this.updateUnitLabels();
     this.renderTodayDashboard();
     this.renderInventory();
@@ -384,19 +435,28 @@ export class App {
     if (toggleBtn) {
       toggleBtn.textContent = unit === 'oz' ? 'oz' : 'mL';
     }
+    // The quick-add chips are authored in ounces; label them with what a tap really adds.
+    document.querySelectorAll('.chip-btn[data-delta]').forEach(chip => {
+      const oz = parseFloat(chip.dataset.delta);
+      chip.textContent = unit === 'mL' ? `+${scaleOutputDelta(oz, 'mL')}` : `+${oz.toFixed(1)}`;
+    });
   }
 
   // --- SERVICE WORKER REGISTRATION ---
   registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').then((reg) => {
-          console.log('Nurture Service Worker registered:', reg.scope);
-        }).catch((err) => {
-          console.warn('Service Worker registration failed:', err);
-        });
+    if (!('serviceWorker' in navigator)) return;
+    const register = () => {
+      navigator.serviceWorker.register('./sw.js').then((reg) => {
+        console.log('Nurture Service Worker registered:', reg.scope);
+      }).catch((err) => {
+        console.warn('Service Worker registration failed:', err);
       });
-    }
+    };
+    // init() only reaches this point after awaiting IndexedDB, by which time the page may already
+    // have finished loading. A 'load' listener added after that never fires — so on a fast or cached
+    // load the worker (and with it, offline mode) was silently never installed.
+    if (document.readyState === 'complete') register();
+    else window.addEventListener('load', register);
   }
 
   // --- NAVIGATION (4 TABS) ---
@@ -426,6 +486,10 @@ export class App {
         if (sel) sel.value = nextMode;
       });
     }
+
+    // The header's width changes with the window and when the web fonts arrive.
+    window.addEventListener('resize', () => this.fitHeader());
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitHeader());
   }
 
   switchTab(tabName) {
@@ -458,6 +522,17 @@ export class App {
   // inline onclick="" string. One listener here replaces what used to be
   // ~18 separate onclick="window.nurtureApp...." attributes.
   bindGlobalActions() {
+    // Things that stand in for buttons (role="button" on a div) don't get Enter/Space for free the
+    // way a real <button> does — without this, keyboard users could focus them and nothing happened.
+    document.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      const el = e.target;
+      if (el && el.matches && el.matches('[role="button"][data-action]')) {
+        e.preventDefault();
+        el.click();
+      }
+    });
+
     document.addEventListener('click', (e) => {
       const el = e.target.closest('[data-action]');
       if (!el) return;

@@ -4,7 +4,7 @@
 // the cross-cutting renders a finished pump session needs to trigger.
 import { db } from './db.js';
 import { sound } from './audio.js';
-import { timer, normalizePumpDuration } from './timer.js';
+import { timer, normalizePumpDuration, scaleOutputDelta } from './timer.js';
 import { reminders } from './reminders.js';
 
 export class PumpTimerView {
@@ -54,9 +54,12 @@ export class PumpTimerView {
       });
     }
 
-    document.querySelectorAll('.chip-btn').forEach(btn => {
+    // Only the quick-add chips (they carry data-delta). The manual-pump modal's 10/15/20 minute
+    // chips share the .chip-btn class but have no delta — they used to land here too, calling
+    // adjustPumpOutput(NaN) and turning the pump stepper into "NaN".
+    document.querySelectorAll('.chip-btn[data-delta]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const delta = parseFloat(btn.dataset.delta);
+        const delta = scaleOutputDelta(parseFloat(btn.dataset.delta), app.settings.units);
         timer.adjustPumpOutput(delta, app.settings.units);
       });
     });
@@ -142,8 +145,10 @@ export class PumpTimerView {
         }
       };
 
-      goalTargetValue.addEventListener('click', (e) => {
-        e.stopPropagation();
+      // The whole readout looks (pointer cursor) and says ("Tap target to edit") it is tappable,
+      // so make all of it tappable — not just the small underlined number.
+      goalFractionDisplay.addEventListener('click', (e) => {
+        if (goalTargetInput.style.display !== 'none') return; // already typing
         showGoalInput();
       });
 

@@ -1,1 +1,15 @@
-{"description": "Nurture — free offline baby feeding & pumping tracker (PWA)", "license": "MIT", "name": "nurture", "scripts": {"test": "node --test tests/nurture.test.js"}, "type": "module", "version": "1.6.0"}
+{
+  "description": "Nurture — free offline baby feeding & pumping tracker (PWA)",
+  "devDependencies": {
+    "playwright": "^1.56.1"
+  },
+  "license": "MIT",
+  "name": "nurture",
+  "scripts": {
+    "test": "node --test --test-reporter=spec tests/nurture.test.js tests/static-audit.test.js",
+    "test:all": "npm test && npm run test:e2e",
+    "test:e2e": "node --test --test-reporter=spec tests/e2e/shell-pump.test.js tests/e2e/feed.test.js tests/e2e/data.test.js tests/e2e/onboarding-pwa-layout.test.js tests/e2e/sweep.test.js"
+  },
+  "type": "module",
+  "version": "1.6.0"
+}

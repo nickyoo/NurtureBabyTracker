@@ -147,6 +147,8 @@ export class DashboardView {
     if (chevronIcon) {
       chevronIcon.classList.toggle('open', this.pumpsAccordionOpen);
     }
+    const accordionHeader = document.querySelector('.accordion-header');
+    if (accordionHeader) accordionHeader.setAttribute('aria-expanded', String(this.pumpsAccordionOpen));
 
     if (accordionTile) {
       accordionTile.classList.toggle('open', this.pumpsAccordionOpen);
@@ -217,15 +219,15 @@ export class DashboardView {
                       </div>
                       <div class="session-details">
                         <div class="session-primary-title">
-                          <span>${s.outputQty} ${s.unit || unit}</span>
+                          <span>${escapeHtml(s.outputQty)} ${escapeHtml(s.unit || unit)}</span>
                           <span class="session-badge-tag ${isFormula ? 'formula' : 'breastmilk'}">${isFormula ? 'Formula' : 'Breast Milk'}</span>
                         </div>
-                        <div class="session-sub-title">${timeStr} • ${s.notes || (isFormula ? 'Formula Feeding' : 'Breast Milk Feeding')}</div>
+                        <div class="session-sub-title">${timeStr} • ${escapeHtml(s.notes || (isFormula ? 'Formula Feeding' : 'Breast Milk Feeding'))}</div>
                       </div>
                     </div>
                     <div class="session-item-right has-actions">
-                      <button class="session-action-btn" data-action="edit-session" data-id="${s.id}">Edit</button>
-                      <button class="session-action-btn" data-action="delete-session" data-id="${s.id}">Delete</button>
+                      <button class="session-action-btn" data-action="edit-session" data-id="${escapeHtml(s.id)}">Edit</button>
+                      <button class="session-action-btn" data-action="delete-session" data-id="${escapeHtml(s.id)}">Delete</button>
                     </div>
                   </div>
                 `;
@@ -241,16 +243,16 @@ export class DashboardView {
                       </div>
                       <div class="session-details">
                         <div class="session-primary-title">
-                          <span>${s.outputQty} ${s.unit || unit}</span>
+                          <span>${escapeHtml(s.outputQty)} ${escapeHtml(s.unit || unit)}</span>
                           <span class="session-badge-tag breastmilk">Pump</span>
                         </div>
                         <div class="session-sub-title">${timeStr} • ${durationMin} min duration</div>
-                        ${s.notes ? `<div class="note-italic-muted">"${s.notes}"</div>` : ''}
+                        ${s.notes ? `<div class="note-italic-muted">"${escapeHtml(s.notes)}"</div>` : ''}
                       </div>
                     </div>
                     <div class="session-item-right has-actions">
-                      <button class="session-action-btn" data-action="edit-session" data-id="${s.id}">Edit</button>
-                      <button class="session-action-btn" data-action="delete-session" data-id="${s.id}">Delete</button>
+                      <button class="session-action-btn" data-action="edit-session" data-id="${escapeHtml(s.id)}">Edit</button>
+                      <button class="session-action-btn" data-action="delete-session" data-id="${escapeHtml(s.id)}">Delete</button>
                     </div>
                   </div>
                 `;
@@ -423,14 +425,14 @@ export class DashboardView {
       const timeStr = new Date(s.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       return `
         <div class="session-item-tile feeds-tracker-row" role="button" tabindex="0"
-             title="Tap to quick-edit" data-action="edit-session" data-id="${s.id}">
+             title="Tap to quick-edit" data-action="edit-session" data-id="${escapeHtml(s.id)}">
           <div class="session-item-left">
             <div class="session-item-icon ${isFormula ? 'formula-feed-icon' : 'breastmilk-feed-icon'}">
               ${isFormula ? ICON_SVG_BOTTLE : ICON_SVG_DROPLET}
             </div>
             <div class="session-details">
               <div class="session-primary-title">
-                <span>${s.outputQty} ${s.unit || unit}</span>
+                <span>${escapeHtml(s.outputQty)} ${escapeHtml(s.unit || unit)}</span>
                 <span class="session-badge-tag ${isFormula ? 'formula' : 'breastmilk'}">${isFormula ? 'Formula' : 'Breast Milk'}</span>
               </div>
               <div class="session-sub-title">${timeStr}${s.notes ? ` • ${escapeHtml(s.notes)}` : ''}</div>
@@ -470,13 +472,13 @@ export class DashboardView {
               <div class="session-item-left">
                 <div class="session-item-icon thaw-icon">${ICON_SVG_SNOWFLAKE}</div>
                 <div class="session-details">
-                  <div class="session-primary-title"><span>${disp.qty} ${disp.qtyUnit}</span>
+                  <div class="session-primary-title"><span>${escapeHtml(disp.qty)} ${escapeHtml(disp.qtyUnit)}</span>
                     <span class="session-badge-tag">${locName}</span></div>
                   <div class="session-sub-title">Pumped ${pumped}${item.notes ? ` • ${escapeHtml(item.notes)}` : ''}</div>
                 </div>
               </div>
               <button class="inv-action-btn thaw-btn thaw-action-btn"
-                      data-action="thaw-item" data-id="${item.id}">Thaw</button>
+                      data-action="thaw-item" data-id="${escapeHtml(item.id)}">Thaw</button>
             </div>`;
         }).join('');
 
@@ -502,7 +504,7 @@ export class DashboardView {
               <div class="session-item-left">
                 <div class="session-item-icon breastmilk-feed-icon">${ICON_SVG_DROPLET}</div>
                 <div class="session-details">
-                  <div class="session-primary-title"><span>${disp.qty} ${disp.qtyUnit}</span>
+                  <div class="session-primary-title"><span>${escapeHtml(disp.qty)} ${escapeHtml(disp.qtyUnit)}</span>
                     <span class="session-badge-tag breastmilk">Thawed</span></div>
                   <div class="session-sub-title">${sub}</div>
                 </div>
@@ -580,7 +582,7 @@ export class DashboardView {
       rows.innerHTML = items.map(i => `
         <div class="today-urgent-row ${i.tone}">
           <span class="today-urgent-icon" aria-hidden="true">${i.icon}</span>
-          <span class="today-urgent-text">${i.text}</span>
+          <span class="today-urgent-text">${escapeHtml(i.text)}</span>
         </div>`).join('');
     };
     paint(pumpCard, pumpRows, pumpItems);

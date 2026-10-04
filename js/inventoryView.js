@@ -3,6 +3,7 @@
 // are the shared inventory-mutation actions other views (the Feed tab's
 // thaw tile) also call into.
 import { inventory, InventoryManager, THAWED_LOCATION, FROZEN_LOCATIONS } from './inventory.js';
+import { escapeHtml } from './viewHelpers.js';
 
 export class InventoryView {
   constructor(app) {
@@ -62,7 +63,7 @@ export class InventoryView {
         [THAWED_LOCATION]: 'Thawed (Fridge)'
       };
 
-      const locName = locLabels[item.location] || item.location;
+      const locName = escapeHtml(locLabels[item.location] || item.location);
 
       let displayQty = item.quantity;
       let displayUnit = item.unit || 'oz';
@@ -75,7 +76,7 @@ export class InventoryView {
       }
 
       return `
-        <div class="inventory-tile ${isFifoFirst ? 'fifo-first' : ''}" data-id="${item.id}">
+        <div class="inventory-tile ${isFifoFirst ? 'fifo-first' : ''}" data-id="${escapeHtml(item.id)}">
           ${isFifoFirst ? `
             <div class="fifo-badge">
               <svg viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
@@ -84,7 +85,7 @@ export class InventoryView {
           ` : ''}
           <div class="inv-card-top">
             <div class="inv-qty-title">
-              ${displayQty} <span class="inv-qty-unit">${displayUnit}</span>
+              ${escapeHtml(displayQty)} <span class="inv-qty-unit">${escapeHtml(displayUnit)}</span>
             </div>
             <div class="inv-countdown-pill ${urgency.badgeClass}">
               ${urgency.label}
@@ -102,25 +103,25 @@ export class InventoryView {
             </div>
           </div>
 
-          ${item.notes ? `<div class="note-italic-secondary">"${item.notes}"</div>` : ''}
+          ${item.notes ? `<div class="note-italic-secondary">"${escapeHtml(item.notes)}"</div>` : ''}
 
           ${item.status === 'active' ? `
             <div class="inv-card-actions">
               ${FROZEN_LOCATIONS.includes(item.location) ? `
-              <button class="inv-action-btn thaw-btn" data-action="thaw-item" data-id="${item.id}">
+              <button class="inv-action-btn thaw-btn" data-action="thaw-item" data-id="${escapeHtml(item.id)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M9 2h6M10 2v3a2 2 0 0 1-2 2H7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-1a2 2 0 0 1-2-2V2"/>
                 </svg>
                 Thaw
               </button>
               ` : ''}
-              <button class="inv-action-btn" data-action="mark-used" data-id="${item.id}">
+              <button class="inv-action-btn" data-action="mark-used" data-id="${escapeHtml(item.id)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
                 Used
               </button>
-              <button class="inv-action-btn" data-action="discard-item" data-id="${item.id}">
+              <button class="inv-action-btn" data-action="discard-item" data-id="${escapeHtml(item.id)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="3 6 5 6 21 6"/>
                   <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -130,7 +131,7 @@ export class InventoryView {
             </div>
           ` : `
             <div class="inv-status-label">
-              Status: ${item.status}
+              Status: ${escapeHtml(item.status)}
             </div>
           `}
         </div>
@@ -181,6 +182,13 @@ export class InventoryView {
       });
 
       closeAddMilkBtn.addEventListener('click', () => addMilkModal.classList.remove('open'));
+      // Every other sheet closes on a tap outside and on Escape; this one only had Cancel.
+      addMilkModal.addEventListener('click', (e) => {
+        if (e.target === addMilkModal) addMilkModal.classList.remove('open');
+      });
+      window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && addMilkModal.classList.contains('open')) addMilkModal.classList.remove('open');
+      });
 
       saveNewMilkBtn.addEventListener('click', async () => {
         const pumpedAtVal = document.getElementById('modalPumpedAt').value;

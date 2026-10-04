@@ -146,6 +146,13 @@
   user-select: none;
 }
 
+/* The `hidden` attribute must ALWAYS win. The browser's own [hidden] rule is weaker than any
+   author rule, so something like `.install-banner { display: flex }` would otherwise keep a
+   "hidden" element on screen forever (it did: the banner's Dismiss button did nothing). */
+[hidden] {
+  display: none !important;
+}
+
 body {
   font-family: var(--font-body);
   background-color: var(--bg-app);
@@ -385,6 +392,28 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Names too long to share a row with the unit/theme chips used to push those chips off the edge of a
+   narrow phone, where they could not be tapped. app.js (fitHeader) adds .is-stacked only when the header
+   would actually overflow, so normal names keep the exact one-row header. */
+.app-header.is-stacked {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.app-header.is-stacked .brand {
+  flex: 1 1 100%;
+}
+
+.app-header.is-stacked .header-meta {
+  margin-left: auto;
+}
+
+/* A single very long word wraps instead of overflowing its box (without making normal names break early). */
+.brand-name,
+.brand-subtitle span {
+  overflow-wrap: break-word;
 }
 
 .arcade-back-pill {
@@ -1193,10 +1222,14 @@ body {
   transform: translateX(2px);
 }
 
+/* min-width:0 down the chain: a long unbroken note used to stretch this row to ~850px and
+   push the Edit/Delete/Thaw/Used buttons off-screen where they could not be tapped. */
 .session-item-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .session-item-icon {
@@ -1241,6 +1274,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .session-primary-title {
@@ -1250,6 +1284,7 @@ body {
   color: var(--text-primary);
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -1280,10 +1315,12 @@ body {
 .session-sub-title {
   font-size: 0.76rem;
   color: var(--text-secondary);
+  overflow-wrap: anywhere;
 }
 
 .session-item-right {
   text-align: right;
+  flex-shrink: 0;
 }
 
 .session-item-right.has-actions {
@@ -1318,12 +1355,14 @@ body {
   font-size: 0.72rem;
   color: var(--text-muted);
   font-style: italic;
+  overflow-wrap: anywhere;
 }
 
 .note-italic-secondary {
   font-size: 0.78rem;
   color: var(--text-secondary);
   font-style: italic;
+  overflow-wrap: anywhere;
 }
 
 .empty-state-msg {

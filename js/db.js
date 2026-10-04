@@ -11,6 +11,32 @@ export function newId(prefix) {
   return `${prefix}_${suffix}`;
 }
 
+// The record field IndexedDB uses as each store's primary key.
+const STORE_KEYS = { sessions: 'id', inventory: 'id', bottles: 'id', settings: 'key' };
+
+/**
+ * Check a parsed backup file BEFORE anything is changed. Throws a human-readable Error if it
+ * isn't something importBackup can safely apply. (A restore replaces everything, so a file that
+ * only fails halfway through must never get the chance to start.)
+ */
+export function validateBackup(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data) || !data.version) {
+    throw new Error('Invalid backup file format.');
+  }
+  for (const [store, keyField] of Object.entries(STORE_KEYS)) {
+    const list = data[store];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) throw new Error(`Backup is damaged: "${store}" should be a list.`);
+    list.forEach((record, i) => {
+      const key = record && typeof record === 'object' ? record[keyField] : undefined;
+      if ((typeof key !== 'string' && typeof key !== 'number') || key === '') {
+        throw new Error(`Backup is damaged: ${store} entry ${i + 1} has no "${keyField}".`);
+      }
+    });
+  }
+  return true;
+}
+
 class Database {
   constructor() {
     this.db = null;
@@ -240,26 +266,29 @@ class Database {
     };
   }
 
+  // All-or-nothing: the clear + every write happen in ONE transaction, so if anything fails the
+  // browser rolls the whole thing back and the person's existing data is untouched. (It used to
+  // clear each store first and write afterwards, so a bad file wiped everything and then errored.)
   async importBackup(data) {
-    if (!data || !data.version) throw new Error('Invalid backup file format.');
-    await this.clear('sessions');
-    await this.clear('inventory');
-    await this.clear('bottles');
-    await this.clear('settings');
-
-    if (data.sessions) {
-      for (const s of data.sessions) await this.put('sessions', s);
-    }
-    if (data.inventory) {
-      for (const i of data.inventory) await this.put('inventory', i);
-    }
-    if (data.bottles) {
-      for (const b of data.bottles) await this.put('bottles', b);
-    }
-    if (data.settings) {
-      for (const st of data.settings) await this.put('settings', st);
-    }
-    return true;
+    validateBackup(data);
+    await this.ready;
+    const stores = Object.keys(STORE_KEYS);
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction(stores, 'readwrite');
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => reject(tx.error || new Error('Restore failed; your existing data is untouched.'));
+      tx.onabort = () => reject(tx.error || new Error('Restore was cancelled; your existing data is untouched.'));
+      try {
+        for (const name of stores) {
+          const store = tx.objectStore(name);
+          store.clear();
+          for (const record of data[name] || []) store.put(record);
+        }
+      } catch (err) {
+        try { tx.abort(); } catch { /* already finished */ }
+        reject(err);
+      }
+    });
   }
 
   async resetAllData() {
@@ -267,10 +296,10 @@ class Database {
     await this.clear('inventory');
     await this.clear('bottles');
     await this.clear('settings');
-    // Set standard fresh defaults
-    await this.setSetting('dailyPumpingGoal', 24);
-    await this.setSetting('preferredUnit', 'oz');
-    await this.setSetting('reminderIntervalHours', 3);
+    // Set standard fresh defaults (under the same keys App.loadSettings() reads back)
+    await this.setSetting('dailyGoalOz', 24);
+    await this.setSetting('units', 'oz');
+    await this.setSetting('pumpIntervalMinutes', 180);
     await this.setSetting('themeMode', 'auto');
     await this.setSetting('parentName', '');
     await this.setSetting('babyName', '');
