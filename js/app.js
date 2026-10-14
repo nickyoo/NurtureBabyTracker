@@ -362,6 +362,7 @@ export class App {
     this.updateUnitLabels();
     this.renderTodayDashboard();
     this.renderInventory();
+    this.settingsView.renderForm();
     this.pumpTimerView.updateDisplay(timer.getDisplayData());
   }
 
@@ -486,8 +487,12 @@ export class App {
     // Check if reset was explicitly requested via URL (e.g. ?reset=true)
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get('reset') === 'true') {
-      await db.resetAllData();
-      localStorage.removeItem('onboarding_completed');
+      // A URL must never silently wipe someone's baby log — links get shared.
+      const ok = confirm('This link asks to erase all Nurture data on this device. Erase everything?');
+      if (ok) {
+        await db.resetAllData();
+        localStorage.removeItem('onboarding_completed');
+      }
       window.history.replaceState({}, document.title, window.location.pathname);
     }
 
@@ -512,6 +517,9 @@ export class App {
         if (!timer.active) {
           timer.start();
         }
+        // Land on the timer that just started, not the top of the page
+        const hero = document.getElementById('timerHeroTile');
+        if (hero) requestAnimationFrame(() => hero.scrollIntoView({ behavior: 'smooth', block: 'center' }));
       });
     }
 

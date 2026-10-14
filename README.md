@@ -36,7 +36,11 @@ Then open the printed URL on your phone and use *Add to Home Screen* for the ful
 npm test
 ```
 
-54 unit tests covering the safety-critical logic: milk expiration math, urgency badges, bottle countdown thresholds, thaw-from-stash transitions, stash summaries, feed-flow thawed-source prefills, feed-timer entry defaults, thaw-tile visibility rules, pump-duration validation, trend aggregation, ID generation, session editing, feed-flow gesture math (hysteresis, clamp/precision), and the bottle-timer safety windows. No dependencies — just Node's built-in test runner.
+60 unit tests covering the safety-critical logic: milk expiration math, unit-safe totals (oz/mL), urgency badges, bottle countdown thresholds, thaw-from-stash transitions, stash summaries, feed-flow thawed-source prefills, feed-timer entry defaults, thaw-tile visibility rules, pump-duration validation, trend aggregation, ID generation, session editing, feed-flow gesture math (hysteresis, clamp/precision), and the bottle-timer safety windows. No dependencies — just Node's built-in test runner.
+
+**Audit & roadmap**
+
+See [`docs/AUDIT.md`](docs/AUDIT.md) — the full user-flow audit (dead clicks, animation continuity, accessibility, data bugs) and the build spec for the redesign + sleep / diaper / memories expansion.
 
 **Structure**
 

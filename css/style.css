@@ -402,6 +402,12 @@ body {
   transition: transform 0.15s var(--ease-spring);
 }
 
+/* Installed to the home screen, Nurture is its own app — there's no arcade
+   to go "back" to, so the pill would just navigate somewhere confusing. */
+@media (display-mode: standalone) {
+  .arcade-back-pill { display: none; }
+}
+
 .arcade-back-pill:active {
   transform: scale(0.94);
 }
@@ -3362,3 +3368,9 @@ input:checked + .slider:before {
 .rose-link-btn { color: var(--rose-primary); border-color: var(--border-fine); }
 .danger-btn { color: var(--red-urgent); border-color: var(--red-border); }
 .restore-backup-label { margin: 0; cursor: pointer; }
+
+/* Expired thawed pouches stay visible in the feed flow but can't be picked */
+.ff-thawed-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
