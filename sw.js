@@ -31,7 +31,9 @@ const ASSETS_TO_CACHE = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
+      // cache: 'reload' bypasses the browser HTTP cache so a new service
+      // worker never re-caches a stale copy of the previous release.
+      return cache.addAll(ASSETS_TO_CACHE.map((url) => new Request(url, { cache: 'reload' })));
     }).then(() => self.skipWaiting())
   );
 });
