@@ -106,6 +106,7 @@ Legacy v1 modules (`dashboardView.js`, `feedFlow.js`, `pumpTimerView.js`, `inven
   note: '',                     // user text, plain (never HTML)
   data: { ... },                // per-type, below
   createdAt, updatedAt,         // epoch ms
+  babyId: 'baby_<uuid>' | null, // which child (twins/siblings). null ONLY for parent-level events (pump)
   deviceId: 'dev_<uuid>',       // set once per install (settings.deviceId); future sync merge key
   migratedFrom?: 'sess_…'       // v1 provenance
 }
@@ -120,6 +121,8 @@ Per-type `data`:
 | `sleep` | `{ kind: 'nap'\|'night' }` |
 | `diaper` | `{ kind: 'wet'\|'dirty'\|'both'\|'dry', color?: string, consistency?: string }` |
 | `milestone` | `{ key?: 'first-smile'\|…\|null, title: string, photoIds: string[] }` |
+
+**Multiple babies.** Every `feed`, `sleep`, `diaper` and `milestone` event carries the `babyId` of the child it's about; `pump` events are the parent's and carry `babyId: null`. The milk stash (`inventory`) is family-level (no `babyId`) — a feed *from* a pouch records the baby. Queries take an optional `babyId` and views pass the active baby. The UI shows a baby switcher (avatar row in Today's header) only once a second baby exists; with one baby nothing about multi-baby is visible. Migration assigns every v1 event to a single default baby created from the v1 `babyName`. One running activity per **type per baby** (twins can nap at the same time).
 
 Amounts are stored **in the unit they were entered in** with the unit recorded; all display/totals go through `core/units.js` (`convertQty`, `sumAmounts`). Never assume oz.
 
@@ -157,7 +160,7 @@ await events.update(id, patch)                                   // shallow-merg
 await events.remove(id)                                          // → removed event (for undo)
 await events.restore(event)                                      // re-put a removed event (undo)
 await events.get(id)
-await events.query({ type?, types?, from?, to?, running? })      // sorted by startTime DESC
+await events.query({ type?, types?, from?, to?, running?, babyId? })  // sorted by startTime DESC; babyId filters to that baby + parent-level (null) events
 await events.last(type, predicate?)                              // most recent finished event of type
 await events.running(type?)                                      // events with endTime === null
 await events.start(type, data, { startTime? })                   // creates running event; throws if one of that type runs
@@ -218,7 +221,12 @@ settings.get(key) / settings.set(key, value) / settings.all() / settings.subscri
 
 | key | default | notes |
 |---|---|---|
-| `profile` | `{ babyName:'', birthDate:null, photoId:null, parentName:'' }` | |
+| `babies` | `[{ id, name:'', birthDate:null, photoId:null, createdAt }]` | at least one; v1 migration creates it from `babyName` |
+| `activeBabyId` | first baby's id | which child Today/Timeline/sheets show |
+| `parentName` | `''` | |
+| `lastBackupAt` | `null` | drives the weekly backup nudge |
+| `persistGranted` | `null` | result of `navigator.storage.persist()` |
+| `feedbackEmail` | `''` | owner-configured mailto target (no tracking) |
 | `units` | `'oz'` | |
 | `theme` | `'auto'` | `'auto'` = follow system `prefers-color-scheme`, plus "night hours" dimming (19:00–08:00) unless the user picks light/dark explicitly |
 | `trackers` | all `true`: `{ bottle, formula, breastfeeding, pump, stash, sleep, diaper, memories }` | Hidden ≠ deleted |
@@ -299,6 +307,20 @@ Plus a `<meta http-equiv="Content-Security-Policy">` fallback (minus `frame-ance
 `onboarding.js` (and Settings → Baby) on photo pick: square crop → `photos.add()` (downscaled) → render a 180×180 PNG via canvas → set `<link rel="apple-touch-icon">` `href` to the PNG data URL **and** persist it as `settings.iconDataUrl`; `app.js` re-applies it on every boot *before* the user could reach Add to Home Screen. Favicon uses a 64×64 version. Android keeps the static icon. Copy must say "Your home-screen icon will be Clara's photo (iPhone)."
 
 ---
+
+## 10b. Data-loss protection (local-only means *we* must prevent loss)
+
+Safari deletes script-writable storage (IndexedDB) for sites not used in 7 days of browser use; Home-Screen web apps are exempt. With no server there is no recovery, so:
+- `core/persist.js`: call `navigator.storage.persist()` after onboarding and on first meaningful log; store the result; `navigator.storage.estimate()` shown in Settings → Data.
+- Install is pushed as *protection*, not convenience: "Add to Home Screen so iPhone never clears Clara's log."
+- Weekly nudge (Today, dismissible card, never a modal) when `lastBackupAt` is older than 7 days and there's ≥1 day of data: "Save a backup to Files" → `backup.share()`; success updates `lastBackupAt`. Settings → Data shows "Last backup: 3 days ago".
+- Any import in `replace` mode first auto-downloads a backup of the current data.
+
+## 10c. Extras in this build
+
+- **Pediatrician report** (`views/report.js` pushed from Timeline and Settings): last 7 or 14 days — feeds/day + total oz, breastfeeding sessions, wet/dirty diapers/day, sleep total/day + longest stretch, pump totals. Clean print stylesheet; "Save as PDF / Print" uses `window.print()`; "Share" uses the CSV/printable HTML. All local.
+- **Calendar pump reminders** (`core/ics.js`, pure + tested): export the next N days of pump times (from interval + last pump) as an `.ics` with VALARMs, shared via `navigator.share` / download. The phone's Calendar fires the alerts — nothing leaves the device. Settings copy is honest: "Web apps can't alert you while closed. Add your pump schedule to Calendar instead."
+- **Privacy page** (Settings → Privacy): plain-English what/where/how-to-export/how-to-erase, "this app makes no network requests after it loads", link to the public source, and a **Send feedback** `mailto:` (no data attached unless the user types it).
 
 ## 11. Testing
 

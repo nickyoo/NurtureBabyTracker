@@ -23,6 +23,9 @@ Severity key: **P0** = loses or corrupts data / traps the user · **P1** = wrong
 | Rollout | **Phased PRs**: (1) audit + critical fixes ← *this PR*, (2) design system + redesign, (3) new trackers, (4) baby-photo icon + share + polish. |
 | Baby photo as app icon | Yes, **iPhone-only and pre-install only** (see §6.4). Clearly labeled as such in the UI. |
 | **Positioning** | **"Fully private & free."** This is the edge — every design and engineering choice must make it *true and provable*, not just a tagline. See §6.8. |
+| **Multiple babies** | Supported from day one in the data model (`babyId` on events); switcher appears only when a 2nd baby is added. |
+| **Partner sync** | Now: share a backup that **merges** into the partner's log. Later (Phase 5): end-to-end-encrypted sync where the server only sees ciphertext. |
+| **Extras in this build** | Data-loss protection (persistent storage, install-as-protection, weekly backup nudge), pediatrician report, calendar (.ics) pump reminders, privacy page + no-tracking feedback link. |
 | **Tracker visibility** | **All trackers on by default.** Settings → *Customize* lets each family hide what they don't use (pumping, stash, formula, breastfeeding, sleep, diapers, memories) and reorder Today's cards. Hidden ≠ deleted: data stays, and re-enabling brings it back. |
 
 ---
