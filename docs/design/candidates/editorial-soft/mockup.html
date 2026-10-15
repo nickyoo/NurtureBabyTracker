@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nurture · Editorial Soft</title>
+<style>
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-latin-full-normal.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-latin-full-italic.woff2") format("woff2");font-weight:100 900;font-style:italic;font-display:swap}
+@font-face{font-family:"Inter";src:url("fonts/inter-latin-opsz-normal.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#E7E3DD}
+body{font-family:"Inter",system-ui,sans-serif;color:#2A231E;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit}
+ol,ul{list-style:none}
+
+/* ---------- board ---------- */
+.board-head{padding:40px 56px 0;max-width:1100px}
+.board-head h1{font-family:"Fraunces",Georgia,serif;font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:400;font-size:40px;letter-spacing:-.01em}
+.board-head p{margin-top:6px;color:#5C5047;font-size:15px;max-width:720px;line-height:1.5}
+.board{display:flex;gap:48px;padding:36px 56px 64px;width:max-content;align-items:flex-start}
+.cell{display:flex;flex-direction:column;gap:12px}
+.cell figcaption{font-size:13px;font-weight:600;letter-spacing:.02em;color:#5C5047;width:390px}
+.cell figcaption b{color:#2A231E;font-weight:700;margin-right:6px}
+
+/* ---------- tokens ---------- */
+.frame{
+  --paper:#F7F2EA; --raised:#FDFAF5; --sunk:#EFE8DC;
+  --ink:#2A231E; --ink-2:#5C5047; --ink-3:#6F6358;
+  --rule:#E3D9CA; --rule-2:#CBBDAB; --control-off:#8F8274;
+  --accent:#A04D29; --on-accent:#FFF8F0; --fab:#A04D29; --on-fab:#FFF8F0; --knob:#FFFDF9; --accent-tint:#F4E4D7; --accent-ink:#8E4122;
+  --feed:#875A10; --feed-tint:#F5E8CF;
+  --sleep:#46518F; --sleep-tint:#E5E7F2;
+  --diaper:#3B6A54; --diaper-tint:#DFEAE2;
+  --pump:#7A4373; --pump-tint:#F1E2ED;
+  --memory:#9C3C55; --memory-tint:#F6E1E6;
+  --danger:#A42E27; --danger-tint:#F7E0DC;
+  --pill:#2A231E; --pill-text:#F7F2EA; --pill-muted:#C9BBAA; --pill-rule:#463C35; --pill-feed:#D1A257;
+  --scrim:rgba(33,26,21,.46);
+  --shadow-1:0 1px 2px rgba(42,35,30,.06),0 4px 12px -6px rgba(42,35,30,.10);
+  --shadow-2:0 2px 6px rgba(42,35,30,.06),0 18px 40px -12px rgba(42,35,30,.22);
+  --shadow-sheet:0 -1px 0 rgba(42,35,30,.04),0 -18px 48px -16px rgba(42,35,30,.28);
+  --serif:"Fraunces",Georgia,"Times New Roman",serif;
+  --sans:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --gutter:20px;
+}
+.frame.night{
+  --paper:#14110F; --raised:#1C1815; --sunk:#0F0D0B;
+  --ink:#DCCFBE; --ink-2:#AD9F8E; --ink-3:#8F8273;
+  --rule:#2B2521; --rule-2:#3E3631; --control-off:#6E6357;
+  --accent:#D3875E; --on-accent:#1A110C; --fab:#B26A45; --on-fab:#1A110C; --knob:#DCCFBE; --accent-tint:#36231A; --accent-ink:#DE9A73;
+  --feed:#D1A257; --feed-tint:#2F2517;
+  --sleep:#9AA3D6; --sleep-tint:#212433;
+  --diaper:#86B39A; --diaper-tint:#1B2620;
+  --pump:#C48DBC; --pump-tint:#2C1F2A;
+  --memory:#DB8C9F; --memory-tint:#33201F;
+  --danger:#E07F72; --danger-tint:#361C19;
+  --pill:#2A2420; --pill-text:#DCCFBE; --pill-muted:#A39584; --pill-rule:#3E3631; --pill-feed:#D1A257;
+  --scrim:rgba(0,0,0,.6);
+  --shadow-1:0 0 0 1px rgba(0,0,0,.2);
+  --shadow-2:0 18px 40px -12px rgba(0,0,0,.7);
+  --shadow-sheet:0 -18px 48px -16px rgba(0,0,0,.8);
+}
+
+/* ---------- phone frame ---------- */
+.frame{position:relative;width:390px;height:844px;overflow:hidden;border-radius:46px;background:var(--paper);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.4;font-feature-settings:"cv11" 1,"ss01" 0;flex:none}
+.serif{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-optical-sizing:auto}
+.num{font-variant-numeric:tabular-nums lining-nums}
+.island{position:absolute;top:11px;left:50%;width:124px;height:36px;margin-left:-62px;background:#000;border-radius:20px;z-index:60}
+.status{position:absolute;top:0;left:0;right:0;height:47px;display:flex;align-items:center;justify-content:space-between;
+  padding:4px 28px 0 38px;font-size:16px;font-weight:600;letter-spacing:-.01em;z-index:55;color:var(--ink)}
+.status .si{display:flex;gap:6px;align-items:center}
+.status svg{display:block;fill:currentColor}
+.home-ind{position:absolute;bottom:8px;left:50%;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--ink);opacity:.85;z-index:70}
+
+.ic{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none;display:block}
+.ic.s16{width:16px;height:16px;stroke-width:1.9}
+.ic.s18{width:18px;height:18px;stroke-width:1.8}
+.ic.s20{width:20px;height:20px}
+.ic.s28{width:28px;height:28px;stroke-width:1.6}
+
+/* category hooks */
+.c-feed{--c:var(--feed);--ct:var(--feed-tint)}
+.c-sleep{--c:var(--sleep);--ct:var(--sleep-tint)}
+.c-diaper{--c:var(--diaper);--ct:var(--diaper-tint)}
+.c-pump{--c:var(--pump);--ct:var(--pump-tint)}
+.c-memory{--c:var(--memory);--ct:var(--memory-tint)}
+.c-stash{--c:var(--pump);--ct:var(--pump-tint)}
+.c-neutral{--c:var(--ink-2);--ct:var(--sunk)}
+
+/* ---------- shared bits ---------- */
+.screen{position:absolute;inset:0;padding-top:47px}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+.rule{height:1px;background:var(--rule);margin:0 var(--gutter)}
+.chip-ic{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--ct);color:var(--c);flex:none}
+.chip-ic.lg{width:44px;height:44px}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 22px;border-radius:999px;font-size:16px;font-weight:600;letter-spacing:-.005em;white-space:nowrap}
+.btn-primary{background:var(--accent);color:var(--on-accent)}
+.btn-secondary{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.25px var(--rule-2)}
+.btn-ghost{color:var(--accent-ink);padding:0 12px;min-height:44px}
+.btn-block{width:100%;min-height:56px;font-size:17px}
+
+/* ---------- masthead ---------- */
+.mast{display:flex;align-items:flex-end;justify-content:space-between;padding:14px var(--gutter) 16px}
+.mast h1{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:400;font-size:38px;line-height:1;letter-spacing:-.015em;margin-top:6px}
+.mast h1 em{font-style:italic;font-weight:300;font-size:17px;letter-spacing:0;color:var(--ink-3);margin-left:6px;font-family:var(--serif)}
+.avatar{position:relative;width:48px;height:48px;border-radius:50%;flex:none;margin-bottom:-2px}
+.avatar .photo{position:absolute;inset:0;border-radius:50%;background:
+  radial-gradient(circle at 50% 40%,#F6D9C2 0 26%,transparent 27%),
+  radial-gradient(circle at 50% 118%,#E9B99A 0 46%,transparent 47%),
+  linear-gradient(160deg,#E8D3BF,#D6B49B);box-shadow:0 0 0 1px var(--rule-2)}
+.night .avatar .photo{filter:brightness(.72) saturate(.8)}
+.avatar .gear{position:absolute;right:-3px;bottom:-3px;width:20px;height:20px;border-radius:50%;background:var(--paper);display:grid;place-items:center;color:var(--ink-2);box-shadow:0 0 0 1px var(--rule)}
+.avatar .gear .ic{width:13px;height:13px;stroke-width:2}
+
+/* ---------- since-last ---------- */
+.since-grid{display:grid;grid-template-columns:1fr 1fr;margin:0 var(--gutter);border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.since{position:relative;display:flex;flex-direction:column;padding:16px 0 16px 0;min-height:128px}
+.since:nth-child(odd){padding-right:16px;border-right:1px solid var(--rule)}
+.since:nth-child(even){padding-left:16px}
+.since:nth-child(-n+2){border-bottom:1px solid var(--rule)}
+.since .k{display:flex;align-items:center;gap:7px;color:var(--c);font-size:12px;font-weight:650;letter-spacing:.09em;text-transform:uppercase;height:20px}
+.since .add{position:absolute;top:12px;right:0;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--c);background:var(--ct)}
+.since:nth-child(odd) .add{right:14px}
+.since .add .ic{width:16px;height:16px;stroke-width:2.1}
+.since .v{margin-top:10px;font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:400;font-size:34px;line-height:1;letter-spacing:-.02em;color:var(--ink);white-space:nowrap}
+.since .v small{font-family:var(--sans);font-size:15px;font-weight:500;letter-spacing:0;color:var(--ink-2);margin:0 4px 0 1px}
+.since .v .ago{font-family:var(--sans);font-size:14px;font-weight:450;color:var(--ink-3);letter-spacing:0;margin-left:2px}
+.since .d{margin-top:8px;font-size:14px;color:var(--ink-2);line-height:1.3}
+.since .live{display:inline-flex;align-items:center;gap:5px;margin-left:auto;margin-right:36px;font-size:11px;font-weight:650;letter-spacing:.06em;color:var(--c);text-transform:uppercase}
+.since .live i{width:7px;height:7px;border-radius:50%;background:var(--c);box-shadow:0 0 0 3px var(--ct)}
+.goal{display:block;margin-top:10px}
+.goal .bar{display:block;height:4px;border-radius:2px;background:var(--sunk);overflow:hidden;box-shadow:inset 0 0 0 1px var(--rule)}
+.goal .bar i{display:block;height:100%;width:52%;background:var(--pump);border-radius:2px}
+.goal .gl{display:block;margin-top:7px;font-size:13px;color:var(--ink-2)}
+.goal .gl b{font-weight:600;color:var(--ink)}
+
+/* ---------- day log (journal list) ---------- */
+.sec-head{display:flex;align-items:baseline;justify-content:space-between;padding:22px var(--gutter) 6px}
+.sec-head h2{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:400;font-size:24px;letter-spacing:-.01em}
+.sec-head .meta{font-size:14px;color:var(--ink-3)}
+.sec-head a{display:inline-flex;align-items:center;gap:2px;font-size:15px;font-weight:550;color:var(--accent-ink);text-decoration:none;min-height:44px;margin:-12px -4px -12px 0}
+.log{padding:0 var(--gutter)}
+.log li{position:relative;display:grid;grid-template-columns:52px 32px 1fr auto;column-gap:12px;align-items:center;min-height:62px;padding:8px 0}
+.log li + li{border-top:1px solid var(--rule)}
+.log li::before{content:"";position:absolute;left:79px;top:0;bottom:0;width:1px;background:var(--rule-2);opacity:.7}
+.log li:first-child::before{top:50%}
+.log li.last::before{bottom:50%}
+.log time{font-size:14px;font-weight:550;color:var(--ink);text-align:right;line-height:1.1}
+.log time small{display:block;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--ink-3);margin-top:2px}
+.log .chip-ic{position:relative;z-index:1;box-shadow:0 0 0 4px var(--paper)}
+.log .t b{display:block;font-size:16px;font-weight:550;letter-spacing:-.005em}
+.log .t span{display:block;font-size:14px;color:var(--ink-2);margin-top:1px}
+.log .amt{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-size:20px;font-weight:420;letter-spacing:-.01em;text-align:right;white-space:nowrap}
+.log .amt small{font-family:var(--sans);font-size:13px;font-weight:500;color:var(--ink-3);margin-left:2px;letter-spacing:0}
+.log .amt.live{color:var(--sleep)}
+.tag{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:12px;font-size:12px;font-weight:600;letter-spacing:.01em;background:var(--ct);color:var(--c)}
+
+/* ---------- live pill ---------- */
+.fade{position:absolute;left:0;right:0;bottom:98px;height:150px;background:linear-gradient(to bottom,transparent,var(--paper) 62%);pointer-events:none;z-index:20}
+.livepill{position:absolute;left:16px;right:16px;bottom:130px;height:60px;border-radius:30px;background:var(--pill);color:var(--pill-text);
+  display:flex;align-items:center;gap:12px;padding:0 8px 0 10px;z-index:30;box-shadow:var(--shadow-2)}
+.night .livepill{box-shadow:0 0 0 1px var(--pill-rule),var(--shadow-2)}
+.lp-ic{position:relative;width:42px;height:42px;flex:none;display:grid;place-items:center;color:var(--pill-feed)}
+.lp-ic svg.ring{position:absolute;inset:0;width:42px;height:42px;transform:rotate(-90deg)}
+.lp-ic .ring circle{fill:none;stroke-width:2.5}
+.lp-ic .ring .track{stroke:var(--pill-rule)}
+.lp-ic .ring .val{stroke:var(--pill-feed);stroke-linecap:round}
+.lp-t{display:flex;flex-direction:column;line-height:1.2;min-width:0}
+.lp-t b{font-size:16px;font-weight:600;letter-spacing:-.005em}
+.lp-t b .dot{color:var(--pill-muted);font-weight:400;margin:0 5px}
+.lp-t span{font-size:13px;color:var(--pill-muted)}
+.lp-btn{margin-left:auto;height:44px;padding:0 18px;border-radius:22px;background:var(--pill-text);color:var(--pill);font-size:15px;font-weight:650;display:flex;align-items:center}
+.night .lp-btn{background:#3A322C;color:var(--pill-text)}
+
+/* ---------- tab bar ---------- */
+.tabbar{position:absolute;left:0;right:0;bottom:0;height:98px;padding-bottom:34px;background:var(--raised);border-top:1px solid var(--rule);
+  display:grid;grid-template-columns:1fr 1fr 84px 1fr 1fr;z-index:40}
+.night .tabbar{background:#181512}
+.tab{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:12px;font-weight:550;letter-spacing:.01em;min-height:64px}
+.tab.on{color:var(--ink);font-weight:650}
+.tab.on::before{content:"";position:absolute;top:-1px;left:50%;width:22px;height:2px;margin-left:-11px;background:var(--accent);border-radius:0 0 2px 2px}
+.fab{position:absolute;left:50%;top:-18px;width:60px;height:60px;margin-left:-30px;border-radius:50%;background:var(--fab);color:var(--on-fab);
+  display:grid;place-items:center;box-shadow:0 0 0 5px var(--raised),0 8px 18px -6px rgba(160,77,41,.55);z-index:2}
+.night .fab{box-shadow:0 0 0 5px #181512,0 8px 18px -6px rgba(0,0,0,.6)}
+.fab .ic{width:28px;height:28px;stroke-width:2.1}
+.fab-slot{position:relative}
+
+/* ---------- sheet ---------- */
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:80}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--raised);border-radius:30px 30px 0 0;z-index:90;box-shadow:var(--shadow-sheet);overflow:hidden}
+.sheet .origin{position:absolute;left:50%;bottom:-224px;width:640px;height:640px;margin-left:-320px;border-radius:50%;
+  background:radial-gradient(circle,rgba(160,77,41,.16) 0,rgba(160,77,41,.07) 30%,rgba(160,77,41,.02) 55%,transparent 70%);pointer-events:none}
+.grabber{display:block;width:40px;height:5px;border-radius:3px;background:var(--rule-2);margin:8px auto 0}
+.grab-hit{display:block;height:24px}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;padding:6px 20px 14px}
+.sheet-head h2{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:400;font-size:28px;letter-spacing:-.015em;line-height:1.1}
+.sheet-head p{font-size:14px;color:var(--ink-3);margin-top:3px}
+.when{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 14px 0 16px;border-radius:22px;box-shadow:inset 0 0 0 1.25px var(--rule-2);font-size:15px;font-weight:600}
+.when .ic{width:16px;height:16px;stroke-width:2;color:var(--ink-3)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px}
+.tile{position:relative;display:flex;flex-direction:column;justify-content:space-between;height:104px;padding:14px 14px 13px;border-radius:20px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--rule)}
+.tile .chip-ic{width:40px;height:40px}
+.tile b{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:430;font-size:21px;letter-spacing:-.01em;line-height:1.1;display:block}
+.tile .sub{display:block;font-size:13px;color:var(--ink-2);margin-top:2px;white-space:nowrap}
+.tile .bar-c{position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:0 3px 3px 0;background:var(--c)}
+.tile.running{box-shadow:inset 0 0 0 1.5px var(--sleep)}
+.tile .st{position:absolute;top:14px;right:14px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--c);display:flex;align-items:center;gap:5px}
+.tile .st i{width:7px;height:7px;border-radius:50%;background:var(--c)}
+.wide-row{width:calc(100% - 32px);display:flex;align-items:center;gap:12px;margin:10px 16px 0;min-height:60px;padding:0 14px;border-radius:20px;background:var(--paper);box-shadow:inset 0 0 0 1px var(--rule)}
+.wide-row b{font-size:16px;font-weight:600}
+.wide-row .sub{font-size:13px;color:var(--ink-2);display:block}
+.wide-row .ic.chev{margin-left:auto;color:var(--ink-3)}
+.sheet-foot{position:absolute;left:0;right:0;bottom:0;height:98px}
+.sheet-hint{margin-top:14px;text-align:center;font-size:13px;color:var(--ink-3)}
+.sheet-hint b{color:var(--ink-2);font-weight:600}
+.fab.close{background:var(--ink);color:var(--paper);box-shadow:0 0 0 5px var(--raised),0 8px 18px -8px rgba(42,35,30,.5)}
+.fab.close .ic{transform:rotate(0)}
+
+/* ---------- timeline ---------- */
+.titlebar{display:flex;align-items:flex-end;justify-content:space-between;padding:14px var(--gutter) 10px}
+.titlebar h1{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:400;font-size:34px;line-height:1.05;letter-spacing:-.015em;margin-top:6px}
+.iconbtn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;color:var(--ink-2);box-shadow:inset 0 0 0 1.25px var(--rule-2)}
+.iconbtn.flat{box-shadow:none}
+.pager{display:grid;grid-template-columns:repeat(7,1fr);margin:4px 12px 0;}
+.pd{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 0 8px;min-height:60px;border-radius:16px;color:var(--ink-3);font-size:12px;font-weight:600;letter-spacing:.04em}
+.pd b{font-size:17px;font-weight:550;color:var(--ink-2);letter-spacing:0;width:34px;height:34px;display:grid;place-items:center;border-radius:50%}
+.pd.sel{color:var(--ink)}
+.pd.sel b{background:var(--ink);color:var(--paper);font-weight:650}
+.pd.today b{color:var(--accent-ink);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);margin:8px var(--gutter) 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.stat{padding:12px 0 12px 10px;border-left:1px solid var(--rule)}
+.stat:first-child{border-left:0;padding-left:0}
+.stat .k{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:var(--c)}
+.stat .v{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-size:23px;font-weight:420;letter-spacing:-.015em;margin-top:5px;line-height:1;white-space:nowrap}
+.stat .v small{font-family:var(--sans);font-size:12px;font-weight:550;color:var(--ink-2);margin-left:1px;letter-spacing:0}
+.stat .s{font-size:12px;color:var(--ink-3);margin-top:4px}
+.strip{margin:14px var(--gutter) 0}
+.strip > svg{display:block;width:350px;height:118px;overflow:visible}
+.strip .grid line{stroke:var(--rule);stroke-width:1}
+.strip .grid line.major{stroke:var(--rule-2)}
+.strip .lbl{font-family:var(--sans);font-size:11px;font-weight:550;fill:var(--ink-3)}
+.strip .lane-bg{fill:var(--sunk)}
+.strip .sl{fill:var(--sleep)}
+.strip .sl.night{fill:var(--sleep);opacity:1}
+.strip .sl.nap{fill:var(--sleep);opacity:.55}
+.strip .fd{stroke:var(--feed);stroke-width:2.4;stroke-linecap:round}
+.strip .bf{stroke:var(--feed);stroke-width:2.4;stroke-linecap:round;stroke-dasharray:2 3}
+.strip .dp{fill:var(--diaper)}
+.strip .dp.wet{fill:var(--paper);stroke:var(--diaper);stroke-width:1.8}
+.strip .pm{fill:var(--pump)}
+.strip .lic{color:var(--c)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin:8px var(--gutter) 0;font-size:12px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:5px}
+.legend i{display:inline-block}
+
+/* ---------- stash ---------- */
+.big-num{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:380;font-size:56px;line-height:.95;letter-spacing:-.03em}
+.big-num small{font-family:var(--sans);font-size:18px;font-weight:550;color:var(--ink-2);letter-spacing:0;margin-left:3px}
+.split{margin:16px var(--gutter) 0}
+.split .bar{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px}
+.split .bar i{display:block;height:100%}
+.split .bar .fr{background:var(--pump-tint);box-shadow:inset 0 0 0 1.25px var(--pump);border-radius:5px 0 0 5px;width:19.6%}
+.split .bar .fz{background:var(--pump);flex:1;border-radius:0 5px 5px 0}
+.split .lg{display:flex;justify-content:space-between;margin-top:9px;font-size:14px;color:var(--ink-2)}
+.split .lg b{color:var(--ink);font-weight:600}
+.split .lg span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.hero{margin:20px var(--gutter) 0;padding:16px 16px 16px;border-radius:22px;background:var(--raised);box-shadow:inset 0 0 0 1px var(--rule),var(--shadow-1);position:relative}
+.hero .top{display:flex;align-items:center;justify-content:space-between}
+.hero .eyebrow{color:var(--accent-ink)}
+.hero .row{display:flex;align-items:flex-end;gap:14px;margin-top:10px}
+.pouch{width:52px;height:64px;flex:none;color:var(--pump)}
+.hero .amt{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-size:44px;font-weight:400;line-height:.9;letter-spacing:-.025em}
+.hero .amt small{font-family:var(--sans);font-size:16px;font-weight:550;color:var(--ink-2);margin-left:3px;letter-spacing:0}
+.hero .det{font-size:14px;color:var(--ink-2);margin-top:6px}
+.hero .acts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.badge{display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px 0 8px;border-radius:13px;font-size:12px;font-weight:600;white-space:nowrap}
+.badge .ic{width:14px;height:14px;stroke-width:2.1}
+.badge.ok{background:var(--sunk);color:var(--ink-2)}
+.badge.soon{background:var(--accent-tint);color:var(--accent-ink)}
+.badge.bad{background:var(--danger-tint);color:var(--danger)}
+.stash-list{padding:0 var(--gutter)}
+.stash-list .grp{display:flex;align-items:center;gap:8px;padding:20px 0 6px;font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.stash-list .grp .ic{color:var(--ink-3)}
+.stash-list .grp .tot{margin-left:auto;font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;text-transform:none;letter-spacing:-.01em;font-size:17px;font-weight:450;color:var(--ink)}
+.srow{display:grid;grid-template-columns:62px 1fr auto;align-items:center;column-gap:10px;min-height:56px;border-top:1px solid var(--rule)}
+.srow .a{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-size:22px;font-weight:420;letter-spacing:-.015em}
+.srow .a small{font-family:var(--sans);font-size:13px;font-weight:550;color:var(--ink-3);margin-left:2px;letter-spacing:0}
+.srow .m b{display:block;font-size:15px;font-weight:550}
+.srow .m span{display:block;font-size:13px;color:var(--ink-3)}
+
+/* ---------- memories ---------- */
+.cover{position:relative;margin:10px var(--gutter) 0;height:156px;border-radius:6px;overflow:hidden;
+  box-shadow:0 0 0 7px var(--raised),0 0 0 8px var(--rule),0 16px 30px -18px rgba(42,35,30,.35)}
+.ph{position:relative;overflow:hidden;background:linear-gradient(160deg,var(--g1),var(--g2))}
+.ph::before{content:"";position:absolute;inset:0;background:radial-gradient(ellipse 34% 30% at var(--sx,50%) var(--sy,62%),var(--g3) 0 60%,transparent 62%),radial-gradient(ellipse 52% 48% at var(--sx,50%) 112%,var(--g4) 0 80%,transparent 82%);filter:blur(.4px)}
+.ph::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 18% 14%,rgba(255,255,255,.35),transparent 40%)}
+.p1{--g1:#EAD3C0;--g2:#CFA88E;--g3:#F4DCCB;--g4:#B98B73;--sy:46%}
+.p2{--g1:#D9DEE6;--g2:#AEB7C6;--g3:#EFE4DA;--g4:#8E9AAF;--sx:40%;--sy:52%}
+.p3{--g1:#E8E0CC;--g2:#C9BB97;--g3:#F3E3CF;--g4:#A79766;--sx:60%}
+.p4{--g1:#EBD8D8;--g2:#CDA6A9;--g3:#F5E1D6;--g4:#B07F86;--sx:45%;--sy:58%}
+.p5{--g1:#DCE4DA;--g2:#A9BCA9;--g3:#F1E3D3;--g4:#839A86;--sx:55%;--sy:50%}
+.p6{--g1:#EFDCC7;--g2:#D8B48F;--g3:#F7E6D3;--g4:#BF946C;--sx:48%;--sy:60%}
+.night .ph{filter:brightness(.7) saturate(.85)}
+.cover .ph{position:absolute;inset:0}
+.cover .cap{position:absolute;left:0;right:0;bottom:0;padding:40px 16px 14px;background:linear-gradient(to top,rgba(30,22,16,.55),transparent);color:#FFF8F0}
+.cover .cap b{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-style:italic;font-weight:400;font-size:24px;letter-spacing:-.01em;display:block;line-height:1.1}
+.cover .cap span{font-size:13px;opacity:.92}
+.ms{padding:0 var(--gutter)}
+.ms li{position:relative;display:grid;grid-template-columns:28px 1fr auto;column-gap:12px;align-items:center;min-height:54px;border-top:1px solid var(--rule)}
+.ms li:first-child{border-top:0}
+.ms .star{color:var(--memory);width:28px;height:28px;display:grid;place-items:center}
+.ms b{display:block;font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:430;font-size:18px;letter-spacing:-.01em;line-height:1.2}
+.ms .sub{display:block;font-size:13px;color:var(--ink-3);margin-top:1px}
+.ms .thumb{width:40px;height:40px;border-radius:4px;box-shadow:0 0 0 3px var(--raised),0 0 0 4px var(--rule)}
+.ms li.next b{color:var(--ink-2);font-style:italic;font-weight:380}
+.ms li.next .star{color:var(--ink-3)}
+.addbtn{display:inline-flex;align-items:center;gap:6px;height:44px;padding:0 14px;border-radius:22px;box-shadow:inset 0 0 0 1.25px var(--rule-2);font-size:14px;font-weight:600;color:var(--ink)}
+.addbtn .ic{width:16px;height:16px;stroke-width:2.1}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 var(--gutter)}
+.pgrid .ph{aspect-ratio:1;border-radius:4px}
+.seg{display:flex;margin:14px var(--gutter) 0;padding:3px;border-radius:22px;background:var(--sunk);box-shadow:inset 0 0 0 1px var(--rule)}
+.seg button{flex:1;height:40px;border-radius:19px;font-size:14px;font-weight:600;color:var(--ink-2)}
+.seg button.on{background:var(--raised);color:var(--ink);box-shadow:0 1px 2px rgba(42,35,30,.12),0 0 0 1px var(--rule)}
+
+/* ---------- settings ---------- */
+.navbar{display:flex;align-items:center;justify-content:space-between;height:48px;padding:0 8px;margin-top:2px}
+.backbtn{display:inline-flex;align-items:center;gap:2px;height:44px;padding:0 10px 0 4px;color:var(--accent-ink);font-size:16px;font-weight:550}
+.set-title{padding:0 var(--gutter)}
+.set-title h1{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:400;font-size:34px;line-height:1.05;letter-spacing:-.015em}
+.set-title p{margin-top:8px;font-size:15px;color:var(--ink-2);line-height:1.4}
+.group-label{display:flex;justify-content:space-between;padding:20px var(--gutter) 8px;font-size:12px;font-weight:650;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.group-label span{text-transform:none;letter-spacing:0;font-weight:500;font-size:13px}
+.tlist{margin:0 16px;border-radius:20px;background:var(--raised);box-shadow:inset 0 0 0 1px var(--rule);position:relative}
+.trow{position:relative;display:grid;grid-template-columns:36px 32px 1fr auto;column-gap:10px;align-items:center;height:54px;padding:0 12px 0 4px}
+.trow + .trow::after{content:"";position:absolute;top:0;left:82px;right:0;height:1px;background:var(--rule)}
+.trow .grip{width:36px;height:44px;display:grid;place-items:center;color:var(--ink-3)}
+.trow b{font-size:16px;font-weight:550;display:block;line-height:1.2}
+.trow .sub{font-size:13px;color:var(--ink-3);display:block;line-height:1.25}
+.trow.drag{z-index:3;background:var(--raised);border-radius:14px;box-shadow:0 0 0 1px var(--rule-2),0 14px 28px -10px rgba(42,35,30,.35);transform:translateY(-6px) scale(1.015)}
+.trow.drag::after{display:none}
+.trow.drag + .trow::after{display:none}
+.trow.gap{height:54px}
+.toggle{position:relative;width:52px;height:32px;border-radius:16px;background:var(--accent);flex:none;margin:6px 0}
+.toggle::after{content:"";position:absolute;top:3px;left:23px;width:26px;height:26px;border-radius:50%;background:var(--knob);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.toggle.off{background:var(--sunk);box-shadow:inset 0 0 0 1.5px var(--control-off)}
+.toggle.off::after{left:3px;background:var(--control-off);box-shadow:none}
+.tog-hit{display:grid;place-items:center;min-width:52px;min-height:44px}
+.prow{width:calc(100% - 32px);display:grid;grid-template-columns:44px 1fr auto;column-gap:12px;align-items:center;min-height:76px;margin:0 16px;padding:12px 14px;border-radius:20px;background:var(--raised);box-shadow:inset 0 0 0 1px var(--rule)}
+.prow b{font-size:16px;font-weight:600;display:block}
+.prow .sub{font-size:13px;color:var(--ink-2);display:block;line-height:1.35}
+.prow .chev{color:var(--ink-3)}
+
+/* ---------- onboarding ---------- */
+.ob-top{display:flex;align-items:center;justify-content:space-between;padding:10px var(--gutter) 0;height:48px}
+.wordmark{font-family:var(--serif);font-variation-settings:"SOFT" 100,"WONK" 1;font-style:italic;font-weight:420;font-size:22px;letter-spacing:-.01em;color:var(--accent-ink)}
+.steps{display:flex;align-items:center;gap:5px;font-size:13px;color:var(--ink-3);font-weight:550}
+.steps i{width:18px;height:3px;border-radius:2px;background:var(--rule-2)}
+.steps i.on{background:var(--ink)}
+.ob-h{padding:26px var(--gutter) 0}
+.ob-h h1{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:380;font-size:44px;line-height:1.02;letter-spacing:-.025em}
+.ob-h h1 em{font-style:italic;font-weight:360;color:var(--accent-ink)}
+.promises{margin:22px var(--gutter) 0;border-top:1px solid var(--rule)}
+.promises li{display:grid;grid-template-columns:28px 1fr;column-gap:12px;align-items:center;min-height:48px;border-bottom:1px solid var(--rule);font-size:15px;color:var(--ink-2)}
+.promises li b{color:var(--ink);font-weight:600}
+.promises .ic{color:var(--accent-ink)}
+.who{padding:24px var(--gutter) 0}
+.who h2{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-weight:420;font-size:22px;letter-spacing:-.01em}
+.who-row{display:grid;grid-template-columns:104px 1fr;column-gap:18px;align-items:center;margin-top:14px}
+.picker{position:relative;width:104px;height:104px;border-radius:50%;display:grid;place-items:center;align-content:center;gap:3px;padding-bottom:10px;color:var(--accent-ink);
+  background:var(--accent-tint);font-size:12px;font-weight:650;letter-spacing:.02em}
+.picker::before{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px dashed var(--accent);opacity:.7}
+.picker .plus{position:absolute;right:-4px;bottom:-2px;width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;box-shadow:0 0 0 3px var(--paper)}
+.picker .plus .ic{width:16px;height:16px;stroke-width:2.3}
+.field{display:block;border-bottom:1.5px solid var(--control-off);padding:6px 0 7px;margin-bottom:12px}
+.field label{display:block;font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.field .val{font-family:var(--serif);font-variation-settings:"SOFT" 50,"WONK" 0;font-size:24px;font-weight:420;letter-spacing:-.01em;line-height:1.25;display:flex;align-items:center}
+.field .val .caret{display:inline-block;width:2px;height:24px;background:var(--accent);margin-left:2px}
+.field .val.ph{color:var(--ink-3);font-size:18px;font-family:var(--sans);font-weight:450;height:30px;background:none}
+.field.focus{border-color:var(--accent)}
+.note{display:flex;gap:8px;align-items:flex-start;padding:2px var(--gutter) 0;font-size:13px;color:var(--ink-3);line-height:1.4}
+.ob-cta{position:absolute;left:var(--gutter);right:var(--gutter);bottom:42px}
+.ob-cta .sub{display:flex;justify-content:center;margin-bottom:6px}
+
+.ob-cta .restore{display:flex;justify-content:center;margin-bottom:8px}
+.night .toggle::after{box-shadow:none}
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="i-bottle" viewBox="0 0 24 24"><path d="M10.2 5.2c0-1.4.8-2.6 1.8-2.6s1.8 1.2 1.8 2.6"/><path d="M8.6 5.2h6.8v2.4H8.6z"/><path d="M9.2 7.6c-1 .8-1.7 1.9-1.7 3.3v8.1a2.2 2.2 0 0 0 2.2 2.2h4.6a2.2 2.2 0 0 0 2.2-2.2v-8.1c0-1.4-.7-2.5-1.7-3.3"/><path d="M7.5 12.6h3M7.5 15.8h2.2"/></symbol><symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3.2c-2.9 3.5-6 7.2-6 10.6a6 6 0 0 0 12 0c0-3.4-3.1-7.1-6-10.6z"/><path d="M9.3 14.3a2.8 2.8 0 0 0 2.6 2.8"/></symbol><symbol id="i-pump" viewBox="0 0 24 24"><path d="M4.5 3.5h15l-5.2 6.2H9.7z"/><path d="M10.4 9.7v2.3M13.6 9.7v2.3"/><rect x="8.2" y="12" width="7.6" height="9" rx="1.8"/><path d="M8.2 16h3"/></symbol><symbol id="i-moon" viewBox="0 0 24 24"><path d="M19.6 14.6A7.8 7.8 0 0 1 9.4 4.4a7.8 7.8 0 1 0 10.2 10.2z"/></symbol><symbol id="i-diaper" viewBox="0 0 24 24"><path d="M3.5 6.5h17v2.8c0 5.3-3.8 9.2-8.5 9.2s-8.5-3.9-8.5-9.2z"/><path d="M8 6.5c.3 3 1.9 4.9 4 4.9s3.7-1.9 4-4.9"/></symbol><symbol id="i-spark" viewBox="0 0 24 24"><path d="M11 3.5l1.6 5 5 1.6-5 1.6-1.6 5-1.6-5-5-1.6 5-1.6z"/><path d="M18 15.5l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/></symbol><symbol id="i-jar" viewBox="0 0 24 24"><path d="M7.6 3h8.8v3H7.6z"/><path d="M7 6h10v13a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2z"/><path d="M10 12.5h4"/></symbol><symbol id="i-snow" viewBox="0 0 24 24"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/><path d="M9.8 4.6L12 6.6l2.2-2M9.8 19.4L12 17.4l2.2 2"/></symbol><symbol id="i-fridge" viewBox="0 0 24 24"><rect x="6" y="2.8" width="12" height="18.4" rx="2.2"/><path d="M6 9.5h12M9 5.6v1.6M9 12.3v3"/></symbol><symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M5.5 18.5l1.4-1.4M17.1 6.9l1.4-1.4"/></symbol><symbol id="i-timeline" viewBox="0 0 24 24"><path d="M9.5 6h10.5M9.5 12h10.5M9.5 18h7"/><circle cx="5" cy="6" r="1.4"/><circle cx="5" cy="12" r="1.4"/><circle cx="5" cy="18" r="1.4"/></symbol><symbol id="i-book" viewBox="0 0 24 24"><path d="M5 19.5V4.6A1.6 1.6 0 0 1 6.6 3H19v15H6.6A1.6 1.6 0 0 0 5 19.5a1.6 1.6 0 0 0 1.6 1.5H19"/><path d="M10 3v6.2l2-1.4 2 1.4V3"/></symbol><symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-x" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol><symbol id="i-chev-r" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol><symbol id="i-chev-l" viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></symbol><symbol id="i-chev-d" viewBox="0 0 24 24"><path d="M6.5 9.5l5.5 5.5 5.5-5.5"/></symbol><symbol id="i-gear" viewBox="0 0 24 24"><path d="M10.16 4.83 L10.80 2.48 L13.20 2.48 L13.84 4.83 L15.77 5.63 L17.88 4.41 L19.59 6.12 L18.37 8.23 L19.17 10.16 L21.52 10.80 L21.52 13.20 L19.17 13.84 L18.37 15.77 L19.59 17.88 L17.88 19.59 L15.77 18.37 L13.84 19.17 L13.20 21.52 L10.80 21.52 L10.16 19.17 L8.23 18.37 L6.12 19.59 L4.41 17.88 L5.63 15.77 L4.83 13.84 L2.48 13.20 L2.48 10.80 L4.83 10.16 L5.63 8.23 L4.41 6.12 L6.12 4.41 L8.23 5.63Z"/><circle cx="12" cy="12" r="3"/></symbol><symbol id="i-grip" viewBox="0 0 24 24"><g fill="currentColor" stroke="none"><circle cx="9" cy="6.5" r="1.5"/><circle cx="15" cy="6.5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="17.5" r="1.5"/><circle cx="15" cy="17.5" r="1.5"/></g></symbol><symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10.5" rx="2.2"/><path d="M8.2 10.5V7.8a3.8 3.8 0 0 1 7.6 0v2.7M12 14.6v2.4"/></symbol><symbol id="i-camera" viewBox="0 0 24 24"><path d="M3.5 8.2c0-.9.8-1.7 1.7-1.7h2.3l1.6-2.3h5.8l1.6 2.3h2.3c.9 0 1.7.8 1.7 1.7v10c0 .9-.8 1.7-1.7 1.7H5.2c-.9 0-1.7-.8-1.7-1.7z"/><circle cx="12" cy="13" r="3.6"/></symbol><symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol><symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol><symbol id="i-hourglass" viewBox="0 0 24 24"><path d="M7 3.5h10M7 20.5h10"/><path d="M8 3.5c0 4.2 4 5 4 8.5s-4 4.3-4 8.5M16 3.5c0 4.2-4 5-4 8.5s4 4.3 4 8.5"/></symbol><symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3.5v11M8 7.5l4-4 4 4"/><path d="M5 13.5v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></symbol><symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2.4"/><path d="M11 18h2"/></symbol><symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 2.8v5.4c0 4.4-3 8.1-7 9.8-4-1.7-7-5.4-7-9.8V5.8z"/><path d="M9 12l2.2 2.2 3.8-4"/></symbol><symbol id="i-noads" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M6 6l12 12"/></symbol><symbol id="i-thaw" viewBox="0 0 24 24"><path d="M12 3.5v9M8.5 5.5L12 8l3.5-2.5"/><path d="M8 14.5c0 2.5 1.8 4.5 4 4.5s4-2 4-4.5c0-1.2-.6-2.3-1.2-3.2"/></symbol><symbol id="i-pencil" viewBox="0 0 24 24"><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M13.5 7l3 3"/></symbol><symbol id="i-hand" viewBox="0 0 24 24"><path d="M8.5 12.5V6.2a1.5 1.5 0 0 1 3 0V11M11.5 10V4.7a1.5 1.5 0 0 1 3 0V11M14.5 10.5V6.2a1.5 1.5 0 0 1 3 0v7.3a7 7 0 0 1-7 7h-.3a6 6 0 0 1-4.6-2.2l-2.4-3a1.6 1.6 0 0 1 2.4-2.1l1.4 1.5"/></symbol></defs></svg>
+<header class="board-head"><h1>Nurture — Editorial Soft</h1>
+<p>A calm journal: paper-warm surfaces, hairline rules instead of boxes, Fraunces numerals with Inter for everything you tap. One clay accent; five category inks that always travel with an icon and a word.</p></header>
+<main class="board">
+<figure class="cell"><figcaption><b>1</b>Today — light</figcaption><section class="frame " id="frame-1"><div class="island"></div><div class="status"><span class="num">9:50</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <header class="mast">
+    <div><p class="eyebrow">Wednesday · October 14</p><h1>Clara<em>6 weeks, 1 day</em></h1></div>
+    <button class="avatar" aria-label="Clara's profile and settings"><span class="photo"></span><span class="gear"><svg class="ic " aria-hidden="true"><use href="#i-gear"/></svg></span></button>
+  </header>
+  
+<section class="since-grid" aria-label="Since last">
+  <button class="since c-feed" aria-label="Fed 2 hours 10 minutes ago, 4 ounces formula. Log a feed">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg>Fed</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">2<small>h</small>10<small>m</small><span class="ago">ago</span></span>
+    <span class="d">4 oz formula · 7:40 AM</span>
+  </button>
+  <button class="since c-sleep" aria-label="Asleep 55 minutes, nap since 8:55. Log wake up">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg>Asleep</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-check"/></svg></span>
+    <span class="v num">55<small>m</small><span class="ago">nap</span></span>
+    <span class="d">Since 8:55 AM</span>
+  </button>
+  <button class="since c-diaper" aria-label="Diaper 3 hours ago, wet. Log a diaper">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg>Diaper</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">3<small>h</small><span class="ago">ago</span></span>
+    <span class="d">Wet · 6:50 AM · 4 today</span>
+  </button>
+  <button class="since c-pump" aria-label="Pumped 2 hours 40 minutes ago, 3.5 ounces. 12.5 of 24 ounces today. Log a pump">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg>Pumped</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">2<small>h</small>40<small>m</small><span class="ago">ago</span></span>
+    <span class="goal"><span class="bar"><i></i></span><span class="gl num"><b>12.5</b> of 24 oz today</span></span>
+  </button>
+</section>
+  <div class="sec-head"><h2>Today</h2><a href="#">Timeline<svg class="ic s16" aria-hidden="true"><use href="#i-chev-r"/></svg></a></div>
+  <ol class="log"><li><time class="num">8:55<small>AM</small></time><span class="chip-ic c-sleep"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="t"><b>Nap</b><span>Asleep · still going</span></span><span class="amt live num">55<small>m</small></span></li><li><time class="num">7:40<small>AM</small></time><span class="chip-ic c-feed"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="t"><b>Bottle</b><span>Formula · finished in 15 min</span></span><span class="amt num">4<small>oz</small></span></li><li><time class="num">7:10<small>AM</small></time><span class="chip-ic c-pump"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="t"><b>Pumped</b><span>18 min · to fridge</span></span><span class="amt num">3.5<small>oz</small></span></li><li><time class="num">6:50<small>AM</small></time><span class="chip-ic c-diaper"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="t"><b>Diaper</b><span>Wet</span></span></li><li><time class="num">5:20<small>AM</small></time><span class="chip-ic c-feed"><svg class="ic s18" aria-hidden="true"><use href="#i-drop"/></svg></span><span class="t"><b>Breastfed</b><span>Left 12m · Right 9m</span></span><span class="amt num">21<small>m</small></span></li><li><time class="num">4:05<small>AM</small></time><span class="chip-ic c-pump"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="t"><b>Pumped</b><span>20 min · to freezer</span></span><span class="amt num">4.5<small>oz</small></span></li></ol>
+</div>
+<div class="fade"></div>
+<button class="livepill" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle"><span class="lp-ic"><svg class="ring" viewBox="0 0 42 42" aria-hidden="true"><circle class="track" cx="21" cy="21" r="19"/><circle class="val" cx="21" cy="21" r="19" stroke-dasharray="107.4 119.4"/></svg><svg class="ic s20" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="lp-t"><b>Bottle<span class="dot">·</span><span class="num">12:04</span></b><span>good for 1h 48m</span></span><span class="lp-btn">Finish</span></button>
+<nav class="tabbar" aria-label="Main"><button class="tab on" aria-current="page"><svg class="ic " aria-hidden="true"><use href="#i-sun"/></svg><span>Today</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="fab-slot"><button class="fab" aria-label="Log something"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-jar"/></svg><span>Stash</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-book"/></svg><span>Memories</span></button></nav><div class="home-ind"></div></section></figure><figure class="cell"><figcaption><b>2</b>Today — night</figcaption><section class="frame night" id="frame-2"><div class="island"></div><div class="status"><span class="num">9:50</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <header class="mast">
+    <div><p class="eyebrow">Wednesday · October 14</p><h1>Clara<em>6 weeks, 1 day</em></h1></div>
+    <button class="avatar" aria-label="Clara's profile and settings"><span class="photo"></span><span class="gear"><svg class="ic " aria-hidden="true"><use href="#i-gear"/></svg></span></button>
+  </header>
+  
+<section class="since-grid" aria-label="Since last">
+  <button class="since c-feed" aria-label="Fed 2 hours 10 minutes ago, 4 ounces formula. Log a feed">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg>Fed</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">2<small>h</small>10<small>m</small><span class="ago">ago</span></span>
+    <span class="d">4 oz formula · 7:40 AM</span>
+  </button>
+  <button class="since c-sleep" aria-label="Asleep 55 minutes, nap since 8:55. Log wake up">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg>Asleep</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-check"/></svg></span>
+    <span class="v num">55<small>m</small><span class="ago">nap</span></span>
+    <span class="d">Since 8:55 AM</span>
+  </button>
+  <button class="since c-diaper" aria-label="Diaper 3 hours ago, wet. Log a diaper">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg>Diaper</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">3<small>h</small><span class="ago">ago</span></span>
+    <span class="d">Wet · 6:50 AM · 4 today</span>
+  </button>
+  <button class="since c-pump" aria-label="Pumped 2 hours 40 minutes ago, 3.5 ounces. 12.5 of 24 ounces today. Log a pump">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg>Pumped</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">2<small>h</small>40<small>m</small><span class="ago">ago</span></span>
+    <span class="goal"><span class="bar"><i></i></span><span class="gl num"><b>12.5</b> of 24 oz today</span></span>
+  </button>
+</section>
+  <div class="sec-head"><h2>Today</h2><a href="#">Timeline<svg class="ic s16" aria-hidden="true"><use href="#i-chev-r"/></svg></a></div>
+  <ol class="log"><li><time class="num">8:55<small>AM</small></time><span class="chip-ic c-sleep"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="t"><b>Nap</b><span>Asleep · still going</span></span><span class="amt live num">55<small>m</small></span></li><li><time class="num">7:40<small>AM</small></time><span class="chip-ic c-feed"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="t"><b>Bottle</b><span>Formula · finished in 15 min</span></span><span class="amt num">4<small>oz</small></span></li><li><time class="num">7:10<small>AM</small></time><span class="chip-ic c-pump"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="t"><b>Pumped</b><span>18 min · to fridge</span></span><span class="amt num">3.5<small>oz</small></span></li><li><time class="num">6:50<small>AM</small></time><span class="chip-ic c-diaper"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="t"><b>Diaper</b><span>Wet</span></span></li><li><time class="num">5:20<small>AM</small></time><span class="chip-ic c-feed"><svg class="ic s18" aria-hidden="true"><use href="#i-drop"/></svg></span><span class="t"><b>Breastfed</b><span>Left 12m · Right 9m</span></span><span class="amt num">21<small>m</small></span></li><li><time class="num">4:05<small>AM</small></time><span class="chip-ic c-pump"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="t"><b>Pumped</b><span>20 min · to freezer</span></span><span class="amt num">4.5<small>oz</small></span></li></ol>
+</div>
+<div class="fade"></div>
+<button class="livepill" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle"><span class="lp-ic"><svg class="ring" viewBox="0 0 42 42" aria-hidden="true"><circle class="track" cx="21" cy="21" r="19"/><circle class="val" cx="21" cy="21" r="19" stroke-dasharray="107.4 119.4"/></svg><svg class="ic s20" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="lp-t"><b>Bottle<span class="dot">·</span><span class="num">12:04</span></b><span>good for 1h 48m</span></span><span class="lp-btn">Finish</span></button>
+<nav class="tabbar" aria-label="Main"><button class="tab on" aria-current="page"><svg class="ic " aria-hidden="true"><use href="#i-sun"/></svg><span>Today</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="fab-slot"><button class="fab" aria-label="Log something"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-jar"/></svg><span>Stash</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-book"/></svg><span>Memories</span></button></nav><div class="home-ind"></div></section></figure><figure class="cell"><figcaption><b>3</b>Quick log — grows from + (morphs into ×)</figcaption><section class="frame " id="frame-3"><div class="island"></div><div class="status"><span class="num">9:50</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <header class="mast">
+    <div><p class="eyebrow">Wednesday · October 14</p><h1>Clara<em>6 weeks, 1 day</em></h1></div>
+    <button class="avatar" aria-label="Clara's profile and settings"><span class="photo"></span><span class="gear"><svg class="ic " aria-hidden="true"><use href="#i-gear"/></svg></span></button>
+  </header>
+  
+<section class="since-grid" aria-label="Since last">
+  <button class="since c-feed" aria-label="Fed 2 hours 10 minutes ago, 4 ounces formula. Log a feed">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg>Fed</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">2<small>h</small>10<small>m</small><span class="ago">ago</span></span>
+    <span class="d">4 oz formula · 7:40 AM</span>
+  </button>
+  <button class="since c-sleep" aria-label="Asleep 55 minutes, nap since 8:55. Log wake up">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg>Asleep</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-check"/></svg></span>
+    <span class="v num">55<small>m</small><span class="ago">nap</span></span>
+    <span class="d">Since 8:55 AM</span>
+  </button>
+  <button class="since c-diaper" aria-label="Diaper 3 hours ago, wet. Log a diaper">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg>Diaper</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">3<small>h</small><span class="ago">ago</span></span>
+    <span class="d">Wet · 6:50 AM · 4 today</span>
+  </button>
+  <button class="since c-pump" aria-label="Pumped 2 hours 40 minutes ago, 3.5 ounces. 12.5 of 24 ounces today. Log a pump">
+    <span class="k"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg>Pumped</span><span class="add"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span>
+    <span class="v num">2<small>h</small>40<small>m</small><span class="ago">ago</span></span>
+    <span class="goal"><span class="bar"><i></i></span><span class="gl num"><b>12.5</b> of 24 oz today</span></span>
+  </button>
+</section>
+  <div class="sec-head"><h2>Today</h2><a href="#">Timeline<svg class="ic s16" aria-hidden="true"><use href="#i-chev-r"/></svg></a></div>
+  <ol class="log"><li><time class="num">8:55<small>AM</small></time><span class="chip-ic c-sleep"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="t"><b>Nap</b><span>Asleep · still going</span></span><span class="amt live num">55<small>m</small></span></li><li><time class="num">7:40<small>AM</small></time><span class="chip-ic c-feed"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="t"><b>Bottle</b><span>Formula · finished in 15 min</span></span><span class="amt num">4<small>oz</small></span></li><li><time class="num">7:10<small>AM</small></time><span class="chip-ic c-pump"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="t"><b>Pumped</b><span>18 min · to fridge</span></span><span class="amt num">3.5<small>oz</small></span></li><li><time class="num">6:50<small>AM</small></time><span class="chip-ic c-diaper"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="t"><b>Diaper</b><span>Wet</span></span></li><li><time class="num">5:20<small>AM</small></time><span class="chip-ic c-feed"><svg class="ic s18" aria-hidden="true"><use href="#i-drop"/></svg></span><span class="t"><b>Breastfed</b><span>Left 12m · Right 9m</span></span><span class="amt num">21<small>m</small></span></li><li><time class="num">4:05<small>AM</small></time><span class="chip-ic c-pump"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="t"><b>Pumped</b><span>20 min · to freezer</span></span><span class="amt num">4.5<small>oz</small></span></li></ol>
+</div>
+<div class="fade"></div>
+<button class="livepill" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle"><span class="lp-ic"><svg class="ring" viewBox="0 0 42 42" aria-hidden="true"><circle class="track" cx="21" cy="21" r="19"/><circle class="val" cx="21" cy="21" r="19" stroke-dasharray="107.4 119.4"/></svg><svg class="ic s20" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="lp-t"><b>Bottle<span class="dot">·</span><span class="num">12:04</span></b><span>good for 1h 48m</span></span><span class="lp-btn">Finish</span></button>
+<nav class="tabbar" aria-label="Main"><button class="tab on" aria-current="page"><svg class="ic " aria-hidden="true"><use href="#i-sun"/></svg><span>Today</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="fab-slot"><button class="fab" aria-label="Log something"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-jar"/></svg><span>Stash</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-book"/></svg><span>Memories</span></button></nav>
+<div class="scrim"></div>
+<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ls-t" style="top:174px">
+  <div class="origin"></div>
+  <span class="grab-hit"><span class="grabber"></span></span>
+  <div class="sheet-head"><div><h2 id="ls-t">Log for Clara</h2><p>Tap one. Everything is editable later.</p></div>
+    <button class="when" aria-label="Time: now. Change">Now<svg class="ic " aria-hidden="true"><use href="#i-chev-d"/></svg></button></div>
+  <div class="tiles"><button class="tile c-feed"><span class="chip-ic"><svg class="ic " aria-hidden="true"><use href="#i-bottle"/></svg></span><span><b>Bottle</b><span class="sub">Last 2h 10m ago · 4 oz</span></span></button><button class="tile c-feed"><span class="chip-ic"><svg class="ic " aria-hidden="true"><use href="#i-drop"/></svg></span><span><b>Breastfeed</b><span class="sub">Last side: right</span></span></button><button class="tile c-sleep running"><span class="chip-ic"><svg class="ic " aria-hidden="true"><use href="#i-moon"/></svg></span><span class="st"><i></i>Live</span><span><b>Wake up</b><span class="sub">Asleep 55m</span></span></button><button class="tile c-diaper"><span class="chip-ic"><svg class="ic " aria-hidden="true"><use href="#i-diaper"/></svg></span><span><b>Diaper</b><span class="sub">Last 3h ago · wet</span></span></button><button class="tile c-pump"><span class="chip-ic"><svg class="ic " aria-hidden="true"><use href="#i-pump"/></svg></span><span><b>Pump</b><span class="sub">12.5 of 24 oz today</span></span></button><button class="tile c-memory"><span class="chip-ic"><svg class="ic " aria-hidden="true"><use href="#i-spark"/></svg></span><span><b>Memory</b><span class="sub">Photo or milestone</span></span></button></div>
+  <button class="wide-row c-stash"><span class="chip-ic"><svg class="ic s20" aria-hidden="true"><use href="#i-jar"/></svg></span><span><b>Add milk to stash</b><span class="sub">Fridge or freezer pouch</span></span><svg class="ic chev s20" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+  <p class="sheet-hint">Tip: <b>hold</b> the + button to log a bottle in one move</p>
+  <div class="sheet-foot"><button class="fab close" aria-label="Close"><svg class="ic " aria-hidden="true"><use href="#i-x"/></svg></button></div>
+</div><div class="home-ind"></div></section></figure><figure class="cell"><figcaption><b>4</b>Timeline — Tuesday, with 24h strip</figcaption><section class="frame " id="frame-4"><div class="island"></div><div class="status"><span class="num">9:50</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <div class="titlebar"><div><p class="eyebrow">Timeline</p><h1>Tuesday, Oct 13</h1></div>
+    <div style="display:flex;gap:8px"><button class="iconbtn" aria-label="Previous day"><svg class="ic s20" aria-hidden="true"><use href="#i-chev-l"/></svg></button><button class="iconbtn" aria-label="Next day"><svg class="ic s20" aria-hidden="true"><use href="#i-chev-r"/></svg></button></div></div>
+  <div class="pager" role="tablist" aria-label="Days"><button class="pd"><span>Th</span><b class="num">8</b></button><button class="pd"><span>Fr</span><b class="num">9</b></button><button class="pd"><span>Sa</span><b class="num">10</b></button><button class="pd"><span>Su</span><b class="num">11</b></button><button class="pd"><span>Mo</span><b class="num">12</b></button><button class="pd sel" aria-current="date"><span>Tu</span><b class="num">13</b></button><button class="pd today"><span>We</span><b class="num">14</b></button></div>
+  <div class="stats">
+    <div class="stat c-feed"><div class="k"><svg class="ic s16" aria-hidden="true"><use href="#i-bottle"/></svg>Fed</div><div class="v num">26<small>oz</small></div><div class="s">9 feeds</div></div>
+    <div class="stat c-sleep"><div class="k"><svg class="ic s16" aria-hidden="true"><use href="#i-moon"/></svg>Slept</div><div class="v num">14<small>h</small>30<small>m</small></div><div class="s">4 naps</div></div>
+    <div class="stat c-diaper"><div class="k"><svg class="ic s16" aria-hidden="true"><use href="#i-diaper"/></svg>Diaper</div><div class="v num">9</div><div class="s">3 dirty</div></div>
+    <div class="stat c-pump"><div class="k"><svg class="ic s16" aria-hidden="true"><use href="#i-pump"/></svg>Pump</div><div class="v num">25<small>oz</small></div><div class="s">goal 24 ✓</div></div>
+  </div>
+  <div class="strip"><svg viewBox="0 0 350 118" role="img" aria-label="24 hour activity strip for Tuesday October 13"><g class="grid"><line class="major" x1="26.0" x2="26.0" y1="0" y2="94"/><line x1="66.5" x2="66.5" y1="0" y2="94"/><line x1="107.0" x2="107.0" y1="0" y2="94"/><line x1="147.5" x2="147.5" y1="0" y2="94"/><line class="major" x1="188.0" x2="188.0" y1="0" y2="94"/><line x1="228.5" x2="228.5" y1="0" y2="94"/><line x1="269.0" x2="269.0" y1="0" y2="94"/><line x1="309.5" x2="309.5" y1="0" y2="94"/><line class="major" x1="350.0" x2="350.0" y1="0" y2="94"/></g><rect class="lane-bg" x="26" y="2" width="324" height="18" rx="4" opacity=".7"/><rect class="lane-bg" x="26" y="26" width="324" height="18" rx="4" opacity=".7"/><rect class="lane-bg" x="26" y="50" width="324" height="18" rx="4" opacity=".7"/><rect class="lane-bg" x="26" y="74" width="324" height="18" rx="4" opacity=".7"/><svg x="0" y="3" width="16" height="16" class="lic c-sleep"><use href="#i-moon" style="stroke:var(--c);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"/></svg><svg x="0" y="27" width="16" height="16" class="lic c-feed"><use href="#i-bottle" style="stroke:var(--c);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"/></svg><svg x="0" y="51" width="16" height="16" class="lic c-diaper"><use href="#i-diaper" style="stroke:var(--c);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"/></svg><svg x="0" y="75" width="16" height="16" class="lic c-pump"><use href="#i-pump" style="stroke:var(--c);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round"/></svg><rect class="sl night" x="26.0" y="5" width="31.5" height="12" rx="3"/><rect class="sl night" x="64.2" y="5" width="36.0" height="12" rx="3"/><rect class="sl night" x="107.0" y="5" width="18.0" height="12" rx="3"/><rect class="sl nap" x="150.9" y="5" width="20.2" height="12" rx="3"/><rect class="sl nap" x="192.5" y="5" width="22.5" height="12" rx="3"/><rect class="sl nap" x="237.5" y="5" width="11.2" height="12" rx="3"/><rect class="sl nap" x="270.1" y="5" width="9.0" height="12" rx="3"/><rect class="sl night" x="299.4" y="5" width="46.1" height="12" rx="3"/><rect class="sl night" x="348.9" y="5" width="2.0" height="12" rx="3"/><line class="fd" x1="58.6" x2="58.6" y1="29" y2="41"/><line class="bf" x1="101.4" x2="101.4" y1="29" y2="41"/><line class="fd" x1="127.2" x2="127.2" y1="29" y2="41"/><line class="fd" x1="172.2" x2="172.2" y1="29" y2="41"/><line class="fd" x1="216.1" x2="216.1" y1="29" y2="41"/><line class="bf" x1="249.9" x2="249.9" y1="29" y2="41"/><line class="fd" x1="280.2" x2="280.2" y1="29" y2="41"/><line class="fd" x1="296.0" x2="296.0" y1="29" y2="41"/><line class="fd" x1="346.6" x2="346.6" y1="29" y2="41"/><circle class="dp wet" cx="59.8" cy="59.0" r="3.6"/><circle class="dp wet" cx="102.5" cy="59.0" r="4.6"/><circle class="dp" cx="102.5" cy="59.0" r="2.2"/><circle class="dp wet" cx="128.4" cy="59.0" r="3.6"/><circle class="dp" cx="173.4" cy="59.0" r="4.2"/><circle class="dp wet" cx="217.2" cy="59.0" r="3.6"/><circle class="dp wet" cx="251.0" cy="59.0" r="3.6"/><circle class="dp wet" cx="282.5" cy="59.0" r="4.6"/><circle class="dp" cx="282.5" cy="59.0" r="2.2"/><circle class="dp wet" cx="297.1" cy="59.0" r="3.6"/><circle class="dp wet" cx="347.3" cy="59.0" r="3.6"/><rect class="pm" x="33.6" y="77.2" width="5" height="11.8" rx="1.5"/><rect class="pm" x="77.5" y="78.0" width="5" height="11.0" rx="1.5"/><rect class="pm" x="133.8" y="77.2" width="5" height="11.8" rx="1.5"/><rect class="pm" x="192.2" y="78.0" width="5" height="11.0" rx="1.5"/><rect class="pm" x="250.8" y="78.0" width="5" height="11.0" rx="1.5"/><rect class="pm" x="307.0" y="78.0" width="5" height="11.0" rx="1.5"/><text class="lbl" x="26.0" y="112" text-anchor="start">12a</text><text class="lbl" x="107.0" y="112" text-anchor="middle">6a</text><text class="lbl" x="188.0" y="112" text-anchor="middle">12p</text><text class="lbl" x="269.0" y="112" text-anchor="middle">6p</text><text class="lbl" x="350.0" y="112" text-anchor="end">12a</text></svg></div>
+  <div class="sec-head" style="padding-top:14px"><h2>The day</h2><span class="meta">32 entries · newest first</span></div>
+  <ol class="log"><li><time class="num">11:55<small>PM</small></time><span class="chip-ic c-sleep"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="t"><b>Night sleep</b><span>Until 5:10 AM Wednesday</span></span><span class="amt num">5<small>h</small>15<small>m</small></span></li><li><time class="num">11:48<small>PM</small></time><span class="chip-ic c-diaper"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="t"><b>Diaper</b><span>Wet</span></span></li><li><time class="num">11:45<small>PM</small></time><span class="chip-ic c-feed"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="t"><b>Bottle</b><span>Formula · 12 min</span></span><span class="amt num">3<small>oz</small></span></li><li><time class="num">9:00<small>PM</small></time><span class="chip-ic c-pump"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="t"><b>Pumped</b><span>16 min · to freezer</span></span><span class="amt num">4<small>oz</small></span></li><li><time class="num">8:15<small>PM</small></time><span class="chip-ic c-sleep"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="t"><b>Sleep</b><span>Until 11:40 PM</span></span><span class="amt num">3<small>h</small>25<small>m</small></span></li></ol>
+</div>
+<div class="fade"></div>
+<button class="livepill" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle"><span class="lp-ic"><svg class="ring" viewBox="0 0 42 42" aria-hidden="true"><circle class="track" cx="21" cy="21" r="19"/><circle class="val" cx="21" cy="21" r="19" stroke-dasharray="107.4 119.4"/></svg><svg class="ic s20" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="lp-t"><b>Bottle<span class="dot">·</span><span class="num">12:04</span></b><span>good for 1h 48m</span></span><span class="lp-btn">Finish</span></button>
+<nav class="tabbar" aria-label="Main"><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-sun"/></svg><span>Today</span></button><button class="tab on" aria-current="page"><svg class="ic " aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="fab-slot"><button class="fab" aria-label="Log something"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-jar"/></svg><span>Stash</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-book"/></svg><span>Memories</span></button></nav><div class="home-ind"></div></section></figure><figure class="cell"><figcaption><b>5</b>Stash — use next, fridge &amp; freezer</figcaption><section class="frame " id="frame-5"><div class="island"></div><div class="status"><span class="num">9:50</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <div class="titlebar"><div><p class="eyebrow">Milk stash</p><div class="big-num num" style="margin-top:8px">46<small>oz</small></div></div>
+    <button class="btn btn-secondary" style="min-height:44px;padding:0 16px 0 12px;margin-bottom:4px"><svg class="ic s18" aria-hidden="true"><use href="#i-plus"/></svg>Add pouch</button></div>
+  <div class="split">
+    <div class="bar" role="img" aria-label="Fridge 9 ounces, freezer 37 ounces"><i class="fr"></i><i class="fz"></i></div>
+    <div class="lg"><span><i class="sw" style="background:var(--pump-tint);box-shadow:inset 0 0 0 1.25px var(--pump)"></i>Fridge <b class="num">9 oz</b> · 3</span>
+      <span><i class="sw" style="background:var(--pump)"></i>Freezer <b class="num">37 oz</b> · 8</span></div>
+  </div>
+  <section class="hero" aria-label="Use next">
+    <div class="top"><p class="eyebrow">Use next · oldest frozen</p><span class="badge ok"><svg class="ic " aria-hidden="true"><use href="#i-check"/></svg>Good till Mar 2</span></div>
+    <div class="row"><svg class="pouch" viewBox="0 0 52 64" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M8 6h36v6H8z"/><path d="M9 12h34l-2 44a4 4 0 0 1-4 4H15a4 4 0 0 1-4-4z"/><path d="M11.6 34h28.8l-1.2 22a3 3 0 0 1-3 2.8H15.8a3 3 0 0 1-3-2.8z" fill="currentColor" fill-opacity=".16" stroke="none"/><path d="M14 20h6M14 26h4M14 32h6"/></svg><div><div class="amt num">4<small>oz</small></div><p class="det">Frozen Wed, Sep 2 · 6 weeks ago</p></div></div>
+    <div class="acts"><button class="btn btn-primary"><svg class="ic s20" aria-hidden="true"><use href="#i-thaw"/></svg>Thaw</button><button class="btn btn-secondary"><svg class="ic s20" aria-hidden="true"><use href="#i-bottle"/></svg>Thaw &amp; feed</button></div>
+  </section>
+  <div class="stash-list">
+    <div class="grp"><svg class="ic s18" aria-hidden="true"><use href="#i-fridge"/></svg>Fridge<span class="tot num">9 oz</span></div>
+    <div class="srow"><span class="a num">3.5<small>oz</small></span><span class="m"><b>Today, 7:10 AM</b></span><span class="badge ok"><svg class="ic " aria-hidden="true"><use href="#i-clock"/></svg>4 days</span></div><div class="srow"><span class="a num">3<small>oz</small></span><span class="m"><b>Yesterday, 12:30 PM</b></span><span class="badge ok"><svg class="ic " aria-hidden="true"><use href="#i-clock"/></svg>3 days</span></div><div class="srow"><span class="a num">2.5<small>oz</small></span><span class="m"><b>Mon, Oct 12, 6:45 PM</b></span><span class="badge soon"><svg class="ic " aria-hidden="true"><use href="#i-hourglass"/></svg>Use by Fri</span></div>
+    <div class="grp"><svg class="ic s18" aria-hidden="true"><use href="#i-snow"/></svg>Freezer<span class="tot num">37 oz</span></div>
+    <div class="srow"><span class="a num">5<small>oz</small></span><span class="m"><b>Sat Sep 5</b></span><span class="badge ok"><svg class="ic " aria-hidden="true"><use href="#i-clock"/></svg>Best by Mar 5</span></div><div class="srow"><span class="a num">4.5<small>oz</small></span><span class="m"><b>Wed Sep 9</b></span><span class="badge ok"><svg class="ic " aria-hidden="true"><use href="#i-clock"/></svg>Best by Mar 9</span></div>
+  </div>
+</div>
+<div class="fade"></div>
+<button class="livepill" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle"><span class="lp-ic"><svg class="ring" viewBox="0 0 42 42" aria-hidden="true"><circle class="track" cx="21" cy="21" r="19"/><circle class="val" cx="21" cy="21" r="19" stroke-dasharray="107.4 119.4"/></svg><svg class="ic s20" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="lp-t"><b>Bottle<span class="dot">·</span><span class="num">12:04</span></b><span>good for 1h 48m</span></span><span class="lp-btn">Finish</span></button>
+<nav class="tabbar" aria-label="Main"><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-sun"/></svg><span>Today</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="fab-slot"><button class="fab" aria-label="Log something"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab on" aria-current="page"><svg class="ic " aria-hidden="true"><use href="#i-jar"/></svg><span>Stash</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-book"/></svg><span>Memories</span></button></nav><div class="home-ind"></div></section></figure><figure class="cell"><figcaption><b>6</b>Memories — Clara’s book</figcaption><section class="frame " id="frame-6"><div class="island"></div><div class="status"><span class="num">1:15</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <div class="titlebar"><div><p class="eyebrow">Clara's book</p><h1>Memories</h1></div>
+    <button class="btn btn-secondary" style="min-height:44px;padding:0 16px 0 12px;margin-bottom:4px"><svg class="ic s18" aria-hidden="true"><use href="#i-camera"/></svg>Add</button></div>
+  <div class="cover" role="img" aria-label="Cover photo: First real smile">
+    <span class="ph p1"></span>
+    <div class="cap"><b>The first real smile</b><span>Friday, October 9 · at 5 weeks</span></div>
+  </div>
+  <div class="sec-head" style="padding-top:20px"><h2>Firsts</h2><span class="meta">3 of 12 kept</span></div>
+  <ol class="ms"><li class=""><span class="star"><svg class="ic s20" aria-hidden="true"><use href="#i-spark"/></svg></span><span><b>First real smile</b><span class="sub">Fri, Oct 9 · 5 weeks, 4 days</span></span><span class="thumb ph p1"></span></li><li class=""><span class="star"><svg class="ic s20" aria-hidden="true"><use href="#i-spark"/></svg></span><span><b>Head up in tummy time</b><span class="sub">Mon, Sep 28 · 4 weeks</span></span><span class="thumb ph p5"></span></li><li class=""><span class="star"><svg class="ic s20" aria-hidden="true"><use href="#i-spark"/></svg></span><span><b>First bath at home</b><span class="sub">Sun, Sep 6 · 5 days</span></span><span class="thumb ph p2"></span></li><li class="next"><span class="star"><svg class="ic s20" aria-hidden="true"><use href="#i-spark"/></svg></span><span><b>Laughs out loud</b><span class="sub">Usually 3–4 months · tap to add</span></span><button class="addbtn" aria-label="Add laughs out loud"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg>Add</button></li></ol>
+  <div class="sec-head" style="padding-top:12px;padding-bottom:10px"><h2>Week six</h2><span class="meta">6 photos</span></div>
+  <div class="pgrid"><span class="ph p4" role="img" aria-label="Photo"></span><span class="ph p6" role="img" aria-label="Photo"></span><span class="ph p3" role="img" aria-label="Photo"></span><span class="ph p2" role="img" aria-label="Photo"></span><span class="ph p5" role="img" aria-label="Photo"></span><span class="ph p1" role="img" aria-label="Photo"></span></div>
+</div>
+<div class="fade" style="height:36px"></div>
+<nav class="tabbar" aria-label="Main"><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-sun"/></svg><span>Today</span></button><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="fab-slot"><button class="fab" aria-label="Log something"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic " aria-hidden="true"><use href="#i-jar"/></svg><span>Stash</span></button><button class="tab on" aria-current="page"><svg class="ic " aria-hidden="true"><use href="#i-book"/></svg><span>Memories</span></button></nav><div class="home-ind"></div></section></figure><figure class="cell"><figcaption><b>7</b>Settings → Customize + Privacy</figcaption><section class="frame " id="frame-7"><div class="island"></div><div class="status"><span class="num">9:50</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <div class="navbar"><button class="backbtn"><svg class="ic " aria-hidden="true"><use href="#i-chev-l"/></svg>Settings</button></div>
+  <div class="set-title"><h1>Customize</h1>
+    <p>Choose what Clara’s Today shows, and drag to reorder. Hiding never deletes — turn it back on and it’s all there.</p></div>
+  <div class="group-label">Trackers<span>7 of 8 on</span></div>
+  <div class="tlist"><div class="trow c-feed "><span class="grip" role="button" aria-label="Reorder Bottles · formula"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg></span><span><b>Bottles · formula</b><span class="sub">Fed card, timeline</span></span><span class="tog-hit" role="switch" aria-checked="true" aria-label="Show Bottles · formula"><span class="toggle"></span></span></div><div class="trow c-feed "><span class="grip" role="button" aria-label="Reorder Bottles · breast milk"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-bottle"/></svg></span><span><b>Bottles · breast milk</b><span class="sub">Pairs with your stash</span></span><span class="tog-hit" role="switch" aria-checked="true" aria-label="Show Bottles · breast milk"><span class="toggle"></span></span></div><div class="trow c-feed "><span class="grip" role="button" aria-label="Reorder Breastfeeding"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-drop"/></svg></span><span><b>Breastfeeding</b><span class="sub">Left / right timer</span></span><span class="tog-hit" role="switch" aria-checked="true" aria-label="Show Breastfeeding"><span class="toggle"></span></span></div><div class="trow c-sleep drag"><span class="grip" role="button" aria-label="Reorder Sleep"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-moon"/></svg></span><span><b>Sleep</b><span class="sub">Naps, nights, wake windows</span></span><span class="tog-hit" role="switch" aria-checked="true" aria-label="Show Sleep"><span class="toggle"></span></span></div><div class="trow c-diaper "><span class="grip" role="button" aria-label="Reorder Diapers"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-diaper"/></svg></span><span><b>Diapers</b><span class="sub">Wet, dirty, both</span></span><span class="tog-hit" role="switch" aria-checked="true" aria-label="Show Diapers"><span class="toggle"></span></span></div><div class="trow c-pump "><span class="grip" role="button" aria-label="Reorder Pumping"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-pump"/></svg></span><span><b>Pumping</b><span class="sub">Goal 24 oz a day</span></span><span class="tog-hit" role="switch" aria-checked="true" aria-label="Show Pumping"><span class="toggle"></span></span></div><div class="trow c-stash "><span class="grip" role="button" aria-label="Reorder Milk stash"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-jar"/></svg></span><span><b>Milk stash</b><span class="sub">Fridge & freezer, oldest first</span></span><span class="tog-hit" role="switch" aria-checked="true" aria-label="Show Milk stash"><span class="toggle"></span></span></div><div class="trow c-memory "><span class="grip" role="button" aria-label="Reorder Memories"><svg class="ic s20" aria-hidden="true"><use href="#i-grip"/></svg></span><span class="chip-ic"><svg class="ic s18" aria-hidden="true"><use href="#i-spark"/></svg></span><span><b>Memories</b><span class="sub">Milestones & photos</span></span><span class="tog-hit" role="switch" aria-checked="false" aria-label="Show Memories"><span class="toggle off"></span></span></div></div>
+  <div class="group-label" style="padding-top:22px">Privacy</div>
+  <button class="prow"><span class="chip-ic lg c-neutral" style="color:var(--accent-ink);background:var(--accent-tint)"><svg class="ic s20" aria-hidden="true"><use href="#i-lock"/></svg></span>
+    <span><b>On this phone only</b><span class="sub">No account, ads or tracking<br>0 network requests · 14.2 MB stored</span></span><svg class="ic chev s20" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+</div><div class="home-ind"></div></section></figure><figure class="cell"><figcaption><b>8</b>Onboarding — first screen</figcaption><section class="frame " id="frame-8"><div class="island"></div><div class="status"><span class="num">9:50</span><span class="si"><svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.3c2.3 0 4.4.9 6 2.4l1.2-1.2A10.2 10.2 0 0 0 8 .6C5.2.6 2.7 1.7.8 3.5L2 4.7a8.5 8.5 0 0 1 6-2.4zm0 3.4c1.4 0 2.6.5 3.6 1.4l1.2-1.2A6.8 6.8 0 0 0 8 4c-1.9 0-3.5.7-4.8 1.9l1.2 1.2c1-.9 2.2-1.4 3.6-1.4zm0 3.4c-.6 0-1.2.2-1.6.6L8 11.3l1.6-1.6c-.4-.4-1-.6-1.6-.6z"/></svg><svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".5" y=".5" width="23" height="12" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="17" height="9" rx="2"/><path d="M25 4.5v4c.8-.3 1.3-1.1 1.3-2s-.5-1.7-1.3-2z" opacity=".45"/></svg></span></div>
+<div class="screen">
+  <div class="ob-top"><span class="wordmark">Nurture</span><span class="steps" aria-label="Step 1 of 4"><i class="on"></i><i></i><i></i><i></i></span></div>
+  <div class="ob-h"><h1>Free. Private.<br><em>Everything stays<br>on this phone.</em></h1></div>
+  <ul class="promises">
+    <li><svg class="ic s20" aria-hidden="true"><use href="#i-shield"/></svg><span><b>No account.</b> No ads, no analytics.</span></li>
+    <li><svg class="ic s20" aria-hidden="true"><use href="#i-phone"/></svg><span><b>Works offline,</b> even at 3am with no signal.</span></li>
+    <li><svg class="ic s20" aria-hidden="true"><use href="#i-share"/></svg><span><b>Yours to keep.</b> Export or erase any time.</span></li>
+  </ul>
+  <div class="who"><h2>Who are we caring for?</h2>
+    <div class="who-row">
+      <button class="picker" aria-label="Add a photo of your baby"><svg class="ic s28" aria-hidden="true"><use href="#i-camera"/></svg><span>Add photo</span><span class="plus"><svg class="ic " aria-hidden="true"><use href="#i-plus"/></svg></span></button>
+      <div>
+        <div class="field focus"><label>Name</label><div class="val">Clara<span class="caret"></span></div></div>
+        <div class="field" style="margin-bottom:0"><label>Born</label><div class="val num" style="font-size:20px">Sep 1, 2026</div></div>
+      </div>
+    </div>
+  </div>
+  <p class="note" style="margin-top:14px"><svg class="ic s16" aria-hidden="true"><use href="#i-phone"/></svg><span>On iPhone, her photo can become the app icon when you add Nurture to your Home Screen.</span></p>
+  <div class="ob-cta"><div class="restore"><button class="btn btn-ghost">I have a backup file</button></div><button class="btn btn-primary btn-block">Continue</button></div>
+</div><div class="home-ind"></div></section></figure>
+</main>
+</body></html>
