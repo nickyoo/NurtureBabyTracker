@@ -3,6 +3,7 @@
 // are the shared inventory-mutation actions other views (the Feed tab's
 // thaw tile) also call into.
 import { inventory, InventoryManager, THAWED_LOCATION, FROZEN_LOCATIONS } from './inventory.js';
+import { escapeHtml } from './viewHelpers.js';
 
 export class InventoryView {
   constructor(app) {
@@ -102,7 +103,7 @@ export class InventoryView {
             </div>
           </div>
 
-          ${item.notes ? `<div class="note-italic-secondary">"${item.notes}"</div>` : ''}
+          ${item.notes ? `<div class="note-italic-secondary">"${escapeHtml(item.notes)}"</div>` : ''}
 
           ${item.status === 'active' ? `
             <div class="inv-card-actions">
@@ -138,15 +139,19 @@ export class InventoryView {
     }).join('');
   }
 
+  // Stash changes ripple into the thaw tile and the urgent strips, which
+  // the dashboard owns — re-render both, not just this list.
   async markUsedItem(id) {
     await inventory.markUsed(id);
-    this.render();
+    await this.app.renderTodayDashboard();
+    await this.render();
   }
 
   async discardItem(id) {
     if (confirm('Archive / Discard this item?')) {
       await inventory.markDiscarded(id);
-      this.render();
+      await this.app.renderTodayDashboard();
+      await this.render();
     }
   }
 
@@ -205,7 +210,8 @@ export class InventoryView {
         });
 
         addMilkModal.classList.remove('open');
-        this.render();
+        await app.renderTodayDashboard();
+        await this.render();
       });
     }
   }

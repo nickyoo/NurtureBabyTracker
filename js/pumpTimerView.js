@@ -22,6 +22,7 @@ export class PumpTimerView {
           timer.start();
         } else {
           await timer.stopAndSave({
+            quantity: app.settings.units === 'mL' ? timer.pumpOutputMl : timer.pumpOutputOz,
             units: app.settings.units,
             storageWindows: app.settings.storageWindows
           });
@@ -54,9 +55,15 @@ export class PumpTimerView {
       });
     }
 
-    document.querySelectorAll('.chip-btn').forEach(btn => {
+    // Scoped to the timer tile: the manual-pump modal's duration chips share
+    // the .chip-btn class but carry data-min, not data-delta. An unscoped
+    // selector used to feed NaN into the pump output.
+    document.querySelectorAll('#timerHeroTile .chip-btn[data-delta]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const delta = parseFloat(btn.dataset.delta);
+        const deltaOz = parseFloat(btn.dataset.delta);
+        if (!Number.isFinite(deltaOz)) return;
+        // Chip deltas are authored in oz; in mL mode they step by 30 mL per oz.
+        const delta = app.settings.units === 'mL' ? deltaOz * 30 : deltaOz;
         timer.adjustPumpOutput(delta, app.settings.units);
       });
     });
@@ -227,6 +234,12 @@ export class PumpTimerView {
       `;
       statusText.textContent = 'Ready for Next Pump';
     }
+
+    // Increment chips read in the active unit (+0.5 oz ⇄ +15 mL)
+    document.querySelectorAll('#timerHeroTile .chip-btn[data-delta]').forEach(btn => {
+      const deltaOz = parseFloat(btn.dataset.delta);
+      btn.textContent = app.settings.units === 'mL' ? `+${deltaOz * 30}` : `+${deltaOz.toFixed(1)}`;
+    });
 
     const pumpValEl = document.getElementById('stepperPumpVal');
     if (pumpValEl) {

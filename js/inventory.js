@@ -248,9 +248,13 @@ export class InventoryManager {
 // actually frozen milk to thaw. Empty stash -> the section stays hidden
 // (thawed pouches still surface via the feed-flow source chips and the
 // urgents strip).
-export function shouldShowThawTile(frozenCount) {
-  const n = Number(frozenCount);
-  return Number.isFinite(n) && n > 0;
+// Visible while there's anything to act on: frozen pouches to thaw, OR
+// thawed milk waiting to be fed. (Keying it on frozen stock alone made the
+// tile — and the pouch you'd just thawed into it — vanish the moment you
+// thawed your last frozen pouch.)
+export function shouldShowThawTile(frozenCount, thawedCount = 0) {
+  const has = v => { const n = Number(v); return Number.isFinite(n) && n > 0; };
+  return has(frozenCount) || has(thawedCount);
 }
 
 export const inventory = new InventoryManager();

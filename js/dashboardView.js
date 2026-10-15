@@ -6,7 +6,7 @@ import { db } from './db.js';
 import { reminders } from './reminders.js';
 import { TrendsManager } from './trends.js';
 import { inventory, InventoryManager, shouldShowThawTile } from './inventory.js';
-import { escapeHtml, displayQty } from './viewHelpers.js';
+import { escapeHtml, displayQty, sumQty, sessionQty, plural } from './viewHelpers.js';
 import { applySessionEdits } from './app.js';
 
 const ICON_SVG_BOTTLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg>';
@@ -44,7 +44,7 @@ export class DashboardView {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const count = sessions.filter(s => s.type === 'pump' && s.startTime >= startOfToday).length;
     numEl.textContent = String(count);
-    if (subEl) subEl.textContent = count === 1 ? '1 session today' : `${count} sessions today`;
+    if (subEl) subEl.textContent = `${plural(count, 'session')} today`;
   }
 
   // 1. Animated Bottle Fill Calculation & SVG Rendering
@@ -133,12 +133,12 @@ export class DashboardView {
     // Calculate today's totals for header
     const todayPumps = sessions.filter(s => s.type === 'pump' && s.startTime >= startOfToday);
     const todayFeeds = sessions.filter(s => s.type === 'feed' && s.startTime >= startOfToday);
-    const todayPumpVolume = todayPumps.reduce((acc, s) => acc + (s.outputQty || 0), 0);
-    const todayFeedVolume = todayFeeds.reduce((acc, s) => acc + (s.outputQty || 0), 0);
+    const todayPumpVolume = sumQty(todayPumps, unit);
+    const todayFeedVolume = sumQty(todayFeeds, unit);
 
     if (headerTitle) {
       if (todayPumps.length > 0 || todayFeeds.length > 0) {
-        headerTitle.innerHTML = `Today: <strong>${todayPumps.length} pumps</strong> (${Math.round(todayPumpVolume * 10) / 10} ${unit}) • <strong>${todayFeeds.length} feeds</strong> (${Math.round(todayFeedVolume * 10) / 10} ${unit})`;
+        headerTitle.innerHTML = `Today: <strong>${plural(todayPumps.length, 'pump')}</strong> (${todayPumpVolume} ${unit}) • <strong>${plural(todayFeeds.length, 'feed')}</strong> (${todayFeedVolume} ${unit})`;
       } else {
         headerTitle.innerHTML = `Today's Activity: <strong>0 sessions</strong>`;
       }
@@ -187,16 +187,16 @@ export class DashboardView {
         html += displayedGroups.map(group => {
           const groupPumps = group.sessions.filter(s => s.type === 'pump');
           const groupFeeds = group.sessions.filter(s => s.type === 'feed');
-          const pVol = groupPumps.reduce((a, s) => a + (s.outputQty || 0), 0);
-          const fVol = groupFeeds.reduce((a, s) => a + (s.outputQty || 0), 0);
+          const pVol = sumQty(groupPumps, unit);
+          const fVol = sumQty(groupFeeds, unit);
 
           let summaryTag = '';
           if (pVol > 0 && fVol > 0) {
-            summaryTag = `${Math.round(pVol * 10) / 10} pumped • ${Math.round(fVol * 10) / 10} fed`;
+            summaryTag = `${pVol} ${unit} pumped • ${fVol} ${unit} fed`;
           } else if (pVol > 0) {
-            summaryTag = `${Math.round(pVol * 10) / 10} ${unit} pumped`;
+            summaryTag = `${pVol} ${unit} pumped`;
           } else if (fVol > 0) {
-            summaryTag = `${Math.round(fVol * 10) / 10} ${unit} fed`;
+            summaryTag = `${fVol} ${unit} fed`;
           }
 
           return `
@@ -207,6 +207,7 @@ export class DashboardView {
             ${group.sessions.map(s => {
               const timeStr = new Date(s.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 
+              const q = sessionQty(s, unit);
               if (s.type === 'feed') {
                 const isFormula = s.feedType === 'formula';
                 return `
@@ -217,10 +218,10 @@ export class DashboardView {
                       </div>
                       <div class="session-details">
                         <div class="session-primary-title">
-                          <span>${s.outputQty} ${s.unit || unit}</span>
+                          <span>${q.qty} ${q.qtyUnit}</span>
                           <span class="session-badge-tag ${isFormula ? 'formula' : 'breastmilk'}">${isFormula ? 'Formula' : 'Breast Milk'}</span>
                         </div>
-                        <div class="session-sub-title">${timeStr} • ${s.notes || (isFormula ? 'Formula Feeding' : 'Breast Milk Feeding')}</div>
+                        <div class="session-sub-title">${timeStr} • ${escapeHtml(s.notes || (isFormula ? 'Formula Feeding' : 'Breast Milk Feeding'))}</div>
                       </div>
                     </div>
                     <div class="session-item-right has-actions">
@@ -241,11 +242,11 @@ export class DashboardView {
                       </div>
                       <div class="session-details">
                         <div class="session-primary-title">
-                          <span>${s.outputQty} ${s.unit || unit}</span>
+                          <span>${q.qty} ${q.qtyUnit}</span>
                           <span class="session-badge-tag breastmilk">Pump</span>
                         </div>
                         <div class="session-sub-title">${timeStr} • ${durationMin} min duration</div>
-                        ${s.notes ? `<div class="note-italic-muted">"${s.notes}"</div>` : ''}
+                        ${s.notes ? `<div class="note-italic-muted">"${escapeHtml(s.notes)}"</div>` : ''}
                       </div>
                     </div>
                     <div class="session-item-right has-actions">
@@ -402,11 +403,11 @@ export class DashboardView {
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
     const feeds = sessions.filter(s => s.type === 'feed' && s.startTime >= startOfToday);
     const unit = app.settings.units;
-    const totalVol = feeds.reduce((acc, s) => acc + (s.outputQty || 0), 0);
+    const totalVol = sumQty(feeds, unit);
 
     if (countEl) {
       countEl.textContent = feeds.length
-        ? `• ${feeds.length} feed${feeds.length === 1 ? '' : 's'} • ${Math.round(totalVol * 10) / 10} ${unit}`
+        ? `${plural(feeds.length, 'feed')} • ${totalVol} ${unit}`
         : '';
     }
 
@@ -420,6 +421,7 @@ export class DashboardView {
 
     wrap.innerHTML = feeds.map(s => {
       const isFormula = s.feedType === 'formula';
+      const q = sessionQty(s, unit);
       const timeStr = new Date(s.startTime).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       return `
         <div class="session-item-tile feeds-tracker-row" role="button" tabindex="0"
@@ -430,7 +432,7 @@ export class DashboardView {
             </div>
             <div class="session-details">
               <div class="session-primary-title">
-                <span>${s.outputQty} ${s.unit || unit}</span>
+                <span>${q.qty} ${q.qtyUnit}</span>
                 <span class="session-badge-tag ${isFormula ? 'formula' : 'breastmilk'}">${isFormula ? 'Formula' : 'Breast Milk'}</span>
               </div>
               <div class="session-sub-title">${timeStr}${s.notes ? ` • ${escapeHtml(s.notes)}` : ''}</div>
@@ -455,7 +457,7 @@ export class DashboardView {
     const unit = app.settings.units;
     const frozen = await inventory.getFrozenItems();
     const thawed = await inventory.getThawedItems();
-    if (tile) tile.hidden = !shouldShowThawTile(frozen.length);
+    if (tile) tile.hidden = !shouldShowThawTile(frozen.length, thawed.length);
     const MAX_FROZEN = 6;
     const shown = frozen.slice(0, MAX_FROZEN);
 
@@ -558,8 +560,11 @@ export class DashboardView {
     }
 
     try {
+      // Only warn people who keep a stash at all — a formula-only family (or
+      // a brand-new user) shouldn't be greeted with "Low stash: 0 oz".
       const summary = await inventory.getStashSummary();
-      if (summary.totalOz < 12) {
+      const everStashed = (await db.getInventory(true)).length > 0;
+      if (everStashed && summary.totalOz < 12) {
         const disp = app.settings.units === 'mL' ? Math.round(summary.totalOz * 29.5735) : summary.totalOz;
         stashItems.push({
           tone: 'tone-warn',

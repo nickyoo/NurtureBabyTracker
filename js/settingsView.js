@@ -71,9 +71,13 @@ export class SettingsView {
 
     const goalInput = document.getElementById('settingDailyGoalInput');
     if (goalInput) {
-      goalInput.value = app.settings.dailyGoalOz;
+      goalInput.value = this.goalForDisplay();
       goalInput.addEventListener('change', async (e) => {
-        const val = parseFloat(e.target.value) || 24.0;
+        const raw = parseFloat(e.target.value);
+        // Input is in the active unit; the setting is stored in oz.
+        const val = Number.isFinite(raw) && raw > 0
+          ? Math.round((app.settings.units === 'mL' ? raw / 29.5735 : raw) * 10) / 10
+          : 24.0;
         app.settings.dailyGoalOz = val;
         await db.setSetting('dailyGoalOz', val);
         app.updateBottleFillLevel();
@@ -178,12 +182,17 @@ export class SettingsView {
     const winStarted = document.getElementById('settingWinStarted');
     const goalInput = document.getElementById('settingDailyGoalInput');
 
-    if (goalInput) goalInput.value = app.settings.dailyGoalOz;
+    if (goalInput) goalInput.value = this.goalForDisplay();
     if (winFridge) winFridge.value = windows.fridgeDays || 4;
     if (winFreezer) winFreezer.value = windows.freezerMonths || 6;
     if (winDeepFreezer) winDeepFreezer.value = windows.deepFreezerMonths || 12;
     if (winThawed) winThawed.value = windows.thawedBottleHours || 24;
     if (winStarted) winStarted.value = windows.startedBottleHours || 2;
+  }
+
+  goalForDisplay() {
+    const oz = this.app.settings.dailyGoalOz;
+    return this.app.settings.units === 'mL' ? Math.round(oz * 29.5735) : oz;
   }
 
   async saveStorageWindows() {

@@ -20,12 +20,20 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# CSS/JS filenames are not content-hashed, so they must revalidate on every
+# load (cheap: ETag -> 304). Marking them immutable meant a deploy's bug fixes
+# could stay invisible to returning visitors for up to a year.
 [[headers]]
   for = "/css/*"
   [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+    Cache-Control = "public, max-age=0, must-revalidate"
 
 [[headers]]
   for = "/js/*"
   [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

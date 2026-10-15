@@ -30,7 +30,7 @@ export class OnboardingController {
       parentName: settings.parentName || '',
       babyName: (settings.babyName && settings.babyName.toLowerCase() !== 'baby') ? settings.babyName : '',
       goal: Number(settings.dailyGoalOz) || 24,
-      interval: Number(settings.reminderIntervalHours) || 3,
+      interval: (Number(settings.pumpIntervalMinutes) || 180) / 60,
       unit: settings.units || 'oz'
     };
 
@@ -42,7 +42,12 @@ export class OnboardingController {
     const goalInput = document.getElementById('obGoalInput');
     const unitTag = document.getElementById('obUnitTag');
     if (goalInput) goalInput.value = this.state.goal;
-    if (unitTag) unitTag.textContent = this.state.unit;
+    if (unitTag) unitTag.textContent = 'oz';
+
+    // Reflect the saved interval (replaying the tour shouldn't reset it to 3h)
+    document.querySelectorAll('#obIntervalChips .ob-chip').forEach(chip => {
+      chip.classList.toggle('active', parseFloat(chip.dataset.hours) === this.state.interval);
+    });
 
     // Nothing for the install slide to ask of someone already running the
     // installed app — drop it, and drop the now-meaningless Back button
@@ -184,18 +189,23 @@ export class OnboardingController {
       const intervalVal = (this.state && this.state.interval) || 3;
       const unitVal = (this.state && this.state.unit) || 'oz';
 
+      // These keys must match what App.loadSettings() reads back. They used
+      // to be written under different names (dailyPumpingGoal,
+      // reminderIntervalHours, preferredUnit), so the goal and pump interval
+      // picked here silently reverted to 24 oz / 3h on the next launch.
+      const intervalMinutes = Math.round(intervalVal * 60);
       await db.setSetting('parentName', pName);
       await db.setSetting('babyName', bName);
-      await db.setSetting('dailyPumpingGoal', goalVal);
-      await db.setSetting('reminderIntervalHours', intervalVal);
-      await db.setSetting('preferredUnit', unitVal);
+      await db.setSetting('dailyGoalOz', goalVal);
+      await db.setSetting('pumpIntervalMinutes', intervalMinutes);
+      await db.setSetting('units', unitVal);
       await db.setSetting('onboarding_completed', true);
       localStorage.setItem('onboarding_completed', 'true');
 
       settings.parentName = pName;
       settings.babyName = bName;
       settings.dailyGoalOz = goalVal;
-      settings.reminderIntervalHours = intervalVal;
+      settings.pumpIntervalMinutes = intervalMinutes;
       settings.units = unitVal;
 
       this.app.updateNamesUI();
@@ -204,8 +214,8 @@ export class OnboardingController {
       if (goalDisplayEl) goalDisplayEl.textContent = goalVal;
       const settingsGoalInput = document.getElementById('settingDailyGoalInput');
       if (settingsGoalInput) settingsGoalInput.value = goalVal;
-      const settingsIntervalInput = document.getElementById('settingReminderInterval');
-      if (settingsIntervalInput) settingsIntervalInput.value = intervalVal;
+      const settingsIntervalInput = document.getElementById('settingIntervalSelect');
+      if (settingsIntervalInput) settingsIntervalInput.value = String(intervalMinutes);
     } catch (e) {
       console.warn('Failed to save onboarding settings', e);
     }
@@ -222,7 +232,7 @@ export class OnboardingController {
 
     try {
       await this.app.renderTodayDashboard();
-      reminders.init();
+      await reminders.updateStatus();
     } catch (e) {
       console.warn('Post-onboarding render warning', e);
     }

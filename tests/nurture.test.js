@@ -512,7 +512,7 @@ test('buildFeedFlowPrefill: rejects frozen, fridge, used, or missing items', () 
 });
 
 // ----------------------------------------------- shouldShowThawTile ---
-test('shouldShowThawTile: tile visible only when frozen stash exists', () => {
+test('shouldShowThawTile: tile visible while frozen stash exists', () => {
   assert.equal(shouldShowThawTile(0), false);
   assert.equal(shouldShowThawTile(3), true);
   assert.equal(shouldShowThawTile(1), true);
@@ -551,4 +551,53 @@ test('resolveFeedTimerStart: safe defaults when the draft was never picked', () 
   assert.deepEqual(resolveFeedTimerStart({ type: 'breastmilk', amountOz: 0 }), { type: 'breastmilk', amountOz: 4.0, sourceInventoryId: null });
   const unknown = resolveFeedTimerStart({ type: 'weird', amountOz: 3 });
   assert.equal(unknown.type, 'formula'); // unknown type falls back to formula
+});
+
+// ----------------------------------------- thaw tile keeps thawed milk ---
+test('shouldShowThawTile: stays visible after the last frozen pouch is thawed', () => {
+  // Regression: thawing your last frozen pouch used to hide the whole tile,
+  // including the "Thawed & ready" pouch you had just created.
+  assert.equal(shouldShowThawTile(0, 1), true);
+  assert.equal(shouldShowThawTile(2, 0), true);
+  assert.equal(shouldShowThawTile(0, 0), false);
+  assert.equal(shouldShowThawTile(0, NaN), false);
+});
+
+// -------------------------------------------------- unit-safe totals ---
+const { convertQty, sumQty, sessionQty, plural } = await import('../js/viewHelpers.js');
+
+test('convertQty: converts oz <-> mL and treats missing unit as oz', () => {
+  assert.equal(convertQty(4, 'oz', 'oz'), 4);
+  assert.equal(Math.round(convertQty(4, 'oz', 'mL')), 118);
+  assert.equal(Math.round(convertQty(118.294, 'mL', 'oz') * 10) / 10, 4);
+  assert.equal(Math.round(convertQty(2, undefined, 'mL')), 59);
+});
+
+test('convertQty: NaN / null quantities count as 0 instead of poisoning totals', () => {
+  assert.equal(convertQty(NaN, 'oz', 'oz'), 0);
+  assert.equal(convertQty(null, 'mL', 'oz'), 0);
+  assert.equal(convertQty(undefined, 'oz', 'mL'), 0);
+});
+
+test('sumQty: mixed-unit sessions total correctly in the display unit', () => {
+  // Regression: a 4 oz feed + a 120 mL feed used to show "124 mL fed".
+  const sessions = [
+    { outputQty: 4, unit: 'oz' },
+    { outputQty: 120, unit: 'mL' },
+    { outputQty: null, unit: 'mL' }, // corrupted legacy record
+  ];
+  assert.equal(sumQty(sessions, 'mL'), 238);
+  assert.equal(sumQty(sessions, 'oz'), 8.1);
+  assert.equal(sumQty([], 'oz'), 0);
+});
+
+test('sessionQty: renders a session in the active unit', () => {
+  assert.deepEqual(sessionQty({ outputQty: 4, unit: 'oz' }, 'mL'), { qty: 118, qtyUnit: 'mL' });
+  assert.deepEqual(sessionQty({ outputQty: NaN, unit: 'mL' }, 'mL'), { qty: 0, qtyUnit: 'mL' });
+});
+
+test('plural: singular vs plural nouns', () => {
+  assert.equal(plural(1, 'pump'), '1 pump');
+  assert.equal(plural(0, 'feed'), '0 feeds');
+  assert.equal(plural(3, 'session'), '3 sessions');
 });

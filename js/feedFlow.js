@@ -7,7 +7,7 @@ import { db, newId } from './db.js';
 import { sound } from './audio.js';
 import { reminders } from './reminders.js';
 import { inventory, InventoryManager, THAWED_LOCATION } from './inventory.js';
-import { escapeHtml } from './viewHelpers.js';
+import { escapeHtml, sumQty, plural } from './viewHelpers.js';
 import {
   buildFeedFlowPrefill,
   resolveFeedTimerStart,
@@ -83,6 +83,7 @@ export class FeedFlowController {
         downPos = { x: e.clientX, y: e.clientY };
         holdTimer = setTimeout(() => {
           holdFired = true;
+          if (this.bottle && this.bottle.active) { this.reopenLiveBottle(); return; }
           this._openExpressFeed();
         }, 320);
       });
@@ -150,6 +151,11 @@ export class FeedFlowController {
   }
 
   openFeedFlow() {
+    // A bottle is mid-feed: return to it instead of starting a second feed
+    if (this.bottle && this.bottle.active) {
+      this.reopenLiveBottle();
+      return;
+    }
     this.feedFlow = { step: 'type', type: null, amountOz: 4.0, sourceInventoryId: null };
     const fBtn = document.getElementById('ffTypeFormula');
     if (fBtn) fBtn.classList.remove('is-selected');
@@ -373,9 +379,11 @@ export class FeedFlowController {
       const prefill = buildFeedFlowPrefill(item);
       if (!prefill) return '';
       const urgency = InventoryManager.getUrgency(item.expiresAt);
-      const tone = urgency.level === 'expired' ? 'badge-expired' : urgency.badgeClass;
+      const expired = urgency.level === 'expired';
+      const tone = expired ? 'badge-expired' : urgency.badgeClass;
+      // Expired milk is shown (so you know to discard it) but can't be fed
       return `
-        <button type="button" class="ff-thawed-chip" data-action="pick-thawed-source" data-id="${item.id}">
+        <button type="button" class="ff-thawed-chip" ${expired ? 'disabled aria-disabled="true" title="Expired — discard this pouch"' : `data-action="pick-thawed-source" data-id="${item.id}"`}>
           <span class="ff-thawed-qty">${this._ffAmtStr(prefill.amountOz)} breast milk</span>
           <span class="inv-countdown-pill ${tone}">${escapeHtml(urgency.label)}</span>
         </button>`;
@@ -384,6 +392,7 @@ export class FeedFlowController {
 
   pickThawedSource(id) {
     const item = (this._thawedSources || []).find(i => i.id === id);
+    if (!item || InventoryManager.getUrgency(item.expiresAt).level === 'expired') return;
     const prefill = buildFeedFlowPrefill(item);
     if (!prefill) return;
     this.feedFlow.type = prefill.type;
@@ -482,9 +491,8 @@ export class FeedFlowController {
     const sessions = await db.getSessions();
     const startOfToday = new Date().setHours(0, 0, 0, 0);
     const todayFeeds = sessions.filter(s => s.type === 'feed' && s.startTime >= startOfToday);
-    const totalVol = todayFeeds.reduce((acc, s) => acc + (s.outputQty || 0), 0);
     const unit = this.app.settings.units;
-    const text = `${todayFeeds.length} feed${todayFeeds.length === 1 ? '' : 's'} • ${Math.round(totalVol * 10) / 10} ${unit} today`;
+    const text = `${plural(todayFeeds.length, 'feed')} • ${sumQty(todayFeeds, unit)} ${unit} today`;
     const tallyEl = document.getElementById('ffSuccessTally');
     if (tallyEl) tallyEl.textContent = text;
     return text;
@@ -508,16 +516,16 @@ export class FeedFlowController {
     const overlay = document.getElementById('bottleOverlay');
     if (overlay) {
       overlay.addEventListener('click', e => {
-        // Backdrop must not dismiss a live feed
+        // A stray backdrop tap must not dismiss a live feed
         if (e.target === overlay && !this.bottle.active) this.closeBottleSheet();
       });
     }
+    // The X always works. During a live feed it just tucks the sheet away —
+    // the timer keeps running (it's wall-clock based and persisted), and the
+    // Quick Feed / Log feed buttons bring it straight back. It used to be a
+    // dead button that trapped you in the sheet for the whole feed.
     const closeBtn = document.getElementById('btCloseBtn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        if (!this.bottle.active) this.closeBottleSheet();
-      });
-    }
+    if (closeBtn) closeBtn.addEventListener('click', () => this.closeBottleSheet());
     window.addEventListener('keydown', e => {
       if (e.key === 'Escape' && overlay && overlay.classList.contains('open') && !this.bottle.active) {
         this.closeBottleSheet();
@@ -588,6 +596,11 @@ export class FeedFlowController {
     if (overlay) overlay.classList.add('open');
   }
 
+  reopenLiveBottle() {
+    const overlay = document.getElementById('bottleOverlay');
+    if (overlay) overlay.classList.add('open');
+  }
+
   closeBottleSheet() {
     const overlay = document.getElementById('bottleOverlay');
     if (overlay) overlay.classList.remove('open');
@@ -640,7 +653,8 @@ export class FeedFlowController {
       localStorage.setItem('nurture_bottle_timer', JSON.stringify({
         startTs: this.bottle.startTs,
         feedType: this.bottle.feedType,
-        preparedOz: this.bottle.preparedOz
+        preparedOz: this.bottle.preparedOz,
+        sourceInventoryId: this.bottle.sourceInventoryId || null
       }));
     } catch (e) {
       console.warn('Bottle timer persist failed:', e);
@@ -785,6 +799,7 @@ export class FeedFlowController {
       this.bottle.feedType = s.feedType === 'breastmilk' ? 'breastmilk' : 'formula';
       this.bottle.preparedOz = s.preparedOz || 4.0;
       this.bottle.eatenOz = this.bottle.preparedOz;
+      this.bottle.sourceInventoryId = s.sourceInventoryId || null;
       const title = document.getElementById('btTitle');
       if (title) title.textContent = 'Live feed';
       this._btShowStep('live');

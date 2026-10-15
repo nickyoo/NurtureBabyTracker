@@ -80,8 +80,8 @@ class TimerEngine {
         if (state && state.active && state.startedAt) {
           this.active = true;
           this.startedAt = state.startedAt;
-          this.pumpOutputOz = state.pumpOutputOz || 3.5;
-          this.pumpOutputMl = state.pumpOutputMl || 100;
+          this.pumpOutputOz = Number.isFinite(state.pumpOutputOz) && state.pumpOutputOz > 0 ? state.pumpOutputOz : 3.5;
+          this.pumpOutputMl = Number.isFinite(state.pumpOutputMl) && state.pumpOutputMl > 0 ? state.pumpOutputMl : 100;
           this.storeDestination = state.storeDestination || 'fridge';
 
           this._recalcElapsedFromWallClock();
@@ -180,6 +180,7 @@ class TimerEngine {
   }
 
   adjustPumpOutput(delta, unit = 'oz') {
+    if (!Number.isFinite(delta)) return;
     if (unit === 'oz') {
       this.pumpOutputOz = Math.max(0.25, Math.round((this.pumpOutputOz + delta) * 100) / 100);
       this.pumpOutputMl = Math.round(this.pumpOutputOz * 29.5735);
@@ -201,7 +202,9 @@ class TimerEngine {
     this._recalcElapsedFromWallClock();
 
     const sessionRecord = buildPumpSession({
-      quantity: options.quantity !== undefined ? options.quantity : this.pumpOutputOz,
+      quantity: options.quantity !== undefined
+        ? options.quantity
+        : (options.units === 'mL' ? this.pumpOutputMl : this.pumpOutputOz),
       durationMin: this.pumpSeconds / 60,
       unit: options.units || 'oz',
       startTime: this.startedAt,
