@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nurture · Calm Oat</title>
+<style>
+/* ===== Fonts (self-hosted, latin subset, variable) ===== */
+@font-face{font-family:"Nunito";src:url("fonts/nunito-latin-wght-normal.woff2") format("woff2");font-weight:200 1000;font-style:normal;font-display:block}
+@font-face{font-family:"Fraunces";src:url("fonts/fraunces-latin-full-normal.woff2") format("woff2");font-weight:100 900;font-style:normal;font-display:block}
+
+/* ===== Tokens — Calm Oat (light) ===== */
+.frame{
+  --ui:"Nunito",ui-rounded,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --display:"Fraunces",ui-serif,Georgia,serif;
+  --bg:#F6F1E8; --surface:#FFFCF7; --surface-2:#EFE8DC; --line:#E9DFD0; --line-strong:#958675;
+  --text:#2B2420; --text-2:#665A4E; --text-3:#766A5D;
+  --accent:#A6532F; --on-accent:#FFFCF7; --accent-soft:#F5E3D6; --accent-ink:#97492A;
+  --feed-tint:#FCE7D4; --feed-ink:#9A5419; --feed-mid:#BA682E;
+  --sleep-tint:#ECE7F5; --sleep-ink:#62558F; --sleep-mid:#8576B8;
+  --diaper-tint:#E3ECDD; --diaper-ink:#4A6B47; --diaper-mid:#668960;
+  --pump-tint:#F7E2E6; --pump-ink:#9C4459; --pump-mid:#BF6079;
+  --mem-tint:#F7EDCD; --mem-ink:#7E6211; --mem-mid:#9C7A18;
+  --warn-tint:#FBE9C8; --warn-ink:#7F5310; --ok-tint:#E3ECDD; --ok-ink:#46663F;
+  --chip-on-tint:rgba(255,252,247,.78); --track-on-tint:rgba(43,36,32,.10);
+  --nav-bg:#FFFCF7; --scrim:rgba(38,29,22,.46);
+  --pill-bg:#2B2420; --pill-text:#F6EFE4; --pill-text-2:#C9BBAB; --pill-chip:rgba(231,166,115,.16); --pill-ink:#E7A673;
+  --toggle-off:#D8CEC0; --knob:#FFFFFF; --fab-bg:var(--accent);
+  --shadow-1:0 1px 2px rgba(60,40,20,.05),0 4px 14px -6px rgba(60,40,20,.10);
+  --shadow-2:0 10px 30px -8px rgba(43,36,32,.38),0 2px 6px rgba(43,36,32,.12);
+}
+/* ===== Night ===== */
+.frame.dark{
+  --bg:#14110E; --surface:#1E1A16; --surface-2:#28221D; --line:#2E2822; --line-strong:#7E7163;
+  --text:#D9CDBC; --text-2:#A89A89; --text-3:#9B8E7E;
+  --accent:#D48660; --on-accent:#1C130E; --accent-soft:#3A281E; --accent-ink:#E39A74;
+  --feed-tint:#33251A; --feed-ink:#E7A673; --feed-mid:#C07F52;
+  --sleep-tint:#262236; --sleep-ink:#B2A6DE; --sleep-mid:#8B7EBF;
+  --diaper-tint:#1F2A1F; --diaper-ink:#98BB91; --diaper-mid:#78986F;
+  --pump-tint:#35212A; --pump-ink:#E098AA; --pump-mid:#BA6F83;
+  --mem-tint:#30291A; --mem-ink:#D8B866; --mem-mid:#B39445;
+  --warn-tint:#352A16; --warn-ink:#E2B565; --ok-tint:#1F2A1F; --ok-ink:#98BB91;
+  --chip-on-tint:rgba(255,240,220,.07); --track-on-tint:rgba(255,240,220,.10);
+  --nav-bg:#1A1613; --scrim:rgba(0,0,0,.6);
+  --pill-bg:#2E2722; --pill-text:#D9CDBC; --pill-text-2:#A89A89;
+  --toggle-off:#4A4038; --knob:#E8DDCE; --fab-bg:#B9714F;
+  --shadow-1:0 0 0 1px rgba(255,240,220,.03);
+  --shadow-2:0 10px 30px -8px rgba(0,0,0,.7),0 0 0 1px rgba(255,240,220,.06);
+}
+.cat-feed{--c-tint:var(--feed-tint);--c-ink:var(--feed-ink);--c-mid:var(--feed-mid)}
+.cat-sleep{--c-tint:var(--sleep-tint);--c-ink:var(--sleep-ink);--c-mid:var(--sleep-mid)}
+.cat-diaper{--c-tint:var(--diaper-tint);--c-ink:var(--diaper-ink);--c-mid:var(--diaper-mid)}
+.cat-pump{--c-tint:var(--pump-tint);--c-ink:var(--pump-ink);--c-mid:var(--pump-mid)}
+.cat-mem{--c-tint:var(--mem-tint);--c-ink:var(--mem-ink);--c-mid:var(--mem-mid)}
+.cat-accent{--c-tint:var(--accent-soft);--c-ink:var(--accent-ink)}
+.cat-neutral{--c-tint:var(--surface-2);--c-ink:var(--text-2)}
+
+/* ===== Reset / board ===== */
+*{box-sizing:border-box;margin:0;padding:0}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit;-webkit-tap-highlight-color:transparent}
+ul{list-style:none}
+body{background:#D3CCC1;font-family:"Nunito",system-ui,sans-serif;padding:40px 48px 64px;color:#2B2420}
+.board-hd{margin-bottom:28px}
+.board-hd h1{font-family:"Fraunces";font-variation-settings:"SOFT" 100,"WONK" 0;font-weight:560;font-size:30px}
+.board-hd h1 em{font-style:normal;color:#97492A}
+.board-hd p{font-size:15px;font-weight:600;color:#4B4038;margin-top:4px}
+.board{display:flex;gap:40px;align-items:flex-start;width:max-content}
+.shot{display:flex;flex-direction:column;gap:12px;width:390px}
+.cap{font:600 14px/1.35 "Nunito";color:#3D342D;min-height:40px;display:flex;gap:8px;align-items:flex-start}
+.cap b{flex:none;display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#2B2420;color:#F6F1E8;font-size:12px;font-weight:800}
+
+/* ===== Frame ===== */
+.frame{width:390px;height:844px;position:relative;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:var(--ui);font-size:16px;line-height:1.35;-webkit-font-smoothing:antialiased;
+  box-shadow:0 30px 60px -24px rgba(43,36,32,.4),0 0 0 1px rgba(43,36,32,.08)}
+.disp{font-family:var(--display);font-variation-settings:"SOFT" 100,"WONK" 0;font-optical-sizing:auto;font-weight:560;letter-spacing:-.01em}
+.tnum{font-variant-numeric:tabular-nums}
+.ic{width:24px;height:24px;flex:none}
+.ic-s{width:18px;height:18px}
+.ic-xs{width:14px;height:14px}
+
+/* status bar + home indicator */
+.sb{position:absolute;top:0;left:0;right:0;height:47px;display:flex;justify-content:space-between;align-items:center;padding:12px 26px 0 38px;font-weight:800;font-size:16px;z-index:6;font-variant-numeric:tabular-nums}
+.sb-r{display:flex;gap:6px;align-items:center}
+.hi{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--text);opacity:.85;z-index:12}
+.screen{position:absolute;top:47px;left:0;right:0;bottom:0;padding:4px 20px 0;overflow:hidden}
+
+/* ===== Today header ===== */
+.today-hd{display:flex;align-items:center;gap:12px;height:64px}
+.avatar-btn{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;flex:none}
+.avatar{width:44px;height:44px;border-radius:50%;display:block;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent-soft)}
+.av-clara{background:
+  radial-gradient(circle at 50% 45%,#F2D2BA 0 27%,transparent 28%),
+  radial-gradient(ellipse 60% 34% at 50% 26%,#C9B9DD 0 70%,transparent 72%),
+  radial-gradient(ellipse 70% 45% at 50% 108%,#E9B9A0 0 70%,transparent 72%),
+  linear-gradient(160deg,#FBE8D4,#F0CDB2)}
+.today-id{flex:1;min-width:0}
+.today-id h1{font-size:28px;line-height:32px}
+.today-id p{font-size:14px;color:var(--text-2);font-weight:600}
+.icon-btn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--surface);color:var(--text-2);box-shadow:var(--shadow-1);flex:none}
+.icon-btn .ic{width:22px;height:22px}
+.icon-btn.accent{background:var(--accent);color:var(--on-accent);box-shadow:none}
+
+/* ===== QuickLogCard ===== */
+.ql-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:6px}
+.ql{background:var(--c-tint);border-radius:24px;padding:14px 14px 14px 16px;height:148px;display:flex;flex-direction:column}
+.ql-top{display:flex;justify-content:space-between;align-items:center;height:32px}
+.ql-label{display:flex;align-items:center;gap:6px;font-weight:800;font-size:15px;color:var(--c-ink)}
+.ql-label .ic{width:20px;height:20px}
+.ql-label .dot-live{margin-left:2px}
+.ql-add{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--chip-on-tint);color:var(--c-ink)}
+.ql-add .ic{width:18px;height:18px}
+.ql-val{font-size:38px;line-height:42px;margin-top:12px;color:var(--text);white-space:nowrap}
+.ql-val small{font-size:21px;color:var(--text-2);margin:0 3px 0 1px;font-weight:500}
+.ql-sub{font-size:14px;font-weight:600;color:var(--text-2);white-space:nowrap}
+.ql-sub b{color:var(--text);font-weight:800}
+.goal{display:flex;align-items:center;gap:8px;margin-top:auto}
+.goal-bar{flex:1;height:6px;border-radius:3px;background:var(--track-on-tint);overflow:hidden}
+.goal-bar i{display:block;height:100%;background:var(--c-mid);border-radius:3px}
+.goal-txt{font-size:13px;font-weight:800;color:var(--text);white-space:nowrap}
+.goal-txt small{color:var(--text-2);font-weight:700}
+.dot-live{display:inline-block;width:7px;height:7px;border-radius:50%;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 22%,transparent)}
+
+/* ===== Section header / links ===== */
+.sec-hd{display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px;min-height:44px}
+.sec-hd h2{font-size:20px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:center;gap:6px}
+.sec-hd.sm{margin:14px 0 4px;min-height:36px}
+.sec-hd.st{margin:10px 2px 2px;min-height:34px}
+.sec-hd.sm h2{font-size:16px}
+.sec-hd .muted{color:var(--text-2);font-weight:700}
+.muted{color:var(--text-2)}
+.small{font-size:13px;font-weight:700}
+.link{display:flex;align-items:center;gap:2px;height:44px;padding:0 2px 0 12px;color:var(--accent-ink);font-weight:800;font-size:15px}
+
+/* ===== ListRow ===== */
+.list{background:var(--surface);border-radius:22px;box-shadow:var(--shadow-1);overflow:hidden}
+.row{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:10px 16px 10px 12px}
+.list li+li .row::before{content:"";position:absolute;top:0;left:68px;right:16px;height:1px;background:var(--line)}
+.row-time{width:44px;flex:none;font-weight:800;font-size:15px;line-height:1.1;display:flex;flex-direction:column;align-items:flex-end}
+.row-time small{font-size:12px;font-weight:700;color:var(--text-3)}
+.row-time+.chip-ic{margin-left:2px}
+.list li+li .row-time ~ .row-main{}
+.chip-ic{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;background:var(--c-tint);color:var(--c-ink);flex:none}
+.chip-ic .ic{width:22px;height:22px}
+.row-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.row-main b{font-weight:800;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-main small{font-size:14px;color:var(--text-2);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.amt{font-weight:800;font-size:17px;white-space:nowrap}
+.amt small{font-size:13px;color:var(--text-2);font-weight:700}
+.badge{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:14px;background:var(--c-tint);color:var(--c-ink);font-weight:800;font-size:13px}
+/* time column rows put the divider after the time */
+.list li+li .row:has(.row-time)::before{left:72px}
+
+/* ===== bottom chrome ===== */
+.fade{position:absolute;left:0;right:0;bottom:90px;height:92px;background:linear-gradient(to bottom,transparent,var(--bg) 58%);pointer-events:none;z-index:2}
+.live{position:absolute;left:16px;right:16px;bottom:104px;height:60px;border-radius:30px;background:var(--pill-bg);color:var(--pill-text);
+  display:flex;align-items:center;gap:12px;padding:0 16px 0 8px;box-shadow:var(--shadow-2);z-index:4}
+.live-chip{width:44px;height:44px;border-radius:50%;background:var(--pill-chip);color:var(--pill-ink);display:grid;place-items:center;position:relative;flex:none}
+.live-chip .ic{width:22px;height:22px}
+.live-dot{position:absolute;top:1px;right:1px;width:12px;height:12px;border-radius:50%;background:var(--pill-ink);border:2.5px solid var(--pill-bg)}
+.live-txt{flex:1;display:flex;flex-direction:column;line-height:1.2}
+.live-txt b{font-weight:800;font-size:16px}
+.live-txt small{font-size:13px;color:var(--pill-text-2);font-weight:600}
+.live-time{font-weight:800;font-size:24px;letter-spacing:-.01em}
+.live-chev{color:var(--pill-text-2);width:20px;height:20px}
+
+.nav{position:absolute;left:0;right:0;bottom:0;height:90px;padding:0 8px 34px;background:var(--nav-bg);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(5,1fr);z-index:3}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--text-3);font-weight:700;font-size:12px;min-height:56px}
+.tab .ic{width:26px;height:26px}
+.tab.on{color:var(--text);font-weight:800}
+.tab.on .ic{color:var(--accent)}
+.nav-slot{position:relative}
+.fab{position:absolute;left:50%;top:-8px;transform:translateX(-50%);width:58px;height:58px;border-radius:50%;background:var(--fab-bg);color:var(--on-accent);display:grid;place-items:center;
+  box-shadow:0 6px 16px -4px color-mix(in srgb,var(--accent) 70%,transparent),0 0 0 4px var(--nav-bg)}
+.fab-ic{width:30px;height:30px}
+
+/* ===== Sheet (frame 3) ===== */
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:7}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:196px;background:var(--surface);border-radius:28px 28px 0 0;z-index:8;padding:24px 20px 0;box-shadow:0 -12px 40px rgba(30,20,12,.2);overflow:hidden}
+.origin-glow{position:absolute;left:50%;bottom:-310px;width:700px;height:700px;transform:translateX(-50%);border-radius:50%;
+  background:radial-gradient(circle,color-mix(in srgb,var(--accent) 18%,transparent) 0,color-mix(in srgb,var(--accent) 7%,transparent) 26%,transparent 60%);pointer-events:none}
+.grabber{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:40px;height:5px;border-radius:3px;background:var(--line-strong);opacity:.45}
+.sheet-hd{position:relative;display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:16px}
+.sheet-hd h2{font-size:26px;line-height:30px}
+.sheet-hd p{font-size:14px;color:var(--text-2);font-weight:600;margin-top:2px}
+.time-chip{height:44px;padding:0 12px;border-radius:22px;background:var(--surface-2);display:flex;align-items:center;gap:6px;font-weight:800;font-size:15px;white-space:nowrap;flex:none}
+.time-chip .tnum{color:var(--text-2);font-weight:700}
+.tiles{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tile{height:112px;border-radius:22px;background:var(--c-tint);padding:12px 12px 12px 14px;display:flex;flex-direction:column;align-items:flex-start}
+.tile-ic{width:44px;height:44px;border-radius:50%;background:var(--chip-on-tint);color:var(--c-ink);display:grid;place-items:center;margin-bottom:auto}
+.tile b{font-weight:800;font-size:17px;color:var(--text);line-height:1.2}
+.tile small{font-size:13px;color:var(--text-2);font-weight:600;white-space:nowrap}
+.sheet-lbl{position:relative;font-size:13px;font-weight:800;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;margin:18px 0 8px 2px}
+.seg-row{position:relative;display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pill-btn{height:52px;border-radius:26px;background:var(--c-tint);color:var(--c-ink);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:800;font-size:16px}
+.pill-btn .ic{width:20px;height:20px}
+.row-link{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:60px;margin-top:12px;padding:8px 14px 8px 10px;border-radius:20px;background:var(--surface-2)}
+.row-link span{flex:1;display:flex;flex-direction:column}
+.row-link b{font-weight:800;font-size:16px}
+.row-link small{font-size:13px;color:var(--text-2);font-weight:600}
+.ic-pouch{width:40px;height:40px;padding:9px;border-radius:14px;background:var(--pump-tint);color:var(--pump-ink)}
+.hint{position:relative;font-size:13px;color:var(--text-2);font-weight:600;text-align:center;margin-top:12px}
+.hint b{color:var(--accent-ink)}
+.fab-x{top:auto;bottom:40px;transform:translateX(-50%) rotate(45deg);z-index:9;box-shadow:0 6px 16px -4px color-mix(in srgb,var(--accent) 70%,transparent),0 0 0 4px var(--surface)}
+
+/* ===== Page header / pager / stats (Timeline) ===== */
+.page-hd{display:flex;align-items:center;justify-content:space-between;min-height:64px;gap:12px}
+.page-hd h1{font-size:32px;line-height:36px}
+.page-sub{font-size:14px;color:var(--text-2);font-weight:600}
+.card{background:var(--surface);border-radius:22px;box-shadow:var(--shadow-1)}
+.pager{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border-radius:26px;padding:4px;box-shadow:var(--shadow-1)}
+.round-btn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--surface-2);color:var(--text)}
+.round-btn[disabled]{opacity:.38;cursor:default}
+.pager-mid{text-align:center;line-height:1.2}
+.pager-mid b{display:block;font-size:17px;font-weight:800}
+.pager-mid small{font-size:13px;color:var(--text-2);font-weight:600}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}
+.stat{background:var(--c-tint);border-radius:18px;padding:10px 8px 10px 11px;display:flex;flex-direction:column;min-height:80px}
+.stat .ic{color:var(--c-ink);width:20px;height:20px;margin-bottom:auto}
+.stat b{font-size:17px;font-weight:800;line-height:1.15;white-space:nowrap;margin-top:6px}
+.stat small{font-size:12px;color:var(--text-2);font-weight:700;line-height:1.2}
+
+/* ===== TimelineStrip ===== */
+.strip{margin-top:12px;padding:14px 14px 10px}
+.strip-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px}
+.strip-hd b{font-weight:800;font-size:15px}
+.legend{display:flex;gap:12px;font-size:12px;color:var(--text-2);font-weight:700}
+.legend span{display:flex;align-items:center;gap:5px}
+.lg{display:inline-block;width:10px;height:10px;border-radius:50%}
+.lanes{position:relative;display:flex;flex-direction:column;gap:7px}
+.lane{display:flex;align-items:center;gap:8px;height:24px}
+.lane-ic{width:26px;height:24px;display:grid;place-items:center;color:var(--c-ink);flex:none}
+.lane-ic .ic{width:20px;height:20px}
+.track{position:relative;flex:1;height:24px;border-radius:8px;background:var(--surface-2);overflow:hidden}
+.track-in{position:absolute;top:0;bottom:0;left:6px;right:6px}
+.track-in .future{right:-6px}
+.future{position:absolute;top:0;bottom:0;right:0;background:repeating-linear-gradient(135deg,transparent 0 5px,color-mix(in srgb,var(--text) 7%,transparent) 5px 6px)}
+.blk{position:absolute;top:4px;bottom:4px;border-radius:5px;min-width:5px}
+.b-sleep{background:var(--sleep-mid)}
+.b-sleep.live{background:repeating-linear-gradient(135deg,var(--sleep-mid) 0 4px,color-mix(in srgb,var(--sleep-mid) 55%,var(--surface)) 4px 7px)}
+.b-feed{background:var(--feed-mid)}
+.b-pump{background:var(--pump-mid)}
+.dot{position:absolute;top:50%;width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%}
+.d-wet{background:var(--surface);border:2.5px solid var(--diaper-mid)}
+.d-dirty{background:var(--diaper-mid)}
+.nowline{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--accent);border-radius:1px;z-index:2}
+.nowline em{position:absolute;bottom:calc(100% + 3px);left:50%;transform:translateX(-50%);background:var(--accent-soft);padding:1px 7px;border-radius:9px;font-style:normal;font-size:12px;font-weight:800;color:var(--accent-ink);white-space:nowrap;font-variant-numeric:tabular-nums}
+.axis{position:relative;height:16px;margin:8px 6px 0 40px;font-size:12px;font-weight:700;color:var(--text-3)}
+.axis span{position:absolute;top:0;transform:translateX(-50%)}
+.axis span:nth-child(1){left:0;transform:none}
+.axis span:nth-child(2){left:25%}
+.axis span:nth-child(3){left:50%}
+.axis span:nth-child(4){left:75%}
+.axis span:nth-child(5){left:100%;transform:translateX(-100%)}
+.list-tight{margin-top:12px}
+
+/* ===== Stash ===== */
+.stash-sum{padding:14px 16px 14px}
+.stash-total{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.stash-total p{margin-top:2px}
+.big{font-size:44px;line-height:46px}
+.big small{font-size:22px;color:var(--text-2);font-weight:500}
+.stash-total .muted{font-size:14px;font-weight:700}
+.split{display:flex;gap:3px;height:10px;margin:12px 0 2px;border-radius:5px;overflow:hidden}
+.sp-fridge{background:var(--pump-mid)}
+.sp-freezer{background:color-mix(in srgb,var(--pump-mid) 38%,var(--surface-2))}
+.split-lg{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700;color:var(--text-2)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px}
+.split-lg span{display:flex;align-items:center;gap:6px}
+.split-lg b{color:var(--text);font-weight:800;margin-left:auto;padding-left:8px}
+.usenext{margin-top:12px;border-radius:24px;background:var(--pump-tint);padding:12px 14px 14px 16px}
+.un-top{display:flex;justify-content:space-between;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 11px 0 9px;border-radius:14px;background:var(--surface);color:var(--pump-ink);font-weight:800;font-size:12px;text-transform:uppercase;letter-spacing:.07em}
+.un-where{display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;color:var(--text-2)}
+.un-main{display:flex;gap:14px;align-items:center;margin:8px 0 12px 2px}
+.pouch-art{width:48px;height:60px;border-radius:8px 8px 16px 16px;background:color-mix(in srgb,var(--pump-mid) 10%,var(--surface));position:relative;overflow:hidden;flex:none;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--pump-mid) 45%,transparent)}
+.pa-fill{position:absolute;left:0;right:0;bottom:0;height:62%;background:color-mix(in srgb,var(--pump-mid) 34%,var(--surface));border-radius:30% 30% 0 0/6px 6px 0 0}
+.pa-cap{position:absolute;top:8px;left:8px;right:8px;height:4px;border-top:1.5px solid color-mix(in srgb,var(--pump-mid) 55%,transparent);border-bottom:1.5px solid color-mix(in srgb,var(--pump-mid) 55%,transparent)}
+.un-oz{font-size:32px;line-height:36px}
+.un-oz small{font-size:18px;color:var(--text-2);font-weight:500}
+.un-meta{font-size:14px;color:var(--text-2);font-weight:600;line-height:1.35}
+.un-meta b{color:var(--text);font-weight:800}
+.btn-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{height:52px;border-radius:26px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800;font-size:17px}
+.btn .ic{width:22px;height:22px}
+.btn.primary{background:var(--accent);color:var(--on-accent);box-shadow:0 6px 14px -8px color-mix(in srgb,var(--accent) 80%,transparent)}
+.btn.secondary{background:var(--surface);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+.btn.block{width:100%;height:56px}
+.srow{min-height:60px;padding:8px 14px 8px 12px}
+.list li+li .srow::before{left:64px}
+.srow .row-main b{font-size:17px}
+.row-t{font-weight:700;color:var(--text-2);font-size:14px;margin-left:4px}
+.exp{font-size:12px;font-weight:800;height:28px;padding:0 10px;border-radius:14px;display:inline-flex;align-items:center;gap:4px;background:var(--surface-2);color:var(--text-2);white-space:nowrap;flex:none}
+.exp.warn{background:var(--warn-tint);color:var(--warn-ink)}
+.exp.ok{background:var(--ok-tint);color:var(--ok-ink)}
+.exp.next{background:var(--accent-soft);color:var(--accent-ink)}
+
+/* ===== Memories ===== */
+.ms-row{display:flex;gap:10px;margin-right:-20px;overflow:hidden;padding-bottom:2px}
+.ms{flex:none;width:140px;border-radius:22px;background:var(--surface);padding:8px 8px 12px;box-shadow:var(--shadow-1);display:flex;flex-direction:column}
+.ph{display:block;height:100px;border-radius:16px;position:relative;margin-bottom:8px}
+.ms b{font-size:15px;font-weight:800;padding:0 4px}
+.ms small{font-size:13px;color:var(--text-2);font-weight:600;padding:0 4px}
+.ms-check{position:absolute;top:8px;left:8px;width:26px;height:26px;border-radius:50%;background:var(--surface);color:var(--mem-ink);display:grid;place-items:center}
+.ms-next{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line)}
+.ph-empty{background:var(--mem-tint);display:grid;place-items:center;color:var(--mem-ink)}
+.mem-ink{color:var(--mem-ink)}
+.ph-a{background:radial-gradient(circle at 74% 26%,#FFF4DA 0 11%,transparent 12%),radial-gradient(ellipse 80% 52% at 34% 112%,#E2AE8F 0 70%,transparent 71%),radial-gradient(ellipse 60% 40% at 90% 120%,#EDC2A8 0 70%,transparent 71%),linear-gradient(170deg,#FBE3CC,#F2C7AB)}
+.ph-b{background:radial-gradient(circle at 30% 34%,#FFFFFF 0 9%,transparent 10%),radial-gradient(ellipse 90% 50% at 60% 115%,#B6A8D8 0 70%,transparent 71%),linear-gradient(180deg,#EEE8F7,#D9CFEE)}
+.ph-c{background:radial-gradient(circle at 68% 30%,#FAF6E6 0 12%,transparent 13%),radial-gradient(ellipse 70% 46% at 25% 110%,#9CBB93 0 70%,transparent 71%),radial-gradient(ellipse 70% 40% at 85% 118%,#B9CFB1 0 70%,transparent 71%),linear-gradient(175deg,#EAF1E4,#D4E3CC)}
+.ph-d{background:radial-gradient(circle at 50% 38%,#FFF7E2 0 18%,transparent 19%),radial-gradient(ellipse 100% 46% at 50% 118%,#E3C46E 0 70%,transparent 71%),linear-gradient(180deg,#FBF1D3,#F1DDA2)}
+.ph-e{background:radial-gradient(circle at 36% 30%,#FFF1F3 0 13%,transparent 14%),radial-gradient(ellipse 80% 50% at 70% 112%,#D88DA0 0 70%,transparent 71%),linear-gradient(170deg,#FAE6EA,#F0C9D2)}
+.ph-f{background:radial-gradient(circle at 70% 64%,#F6EEE0 0 16%,transparent 17%),radial-gradient(ellipse 70% 44% at 20% 115%,#CDB89B 0 70%,transparent 71%),linear-gradient(170deg,#F3EBDD,#E2D3BC)}
+.pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pg{aspect-ratio:1/1;border-radius:16px;position:relative;overflow:hidden}
+.pg-cap{position:absolute;left:6px;bottom:6px;height:26px;padding:0 9px;border-radius:13px;background:rgba(255,252,247,.92);color:#2B2420;font-size:12px;font-weight:800;display:inline-flex;align-items:center;gap:4px}
+.pg-cap .ic{color:#7E6211}
+
+/* ===== Settings / Customize ===== */
+.push-hd{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:52px;margin:0 -10px}
+.back{display:flex;align-items:center;height:44px;color:var(--accent-ink);font-weight:800;font-size:16px;padding-right:8px;justify-self:start}
+.back .ic{width:26px;height:26px}
+.push-hd h1{font-size:17px;font-weight:800}
+.intro{font-size:15px;color:var(--text-2);font-weight:600;margin:6px 4px 18px;line-height:1.4}
+.grp-lbl{font-size:13px;font-weight:800;color:var(--text-2);text-transform:uppercase;letter-spacing:.07em;margin:0 0 8px 6px}
+.group{background:var(--surface);border-radius:22px;box-shadow:var(--shadow-1);overflow:hidden;margin-bottom:20px}
+.srow2{position:relative;display:flex;align-items:center;gap:6px;min-height:58px;padding:5px 12px 5px 0}
+.group li+li::before{content:"";position:absolute;top:0;left:92px;right:14px;height:1px;background:var(--line)}
+.group li{position:relative}
+.grip{width:44px;height:44px;display:grid;place-items:center;color:var(--text-3);flex:none;cursor:grab}
+.grip .ic{width:20px;height:20px}
+.srow2 .chip-ic{width:38px;height:38px;border-radius:13px;margin-right:6px}
+.srow2 .chip-ic .ic{width:21px;height:21px}
+.srow2 .row-main b{font-size:16px}
+.srow2 .row-main small{font-size:13px}
+.tgl{position:relative;width:52px;height:44px;display:grid;place-items:center;flex:none}
+.tgl input{position:absolute;inset:0;opacity:0;margin:0}
+.tgl span{width:52px;height:32px;border-radius:16px;background:var(--toggle-off);position:relative;display:block}
+.tgl span::after{content:"";position:absolute;top:3px;left:3px;width:26px;height:26px;border-radius:50%;background:var(--knob);box-shadow:0 1px 3px rgba(0,0,0,.22)}
+.tgl input:not(:checked)+span{box-shadow:inset 0 0 0 1px var(--line-strong)}
+.tgl input:checked+span{background:var(--accent)}
+.tgl input:checked+span::after{left:23px}
+.prow{display:flex;align-items:center;gap:12px;width:100%;min-height:64px;padding:8px 14px}
+.group li+li .prow{}
+.group:has(.prow) li+li::before{left:64px}
+.muted-ic{color:var(--text-3)}
+
+/* ===== Onboarding ===== */
+.ob{padding:6px 24px 0;display:flex;flex-direction:column}
+.ob-top{display:flex;justify-content:space-between;align-items:center;height:44px}
+.wordmark{font-size:24px;color:var(--accent-ink)}
+.steps{display:flex;gap:6px}
+.steps i{width:8px;height:8px;border-radius:4px;background:var(--line-strong);opacity:.35}
+.steps i.on{width:22px;background:var(--accent);opacity:1}
+.ob-h{font-size:38px;line-height:42px;margin:22px 0 20px;letter-spacing:-.02em}
+.promise{display:flex;flex-direction:column;gap:6px}
+.promise li{display:flex;align-items:center;gap:12px;font-weight:700;font-size:16px;min-height:40px}
+.promise .ic{width:36px;height:36px;padding:8px;border-radius:50%;background:var(--accent-soft);color:var(--accent-ink)}
+.ob-baby{display:flex;gap:16px;align-items:center;margin-top:24px;padding:14px;background:var(--surface);border-radius:26px;box-shadow:var(--shadow-1)}
+.photo-pick{width:104px;height:104px;border-radius:50%;position:relative;flex:none}
+.pp-ring{position:absolute;inset:0;border-radius:50%;border:2px dashed color-mix(in srgb,var(--accent) 50%,transparent);background:var(--accent-soft);display:grid;place-items:center;color:var(--accent-ink)}
+.pp-ring .ic{width:32px;height:32px}
+.pp-add{position:absolute;right:0;bottom:2px;width:34px;height:34px;border-radius:50%;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;border:3px solid var(--surface)}
+.pp-add .ic{width:16px;height:16px}
+.ob-fields{flex:1;display:flex;flex-direction:column;gap:10px;min-width:0}
+.field{display:flex;flex-direction:column;justify-content:center;background:var(--surface-2);border-radius:14px;padding:6px 12px;min-height:54px}
+.field>span:first-child{font-size:12px;font-weight:700;color:var(--text-2)}
+.field input{font:inherit;font-size:18px;font-weight:800;border:0;background:none;color:var(--text);padding:0;width:100%;outline:none}
+.field-v{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:15px}
+.field-v .ic{color:var(--text-2)}
+.ob-note{display:flex;gap:8px;font-size:13px;color:var(--text-2);font-weight:600;margin:14px 4px 0;line-height:1.4}
+.ob-note .ic{margin-top:2px;flex:none}
+.ob .btn.block{margin-top:auto}
+.btn.ghost{background:none;color:var(--accent-ink);font-size:16px;height:48px}
+.block-ghost{width:100%;margin:6px 0 40px}
+
+</style></head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><symbol id="i-bottle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.2c0-1.7.5-2.7 1.4-2.7s1.4 1 1.4 2.7"/><rect x="8.5" y="5.2" width="7" height="2.6" rx="1"/><path d="M9.2 7.8h5.6l1.2 3v8.4a2.3 2.3 0 0 1-2.3 2.3h-3.4A2.3 2.3 0 0 1 8 19.2v-8.4z"/><path d="M10.6 13.2h2.2M10.6 16.2h2.2"/></symbol><symbol id="i-nurse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="7.5"/><circle cx="12" cy="13" r="2"/><path d="M8.2 6.6c1-.6 2.3-1 3.8-1"/></symbol><symbol id="i-pump" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 5h8.5l-2.6 4.6V12"/><rect x="6.6" y="12" width="5.6" height="8.5" rx="1.8"/><path d="M12 7.2h3.2a1.8 1.8 0 0 1 1.8 1.8v.4"/><rect x="15" y="9.4" width="5.5" height="7.2" rx="1.6"/></symbol><symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 14.6A7.8 7.8 0 1 1 9.4 4.5a6.2 6.2 0 0 0 10.1 10.1z"/></symbol><symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.8"/><path d="M12 2.8v1.8M12 19.4v1.8M2.8 12h1.8M19.4 12h1.8M5.5 5.5l1.3 1.3M17.2 17.2l1.3 1.3M5.5 18.5l1.3-1.3M17.2 6.8l1.3-1.3"/></symbol><symbol id="i-diaper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7h17v3c0 5.2-3.9 8.8-8.5 8.8S3.5 15.2 3.5 10z"/><path d="M8.6 18.2c.4-2.6 1.6-4 3.4-4s3 1.4 3.4 4"/><path d="M3.5 10.2h2.6M17.9 10.2h2.6"/></symbol><symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l1.8 5.1 5.2 1.8-5.2 1.8L12 17l-1.8-5.1L5 10.1l5.2-1.8z"/><path d="M18.5 15.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/></symbol><symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol><symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol><symbol id="i-chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></symbol><symbol id="i-chev-l" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></symbol><symbol id="i-chev-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></symbol><symbol id="i-chev-u" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14.5l6-6 6 6"/></symbol><symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.4L12 4l8 6.4v8.4a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.8z"/><path d="M9.5 20.5v-5.2h5v5.2"/></symbol><symbol id="i-timeline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.8" cy="6.5" r="1.3"/><circle cx="4.8" cy="12" r="1.3"/><circle cx="4.8" cy="17.5" r="1.3"/></symbol><symbol id="i-pouch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10v3.2l1.6 2.6v9.9a1.8 1.8 0 0 1-1.8 1.8H7.2a1.8 1.8 0 0 1-1.8-1.8V9.3L7 6.7z"/><path d="M7 6.7h10"/><path d="M9 13.5h3"/></symbol><symbol id="i-images" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="6.5" width="14" height="13" rx="2.5"/><path d="M7 3.5h11a2.5 2.5 0 0 1 2.5 2.5v10"/><circle cx="8.3" cy="11" r="1.5"/><path d="M3.8 17.2l4-3.6 3.2 2.6 2.4-2 4.1 3.6"/></symbol><symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19.5s-7.5-4.4-7.5-9.8A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.5c0 5.4-7.5 9.8-7.5 9.8z"/></symbol><symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 8.2h3l1.6-2.4h5.8l1.6 2.4h3a1.5 1.5 0 0 1 1.5 1.5v8.3a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V9.7a1.5 1.5 0 0 1 1.5-1.5z"/><circle cx="12" cy="13.4" r="3.4"/></symbol><symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l7 2.8v5.6c0 4.4-3 7.9-7 9.2-4-1.3-7-4.8-7-9.2V6z"/><path d="M9 12.2l2.1 2.1 4-4.1"/></symbol><symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.2"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5"/></symbol><symbol id="i-user-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8.5" r="3.6"/><path d="M3.8 19.5c.7-3.4 3.1-5.3 6.2-5.3 1.4 0 2.6.4 3.6 1.1"/><path d="M16.3 15.3l4 4M20.3 15.3l-4 4"/></symbol><symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12s3-6 8.5-6c1.5 0 2.8.4 4 1M20.5 12s-3 6-8.5 6c-1.5 0-2.8-.4-4-1"/><path d="M9.8 14.2a3 3 0 0 1 4.4-4.4"/><path d="M4.5 19.5l15-15"/></symbol><symbol id="i-cloud-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 18.5h9.6M19.6 16.6A3.6 3.6 0 0 0 17 10.4h-.2A5.3 5.3 0 0 0 9 7.2"/><path d="M6.4 9.3A4.6 4.6 0 0 0 7.2 18.5"/><path d="M4 4l16 16"/></symbol><symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol><symbol id="i-snow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/><path d="M9.8 4.8L12 6.7l2.2-1.9M9.8 19.2L12 17.3l2.2 1.9"/></symbol><symbol id="i-fridge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2.5"/><path d="M6 10h12M9 6v1.5M9 13v2.5"/></symbol><symbol id="i-drop" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0c0-4.2 6-10.6 6-10.6z"/></symbol><symbol id="i-drop-fill" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s6 6.4 6 10.6a6 6 0 0 1-12 0c0-4.2 6-10.6 6-10.6z" fill="currentColor"/></symbol><symbol id="i-thaw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s5 5.4 5 9a5 5 0 0 1-10 0c0-3.6 5-9 5-9z"/><path d="M4 20.5c1.3-.9 2.7-.9 4 0s2.7.9 4 0 2.7-.9 4 0 2.7.9 4 0"/></symbol><symbol id="i-export" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.8M7.8 7.6L12 3.5l4.2 4.1"/><path d="M8 11H6.5A1.5 1.5 0 0 0 5 12.5v6.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-6.5a1.5 1.5 0 0 0-1.5-1.5H16"/></symbol><symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5.5" width="16" height="15" rx="2.5"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></symbol><symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.2 4.2 8.8-9"/></symbol><symbol id="i-grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="6.5" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="6.5" r="1.25" fill="currentColor" stroke="none"/><circle cx="9" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="9" cy="17.5" r="1.25" fill="currentColor" stroke="none"/><circle cx="15" cy="17.5" r="1.25" fill="currentColor" stroke="none"/></symbol><symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></symbol><symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 0 0 0 17c1.2 0 1.8-.8 1.8-1.7 0-1.3-1.2-1.6-1.2-2.8 0-1 .8-1.6 1.8-1.6h2.4a3.7 3.7 0 0 0 3.7-3.7c0-4-3.8-7.2-8.5-7.2z"/><circle cx="8" cy="11" r="1.1"/><circle cx="11" cy="7.6" r="1.1"/><circle cx="15.2" cy="8.4" r="1.1"/></symbol><symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 1.8H5z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></symbol><symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.3a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/></symbol><symbol id="i-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19c0-8 5-13.5 14-14 .2 8.6-5 14-12.6 14H5z"/><path d="M5 19c3-4 6-6.5 9.5-8.5"/></symbol></defs></svg>
+<header class="board-hd"><h1>Nurture — <em>Calm Oat</em></h1><p>Oat, sand and linen neutrals · one clay accent · soft category hues · Fraunces (soft) for numbers &amp; titles, Nunito for UI. 390 × 844, iPhone safe areas.</p></header>
+<main class="board">
+
+<figure class="shot"><figcaption class="cap"><b>1</b> Today — light. Since-last cards are one-tap logs; live pill sits above the nav.</figcaption>
+<section class="frame" id="frame-1">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen">
+<header class="today-hd">
+  <button class="avatar-btn" aria-label="Clara's profile and settings"><span class="avatar av-clara"></span></button>
+  <div class="today-id"><h1 class="disp">Clara</h1><p>6 weeks · Tuesday, Oct 14</p></div>
+  <button class="icon-btn" aria-label="Share today's summary"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-export"/></svg></button>
+</header>
+
+<div class="ql-grid">
+  <button class="ql cat-feed">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg>Fed</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">2<small>h</small> 10<small>m</small></span>
+    <span class="ql-sub">ago · <b>4 oz</b> formula</span>
+  </button>
+  <button class="ql cat-sleep">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg>Asleep<i class="dot-live" aria-hidden="true"></i></span><span class="ql-add" title="Log wake-up"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg></span></span>
+    <span class="ql-val disp">55<small>m</small></span>
+    <span class="ql-sub">Nap · since 8:55 AM</span>
+  </button>
+  <button class="ql cat-diaper">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg>Diaper</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">3<small>h</small></span>
+    <span class="ql-sub">ago · Wet · <b>3</b> today</span>
+  </button>
+  <button class="ql cat-pump">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg>Pumped</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">2<small>h</small> 40<small>m</small></span>
+    <span class="ql-sub">ago · <b>3.5 oz</b></span>
+    <span class="goal"><span class="goal-bar"><i style="width:52%"></i></span><span class="goal-txt tnum">12.5<small> / 24 oz</small></span></span>
+  </button>
+</div>
+<div class="sec-hd"><h2>Today</h2><button class="link">See timeline<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button></div>
+<ul class="list "><li><button class="row"><span class="row-time tnum">8:55<small>AM</small></span><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="row-main"><b>Nap</b><small>Asleep · 55m so far</small></span><span class="badge cat-sleep"><i class="dot-live"></i>Now</span></button></li><li><button class="row"><span class="row-time tnum">7:40<small>AM</small></span><span class="chip-ic cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="row-main"><b>Bottle · formula</b><small>Finished in 18 min</small></span><span class="amt tnum">4.0<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">7:10<small>AM</small></span><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="row-main"><b>Pumped</b><small>16 min · to fridge</small></span><span class="amt tnum">3.5<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">6:50<small>AM</small></span><span class="chip-ic cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="row-main"><b>Diaper</b><small>Wet</small></span></button></li><li><button class="row"><span class="row-time tnum">6:35<small>AM</small></span><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg></span><span class="row-main"><b>Woke up</b><small>Night sleep · 2h 40m</small></span></button></li></ul></div>
+<div class="fade"></div>
+<button class="live" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle timer.">
+<span class="live-chip cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg><i class="live-dot"></i></span>
+<span class="live-txt"><b>Bottle</b><small>good for 1h 48m</small></span>
+<span class="live-time tnum">12:04</span><svg class="ic live-chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-u"/></svg></button>
+<nav class="nav" aria-label="Main"><button class="tab on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg><span>Today</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="nav-slot"><button class="fab" aria-label="Log something"><svg class="ic fab-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg><span>Stash</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-images"/></svg><span>Memories</span></button></nav><div class="hi"></div>
+</section></figure>
+
+<figure class="shot"><figcaption class="cap"><b>2</b> Today — night. Dimmed, warm-shifted, no pure white.</figcaption>
+<section class="frame dark" id="frame-2">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen">
+<header class="today-hd">
+  <button class="avatar-btn" aria-label="Clara's profile and settings"><span class="avatar av-clara"></span></button>
+  <div class="today-id"><h1 class="disp">Clara</h1><p>6 weeks · Tuesday, Oct 14</p></div>
+  <button class="icon-btn" aria-label="Share today's summary"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-export"/></svg></button>
+</header>
+
+<div class="ql-grid">
+  <button class="ql cat-feed">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg>Fed</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">2<small>h</small> 10<small>m</small></span>
+    <span class="ql-sub">ago · <b>4 oz</b> formula</span>
+  </button>
+  <button class="ql cat-sleep">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg>Asleep<i class="dot-live" aria-hidden="true"></i></span><span class="ql-add" title="Log wake-up"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg></span></span>
+    <span class="ql-val disp">55<small>m</small></span>
+    <span class="ql-sub">Nap · since 8:55 AM</span>
+  </button>
+  <button class="ql cat-diaper">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg>Diaper</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">3<small>h</small></span>
+    <span class="ql-sub">ago · Wet · <b>3</b> today</span>
+  </button>
+  <button class="ql cat-pump">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg>Pumped</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">2<small>h</small> 40<small>m</small></span>
+    <span class="ql-sub">ago · <b>3.5 oz</b></span>
+    <span class="goal"><span class="goal-bar"><i style="width:52%"></i></span><span class="goal-txt tnum">12.5<small> / 24 oz</small></span></span>
+  </button>
+</div>
+<div class="sec-hd"><h2>Today</h2><button class="link">See timeline<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button></div>
+<ul class="list "><li><button class="row"><span class="row-time tnum">8:55<small>AM</small></span><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="row-main"><b>Nap</b><small>Asleep · 55m so far</small></span><span class="badge cat-sleep"><i class="dot-live"></i>Now</span></button></li><li><button class="row"><span class="row-time tnum">7:40<small>AM</small></span><span class="chip-ic cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="row-main"><b>Bottle · formula</b><small>Finished in 18 min</small></span><span class="amt tnum">4.0<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">7:10<small>AM</small></span><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="row-main"><b>Pumped</b><small>16 min · to fridge</small></span><span class="amt tnum">3.5<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">6:50<small>AM</small></span><span class="chip-ic cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="row-main"><b>Diaper</b><small>Wet</small></span></button></li><li><button class="row"><span class="row-time tnum">6:35<small>AM</small></span><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg></span><span class="row-main"><b>Woke up</b><small>Night sleep · 2h 40m</small></span></button></li></ul></div>
+<div class="fade"></div>
+<button class="live" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle timer.">
+<span class="live-chip cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg><i class="live-dot"></i></span>
+<span class="live-txt"><b>Bottle</b><small>good for 1h 48m</small></span>
+<span class="live-time tnum">12:04</span><svg class="ic live-chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-u"/></svg></button>
+<nav class="nav" aria-label="Main"><button class="tab on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg><span>Today</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="nav-slot"><button class="fab" aria-label="Log something"><svg class="ic fab-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg><span>Stash</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-images"/></svg><span>Memories</span></button></nav><div class="hi"></div>
+</section></figure>
+
+<figure class="shot"><figcaption class="cap"><b>3</b> Quick-log sheet — grows out of the + (origin = button centre), + turns into ×</figcaption>
+<section class="frame" id="frame-3">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen" aria-hidden="true">
+<header class="today-hd">
+  <button class="avatar-btn" aria-label="Clara's profile and settings"><span class="avatar av-clara"></span></button>
+  <div class="today-id"><h1 class="disp">Clara</h1><p>6 weeks · Tuesday, Oct 14</p></div>
+  <button class="icon-btn" aria-label="Share today's summary"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-export"/></svg></button>
+</header>
+
+<div class="ql-grid">
+  <button class="ql cat-feed">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg>Fed</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">2<small>h</small> 10<small>m</small></span>
+    <span class="ql-sub">ago · <b>4 oz</b> formula</span>
+  </button>
+  <button class="ql cat-sleep">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg>Asleep<i class="dot-live" aria-hidden="true"></i></span><span class="ql-add" title="Log wake-up"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg></span></span>
+    <span class="ql-val disp">55<small>m</small></span>
+    <span class="ql-sub">Nap · since 8:55 AM</span>
+  </button>
+  <button class="ql cat-diaper">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg>Diaper</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">3<small>h</small></span>
+    <span class="ql-sub">ago · Wet · <b>3</b> today</span>
+  </button>
+  <button class="ql cat-pump">
+    <span class="ql-top"><span class="ql-label"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg>Pumped</span><span class="ql-add"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></span>
+    <span class="ql-val disp">2<small>h</small> 40<small>m</small></span>
+    <span class="ql-sub">ago · <b>3.5 oz</b></span>
+    <span class="goal"><span class="goal-bar"><i style="width:52%"></i></span><span class="goal-txt tnum">12.5<small> / 24 oz</small></span></span>
+  </button>
+</div>
+<div class="sec-hd"><h2>Today</h2><button class="link">See timeline<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button></div>
+<ul class="list "><li><button class="row"><span class="row-time tnum">8:55<small>AM</small></span><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="row-main"><b>Nap</b><small>Asleep · 55m so far</small></span><span class="badge cat-sleep"><i class="dot-live"></i>Now</span></button></li><li><button class="row"><span class="row-time tnum">7:40<small>AM</small></span><span class="chip-ic cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="row-main"><b>Bottle · formula</b><small>Finished in 18 min</small></span><span class="amt tnum">4.0<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">7:10<small>AM</small></span><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="row-main"><b>Pumped</b><small>16 min · to fridge</small></span><span class="amt tnum">3.5<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">6:50<small>AM</small></span><span class="chip-ic cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="row-main"><b>Diaper</b><small>Wet</small></span></button></li><li><button class="row"><span class="row-time tnum">6:35<small>AM</small></span><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg></span><span class="row-main"><b>Woke up</b><small>Night sleep · 2h 40m</small></span></button></li></ul></div>
+<div class="fade"></div>
+<button class="live" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle timer.">
+<span class="live-chip cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg><i class="live-dot"></i></span>
+<span class="live-txt"><b>Bottle</b><small>good for 1h 48m</small></span>
+<span class="live-time tnum">12:04</span><svg class="ic live-chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-u"/></svg></button>
+<nav class="nav" aria-label="Main"><button class="tab on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg><span>Today</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="nav-slot"><button class="fab" aria-label="Log something"><svg class="ic fab-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg><span>Stash</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-images"/></svg><span>Memories</span></button></nav><div class="hi"></div>
+<div class="scrim"></div>
+<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="logTitle">
+  <div class="origin-glow"></div>
+  <span class="grabber" aria-hidden="true"></span>
+  <div class="sheet-hd">
+    <div><h2 id="logTitle" class="disp">Log for Clara</h2><p>One tap logs it. Tweak it later.</p></div>
+    <button class="time-chip"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>Now<span class="tnum">9:50</span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-d"/></svg></button>
+  </div>
+  <div class="tiles"><button class="tile cat-feed"><span class="tile-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg></span><b>Bottle</b><small>Formula, milk</small></button><button class="tile cat-feed"><span class="tile-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-nurse"/></svg></span><b>Nurse</b><small>L / R timer</small></button><button class="tile cat-pump"><span class="tile-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg></span><b>Pump</b><small>Timer or past</small></button><button class="tile cat-sleep"><span class="tile-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-sun"/></svg></span><b>Woke up</b><small>Ends the nap</small></button><button class="tile cat-diaper"><span class="tile-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg></span><b>Diaper</b><small>Wet or dirty</small></button><button class="tile cat-mem"><span class="tile-ic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg></span><b>Memory</b><small>Photo, firsts</small></button></div>
+  <p class="sheet-lbl">One-tap diaper</p>
+  <div class="seg-row">
+    <button class="pill-btn cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-drop"/></svg>Wet</button>
+    <button class="pill-btn cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="5" fill="currentColor"/></svg>Dirty</button>
+    <button class="pill-btn cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5s4.6 4.9 4.6 8.2a4.6 4.6 0 0 1-9.2 0c0-3.3 4.6-8.2 4.6-8.2z" fill="none" stroke="currentColor" stroke-width="1.75"/><circle cx="12" cy="13.6" r="2.2" fill="currentColor"/></svg>Both</button>
+  </div>
+  <button class="row-link"><svg class="ic ic-pouch" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg><span><b>Add milk to stash</b><small>Fridge or freezer pouch</small></span><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+  <p class="hint">Tip: press and hold <b>+</b> to log a bottle in one motion.</p>
+</div>
+<button class="fab fab-x" aria-label="Close"><svg class="ic fab-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button>
+<div class="hi hi-top"></div>
+</section></figure>
+
+<figure class="shot"><figcaption class="cap"><b>4</b> Timeline — day pager, 24h strip, the day’s list</figcaption>
+<section class="frame" id="frame-4">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen">
+<header class="page-hd"><h1 class="disp">Timeline</h1><button class="icon-btn" aria-label="Pick a date"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-calendar"/></svg></button></header>
+<div class="pager">
+  <button class="round-btn" aria-label="Previous day, Monday October 13"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-l"/></svg></button>
+  <div class="pager-mid"><b>Today</b><small>Tuesday, October 14</small></div>
+  <button class="round-btn" disabled aria-label="Next day"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button>
+</div>
+<div class="stats"><div class="stat cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg><b class="tnum">7 oz</b><small>3 feeds</small></div><div class="stat cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg><b class="tnum">6h 10m</b><small>slept</small></div><div class="stat cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg><b class="tnum">3</b><small>diapers</small></div><div class="stat cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg><b class="tnum">12.5 oz</b><small>pumped</small></div></div>
+
+<div class="strip card" role="img" aria-label="24 hour activity for Tuesday October 14: 3 sleeps totalling 6 hours 10 minutes, 3 feeds, 3 pumps, 3 diapers.">
+  <div class="strip-hd"><b>24 hours</b><span class="legend"><span><i class="lg d-wet"></i>wet</span><span><i class="lg d-dirty"></i>dirty</span></span></div>
+  <div class="lanes">
+    <span class="nowline" style="left:calc(40px + (100% - 46px) * 0.4097)"><em>Now 9:50</em></span>
+    <div class="lane"><span class="lane-ic cat-sleep" title="Sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="track"><span class="track-in"><span class="future" style="left:40.972%"></span><i class="blk b-sleep" style="left:3.125%;width:10.764%"></i><i class="blk b-sleep" style="left:16.319%;width:11.111%"></i><i class="blk b-sleep live" style="left:37.153%;width:3.819%"></i></span></span></div>
+    <div class="lane"><span class="lane-ic cat-feed" title="Feeds"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="track"><span class="track-in"><span class="future" style="left:40.972%"></span><i class="blk b-feed" style="left:1.389%;width:1.042%"></i><i class="blk b-feed" style="left:14.583%;width:1.667%"></i><i class="blk b-feed" style="left:31.944%;width:1.250%"></i></span></span></div>
+    <div class="lane"><span class="lane-ic cat-diaper" title="Diapers"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="track"><span class="track-in"><span class="future" style="left:40.972%"></span><i class="dot d-dirty" style="left:0.694%"></i><i class="dot d-wet" style="left:14.236%"></i><i class="dot d-wet" style="left:28.472%"></i></span></span></div>
+    <div class="lane"><span class="lane-ic cat-pump" title="Pumping"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="track"><span class="track-in"><span class="future" style="left:40.972%"></span><i class="blk b-pump" style="left:2.778%;width:1.250%"></i><i class="blk b-pump" style="left:18.056%;width:1.250%"></i><i class="blk b-pump" style="left:29.861%;width:1.111%"></i></span></span></div>
+  </div>
+  <div class="axis"><span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span></div>
+</div>
+<ul class="list list-tight"><li><button class="row"><span class="row-time tnum">8:55<small>AM</small></span><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="row-main"><b>Nap</b><small>Asleep · 55m so far</small></span><span class="badge cat-sleep"><i class="dot-live"></i>Now</span></button></li><li><button class="row"><span class="row-time tnum">7:40<small>AM</small></span><span class="chip-ic cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="row-main"><b>Bottle · formula</b><small>Finished in 18 min</small></span><span class="amt tnum">4.0<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">7:10<small>AM</small></span><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="row-main"><b>Pumped</b><small>16 min · to fridge</small></span><span class="amt tnum">3.5<small> oz</small></span></button></li><li><button class="row"><span class="row-time tnum">6:50<small>AM</small></span><span class="chip-ic cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="row-main"><b>Diaper</b><small>Wet</small></span></button></li></ul>
+</div>
+<div class="fade"></div>
+<button class="live" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle timer.">
+<span class="live-chip cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg><i class="live-dot"></i></span>
+<span class="live-txt"><b>Bottle</b><small>good for 1h 48m</small></span>
+<span class="live-time tnum">12:04</span><svg class="ic live-chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-u"/></svg></button>
+<nav class="nav" aria-label="Main"><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg><span>Today</span></button><button class="tab on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="nav-slot"><button class="fab" aria-label="Log something"><svg class="ic fab-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg><span>Stash</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-images"/></svg><span>Memories</span></button></nav><div class="hi"></div>
+</section></figure>
+
+<figure class="shot"><figcaption class="cap"><b>5</b> Stash — total, “Use next” hero with Thaw / Feed, fridge &amp; freezer with expiry</figcaption>
+<section class="frame" id="frame-5">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen">
+<header class="page-hd"><h1 class="disp">Stash</h1><button class="icon-btn accent" aria-label="Add a pouch"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></header>
+<div class="card stash-sum">
+  <div class="stash-total"><div><span class="disp big tnum">46<small> oz</small></span><p class="muted">about 11 bottles at 4 oz</p></div>
+  <div class="split-lg"><span><i class="sw sp-fridge"></i><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-fridge"/></svg>Fridge <b class="tnum">9 oz</b></span><span><i class="sw sp-freezer"></i><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-snow"/></svg>Freezer <b class="tnum">37 oz</b></span></div></div>
+  <div class="split" aria-hidden="true"><i class="sp-fridge" style="width:19.6%"></i><i class="sp-freezer" style="width:80.4%"></i></div>
+</div>
+<div class="usenext">
+  <div class="un-top"><span class="tag"><svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg>Use next</span><span class="un-where"><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-snow"/></svg>Freezer · oldest</span></div>
+  <div class="un-main">
+    <div class="pouch-art" aria-hidden="true"><span class="pa-fill"></span><span class="pa-cap"></span></div>
+    <div><p class="disp un-oz tnum">4<small> oz</small></p><p class="un-meta">Pumped Sep 2 · frozen 6 weeks</p><p class="un-meta">Best by <b>Mar 2</b> · 4½ months left</p></div>
+  </div>
+  <div class="btn-row"><button class="btn primary"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-thaw"/></svg>Thaw</button><button class="btn secondary"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg>Feed</button></div>
+</div>
+<div class="sec-hd sm st"><h2><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-fridge"/></svg>Fridge <span class="muted tnum">9 oz</span></h2><span class="muted small">Keeps 4 days</span></div>
+<ul class="list">
+<li><button class="row srow"><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg></span><span class="row-main"><b class="tnum">5.5<small> oz</small> <span class="row-t"></span></b><small>Pumped Sat, Oct 11</small></span><span class="exp warn"><svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-clock"/></svg>1 day left</span></button></li>
+<li><button class="row srow"><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg></span><span class="row-main"><b class="tnum">3.5<small> oz</small> <span class="row-t"></span></b><small>Pumped today, 7:10 AM</small></span><span class="exp ok">4 days left</span></button></li>
+</ul>
+<div class="sec-hd sm st"><h2><svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-snow"/></svg>Freezer <span class="muted tnum">37 oz</span></h2><span class="muted small">8 pouches</span></div>
+<ul class="list">
+<li><button class="row srow"><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg></span><span class="row-main"><b class="tnum">4<small> oz</small> <span class="row-t"></span></b><small>Tue, Sep 2 · use next</small></span><span class="exp next">Best by Mar 2</span></button></li>
+<li><button class="row srow"><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg></span><span class="row-main"><b class="tnum">5<small> oz</small> <span class="row-t"></span></b><small>Tue, Sep 9</small></span><span class="exp ">Best by Mar 9</span></button></li>
+</ul>
+</div>
+<div class="fade"></div>
+<button class="live" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle timer.">
+<span class="live-chip cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg><i class="live-dot"></i></span>
+<span class="live-txt"><b>Bottle</b><small>good for 1h 48m</small></span>
+<span class="live-time tnum">12:04</span><svg class="ic live-chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-u"/></svg></button>
+<nav class="nav" aria-label="Main"><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg><span>Today</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="nav-slot"><button class="fab" aria-label="Log something"><svg class="ic fab-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg><span>Stash</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-images"/></svg><span>Memories</span></button></nav><div class="hi"></div>
+</section></figure>
+
+<figure class="shot"><figcaption class="cap"><b>6</b> Memories — milestones + photo journal</figcaption>
+<section class="frame" id="frame-6">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen">
+<header class="page-hd"><div><h1 class="disp">Memories</h1><p class="page-sub">Clara · 6 weeks · 23 photos</p></div><button class="icon-btn accent" aria-label="Add a memory"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></header>
+<div class="sec-hd sm"><h2><svg class="ic ic-s mem-ink" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg>Milestones</h2><button class="link">All 24<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button></div>
+
+<div class="ms-row">
+  <button class="ms"><span class="ph ph-a"><span class="ms-check"><svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span></span><b>First smile</b><small>Oct 9 · 5 weeks</small></button>
+  <button class="ms"><span class="ph ph-c"><span class="ms-check"><svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-check"/></svg></span></span><b>Lifts head</b><small>Oct 1 · 4 weeks</small></button>
+  <button class="ms ms-next"><span class="ph ph-empty"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span><b>Coos &amp; babbles</b><small>Often 6–8 weeks</small></button>
+</div>
+<div class="sec-hd sm"><h2>Week 6</h2><span class="muted small">Oct 7 – 13</span></div>
+<div class="pgrid"><button class="pg ph-a" aria-label="Photo, Oct 13"><span class="pg-cap">Bath time</span></button><button class="pg ph-b" aria-label="Photo, Oct 12"></button><button class="pg ph-d" aria-label="Photo, Oct 11"></button><button class="pg ph-c" aria-label="Photo, Oct 10"></button><button class="pg ph-e" aria-label="Photo, Oct 9"><span class="pg-cap"><svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg>First smile</span></button><button class="pg ph-f" aria-label="Photo, Oct 8"></button></div>
+<div class="sec-hd sm"><h2>Week 5</h2><span class="muted small">Sep 30 – Oct 6</span></div>
+<div class="pgrid"><button class="pg ph-f" aria-label="Photo, Oct 6"></button><button class="pg ph-b" aria-label="Photo, Oct 4"></button><button class="pg ph-a" aria-label="Photo, Oct 2"></button></div>
+</div>
+<div class="fade"></div>
+<button class="live" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes. Open bottle timer.">
+<span class="live-chip cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg><i class="live-dot"></i></span>
+<span class="live-txt"><b>Bottle</b><small>good for 1h 48m</small></span>
+<span class="live-time tnum">12:04</span><svg class="ic live-chev" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-u"/></svg></button>
+<nav class="nav" aria-label="Main"><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-home"/></svg><span>Today</span></button><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-timeline"/></svg><span>Timeline</span></button><div class="nav-slot"><button class="fab" aria-label="Log something"><svg class="ic fab-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></button></div><button class="tab"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg><span>Stash</span></button><button class="tab on" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-images"/></svg><span>Memories</span></button></nav><div class="hi"></div>
+</section></figure>
+
+<figure class="shot"><figcaption class="cap"><b>7</b> Settings → Customize trackers (+ the Privacy row)</figcaption>
+<section class="frame" id="frame-7">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen">
+<header class="push-hd"><button class="back"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-l"/></svg>Settings</button><h1>Customize</h1><span class="push-sp"></span></header>
+<p class="intro">Pick what shows on Today and in +. Drag to reorder. Hidden trackers keep their data.</p>
+<p class="grp-lbl">Trackers</p>
+<ul class="group"><li class="srow2"><button class="grip" aria-label="Reorder Bottle feeds"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grip"/></svg></button><span class="chip-ic cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-bottle"/></svg></span><span class="row-main"><b>Bottle feeds</b><small>Formula &amp; breast milk</small></span><label class="tgl"><input type="checkbox" checked aria-label="Show Bottle feeds"><span></span></label></li><li class="srow2"><button class="grip" aria-label="Reorder Breastfeeding"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grip"/></svg></button><span class="chip-ic cat-feed"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-nurse"/></svg></span><span class="row-main"><b>Breastfeeding</b><small>Left / right timer</small></span><label class="tgl"><input type="checkbox" checked aria-label="Show Breastfeeding"><span></span></label></li><li class="srow2"><button class="grip" aria-label="Reorder Pumping"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grip"/></svg></button><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pump"/></svg></span><span class="row-main"><b>Pumping</b><small>Goal 24 oz a day</small></span><label class="tgl"><input type="checkbox" checked aria-label="Show Pumping"><span></span></label></li><li class="srow2"><button class="grip" aria-label="Reorder Milk stash"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grip"/></svg></button><span class="chip-ic cat-pump"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-pouch"/></svg></span><span class="row-main"><b>Milk stash</b><small>Fridge &amp; freezer</small></span><label class="tgl"><input type="checkbox" checked aria-label="Show Milk stash"><span></span></label></li><li class="srow2"><button class="grip" aria-label="Reorder Sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grip"/></svg></button><span class="chip-ic cat-sleep"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-moon"/></svg></span><span class="row-main"><b>Sleep</b><small>Naps, nights, wake windows</small></span><label class="tgl"><input type="checkbox" checked aria-label="Show Sleep"><span></span></label></li><li class="srow2"><button class="grip" aria-label="Reorder Diapers"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grip"/></svg></button><span class="chip-ic cat-diaper"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-diaper"/></svg></span><span class="row-main"><b>Diapers</b><small>Wet, dirty, both</small></span><label class="tgl"><input type="checkbox" checked aria-label="Show Diapers"><span></span></label></li><li class="srow2"><button class="grip" aria-label="Reorder Milestones and memories"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-grip"/></svg></button><span class="chip-ic cat-mem"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-spark"/></svg></span><span class="row-main"><b>Milestones &amp; memories</b><small>Photo journal</small></span><label class="tgl"><input type="checkbox" checked aria-label="Show Milestones and memories"><span></span></label></li></ul>
+<p class="grp-lbl">Privacy &amp; data</p>
+<ul class="group">
+  <li><button class="prow"><span class="chip-ic cat-accent"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-shield"/></svg></span><span class="row-main"><b>Privacy</b><small>On this phone only · no network</small></span><svg class="ic ic-s muted-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button></li>
+  <li><button class="prow"><span class="chip-ic cat-neutral"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-export"/></svg></span><span class="row-main"><b>Export a backup</b><small>Last backup Oct 12 · 18.4 MB</small></span><svg class="ic ic-s muted-ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-chev-r"/></svg></button></li>
+</ul>
+</div>
+<div class="hi"></div>
+</section></figure>
+
+<figure class="shot"><figcaption class="cap"><b>8</b> Onboarding, first screen — the promise, then Clara</figcaption>
+<section class="frame" id="frame-8">
+<div class="sb"><span class="sb-time">9:50</span><span class="sb-r">
+<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx="1" fill="currentColor"/><rect x="5" y="5.5" width="3" height="6.5" rx="1" fill="currentColor"/><rect x="10" y="3" width="3" height="9" rx="1" fill="currentColor"/><rect x="15" y="0" width="3" height="12" rx="1" fill="currentColor"/></svg>
+<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><path d="M8 11.2l2.2-2.4a3.2 3.2 0 0 0-4.4 0z" fill="currentColor"/><path d="M3.6 6.7a6.2 6.2 0 0 1 8.8 0M1.3 4.2a9.6 9.6 0 0 1 13.4 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+<svg width="27" height="13" viewBox="0 0 27 13" aria-hidden="true"><rect x=".6" y=".6" width="22.8" height="11.8" rx="3.6" fill="none" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2"/><rect x="2.4" y="2.4" width="15.5" height="8.2" rx="2.1" fill="currentColor"/><path d="M25 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" fill-opacity=".45"/></svg>
+</span></div>
+<div class="screen ob">
+  <div class="ob-top"><span class="wordmark disp">nurture</span><span class="steps" aria-label="Step 1 of 4"><i class="on"></i><i></i><i></i><i></i></span></div>
+  <h1 class="disp ob-h">Free. Private.<br>Everything stays<br>on this phone.</h1>
+  <ul class="promise">
+    <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-user-x"/></svg><span>No account, no sign-up</span></li>
+    <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-eye-off"/></svg><span>No ads, no analytics. Ever.</span></li>
+    <li><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-cloud-off"/></svg><span>Works offline. Nothing is uploaded.</span></li>
+  </ul>
+  <div class="ob-baby">
+    <button class="photo-pick" aria-label="Add Clara's photo"><span class="pp-ring"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-camera"/></svg></span><span class="pp-add"><svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-plus"/></svg></span></button>
+    <div class="ob-fields">
+      <label class="field"><span>Baby’s name</span><input value="Clara" aria-label="Baby's name"></label>
+      <label class="field"><span>Birthday</span><span class="field-v">Tue, Sep 2, 2026<svg class="ic ic-s" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-calendar"/></svg></span></label>
+    </div>
+  </div>
+  <p class="ob-note"><svg class="ic ic-xs" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-lock"/></svg>The photo stays on this phone. On iPhone it can become Nurture’s home-screen icon.</p>
+  <button class="btn primary block">Continue</button>
+  <button class="btn ghost block-ghost">Restore from a backup file</button>
+</div>
+<div class="hi"></div>
+</section></figure>
+</main>
+</body></html>

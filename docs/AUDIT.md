@@ -22,6 +22,11 @@ Severity key: **P0** = loses or corrupts data / traps the user · **P1** = wrong
 | Visual direction | **Warm, calm, minimal** — soft neutrals, one warm accent, big type, color-coded categories, genuinely dim night mode. Built for one-handed use at 3am. |
 | Rollout | **Phased PRs**: (1) audit + critical fixes ← *this PR*, (2) design system + redesign, (3) new trackers, (4) baby-photo icon + share + polish. |
 | Baby photo as app icon | Yes, **iPhone-only and pre-install only** (see §6.4). Clearly labeled as such in the UI. |
+| **Positioning** | **"Fully private & free."** This is the edge — every design and engineering choice must make it *true and provable*, not just a tagline. See §6.8. |
+| **Multiple babies** | Supported from day one in the data model (`babyId` on events); switcher appears only when a 2nd baby is added. |
+| **Partner sync** | Now: share a backup that **merges** into the partner's log. Later (Phase 5): end-to-end-encrypted sync where the server only sees ciphertext. |
+| **Extras in this build** | Data-loss protection (persistent storage, install-as-protection, weekly backup nudge), pediatrician report, calendar (.ics) pump reminders, privacy page + no-tracking feedback link. |
+| **Tracker visibility** | **All trackers on by default.** Settings → *Customize* lets each family hide what they don't use (pumping, stash, formula, breastfeeding, sleep, diapers, memories) and reorder Today's cards. Hidden ≠ deleted: data stays, and re-enabling brings it back. |
 
 ---
 
@@ -177,6 +182,18 @@ A live activity (bottle timer, pump timer, sleep timer, breastfeeding L/R) shows
 - Components: Button (primary/secondary/ghost/destructive), Card, QuickLogCard, Sheet (with the §3 motion contract), SegmentedControl, NumberStepper/Keypad, Chip, ListRow (tap → detail), Toast (with Undo), LivePill, EmptyState, TimelineStrip.
 - Type: one display face for numbers/titles, one UI sans. Large numerals for amounts and timers.
 - Replace all 22 native dialogs.
+
+### 6.8 "Fully private & free" — technical guarantees
+
+The promise has to survive a skeptical parent opening DevTools.
+
+- **Zero third-party requests.** Today the app loads Google Fonts on every launch (leaks IP + timestamp to Google, and breaks first-run offline). Fonts must be **self-hosted** woff2 subsets under `/fonts`, preloaded, and cached by the service worker.
+- **Content-Security-Policy** via `netlify.toml` (and a `<meta>` fallback): `default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self' https://nickg.xyz`. This makes "nothing leaves your phone" enforced by the browser, not just by us. No inline `<script>` / `style=""` attributes (move to classes) so `style-src 'self'` holds.
+- Also send `Referrer-Policy: no-referrer` and `Permissions-Policy` disabling camera/mic/geolocation (photo upload uses `<input type=file>`, which needs no permission).
+- **No analytics, no ads, no accounts, no tracking pixels** — ever. Not even "anonymous" telemetry.
+- **Settings → Privacy** screen in plain language: what's stored, where (this device only), how to export it, how to erase it, and a line that the app makes no network requests after it's loaded. Link the source.
+- **Free:** no paywall, no "premium" tier, no feature teased-then-locked. Every feature in this spec is free.
+- Onboarding's first screen says it once, simply: *"Free. Private. Everything stays on this phone."*
 
 ### 6.7 Definition of done for each phase
 
