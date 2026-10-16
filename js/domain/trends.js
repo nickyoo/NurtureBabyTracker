@@ -265,3 +265,64 @@ export function latest(events, type, { predicate, includeRunning = false, now } 
   }
   return best;
 }
+
+/**
+ * Pediatrician report numbers (§10c) for the last `days` local days:
+ * per-day rows (lastNDays) plus totals and per-day averages of feeds, bottle
+ * amount, breastfeeding sessions, wet/dirty diapers, sleep and pumping, and
+ * the longest sleep stretch. Pass one baby's events (forBaby) for a per-child
+ * report.
+ *
+ * Two choices keep the averages honest: by default the window is the last N
+ * COMPLETE days (today's half-day would drag every average down), and
+ * averages divide by the days that have any data, so a week-old log isn't
+ * averaged over days before the app was installed.
+ * @param {object[]} events
+ * @param {{ days?: number, unit?: 'oz'|'mL', now?: number, includeToday?: boolean }} [opts]
+ * @returns {{
+ *   unit: 'oz'|'mL', from: number, to: number, dayCount: number, daysWithData: number,
+ *   days: ReturnType<typeof lastNDays>,
+ *   totals: { feeds:number, bottleAmount:number, breastSessions:number, wet:number, dirty:number, sleepMs:number, pumps:number, pumpAmount:number },
+ *   perDay: { feeds:number, bottleAmount:number, breastSessions:number, wet:number, dirty:number, sleepMs:number, pumps:number, pumpAmount:number },
+ *   longestSleepMs: number
+ * }}
+ */
+export function reportSummary(events, { days = 7, unit = 'oz', now = Date.now(), includeToday = false } = {}) {
+  const u = normalizeUnit(unit);
+  const n = Math.max(1, Math.min(90, Math.floor(Number.isFinite(days) ? days : 7) || 1));
+  // The last millisecond of yesterday stands in for "now" when today is
+  // excluded; only a sleep still running from yesterday is affected (it is
+  // clipped at midnight, which is what a per-day report wants anyway).
+  const asOf = includeToday ? now : dayBounds(now).start - 1;
+  const rows = lastNDays(events, n, { unit: u, now: asOf });
+  const from = rows[0].start;
+  const to = rows[rows.length - 1].end;
+  // Totals come from ONE pass over the whole window rather than by adding up
+  // the per-day rows, whose amounts are already rounded (7 × ±0.5 mL drift).
+  const whole = rangeTotals(events, from, to, { unit: u, now: asOf });
+  const totals = {
+    feeds: whole.feed.count,
+    bottleAmount: whole.feed.amount,
+    breastSessions: whole.feed.breastCount,
+    wet: whole.diaper.wet,
+    dirty: whole.diaper.dirty,
+    sleepMs: whole.sleep.totalMs,
+    pumps: whole.pump.count,
+    pumpAmount: whole.pump.amount,
+  };
+  const daysWithData = rows.filter(d => d.feed.count + d.pump.count + d.diaper.count + d.milestone.count + d.sleep.count > 0
+    || d.sleep.totalMs > 0).length;
+  const div = Math.max(1, daysWithData);
+  const avgCount = v => Math.round((v / div) * 10) / 10;
+  const perDay = {
+    feeds: avgCount(totals.feeds),
+    bottleAmount: roundForUnit(totals.bottleAmount / div, u),
+    breastSessions: avgCount(totals.breastSessions),
+    wet: avgCount(totals.wet),
+    dirty: avgCount(totals.dirty),
+    sleepMs: Math.round(totals.sleepMs / div / 60000) * 60000,
+    pumps: avgCount(totals.pumps),
+    pumpAmount: roundForUnit(totals.pumpAmount / div, u),
+  };
+  return { unit: u, from, to, dayCount: n, daysWithData, days: rows, totals, perDay, longestSleepMs: whole.sleep.longestMs };
+}

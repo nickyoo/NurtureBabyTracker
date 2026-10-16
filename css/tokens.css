@@ -1,0 +1,358 @@
+/* =====================================================================
+   Nurture design tokens (Phase 2). Source of truth: docs/DESIGN.md
+   ---------------------------------------------------------------------
+   - Light theme lives on :root. Dark theme redefines TOKENS ONLY under
+     [data-theme="dark"]. Components never contain theme selectors.
+   - The app sets <html data-theme="light|dark"> from js before first
+     paint (auto = clock or system scheme, or the user's choice).
+     Any subtree may also carry data-theme to scope a theme (mockups,
+     previews). Never flip the theme while a sheet is open.
+   - Zero third-party requests: fonts are self-hosted woff2 (latin).
+   ===================================================================== */
+
+/* ---------- Fonts (3 files, 120 KB total, SIL OFL 1.1, see fonts/) ---------- */
+@font-face {
+  font-family: "Nunito";
+  src: url("../fonts/nunito-latin-wght.woff2") format("woff2");
+  font-weight: 200 1000;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  /* Fraunces instanced at SOFT=100, WONK=0; axes kept: opsz 9-144, wght 400-700 */
+  font-family: "Fraunces";
+  src: url("../fonts/fraunces-soft-latin-wght-opsz.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  /* Static italic: SOFT=100, WONK=0, opsz=24, wght=400. Only for the age line,
+     memory captions and the onboarding accent line. */
+  font-family: "Fraunces";
+  src: url("../fonts/fraunces-soft-latin-italic-400.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* =====================================================================
+   LIGHT (default)
+   ===================================================================== */
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* ---- Neutrals ---- */
+  --bg:            #F6F1E8;  /* oat: app background */
+  --surface:       #FFFCF7;  /* linen: cards, lists, nav */
+  --surface-2:     #EFE8DC;  /* sand: fields, chips, tracks, secondary buttons */
+  --band:          #E6DCCC;  /* night band (7pm-7am) behind timeline lanes */
+  --sheet-bg:      #FFFCF7;  /* sheets */
+  --nav-bg:        #FFFCF7;
+  --line:          #E9DFD0;  /* decorative hairline only, never a boundary */
+  --line-strong:   #958675;  /* control outlines (off toggle, inputs) >= 3:1 */
+  --knob:          #FFFCF7;  /* toggle knob (never pure white) */
+  --toggle-on:     #A6532F;  /* on-track; dims at night so a settings list isn't a wall of lit accents */
+  --text:          #2B2420;
+  --text-2:        #665A4E;
+  --text-3:        #766A5D;  /* tertiary TEXT is allowed: >= 4.5:1 on bg/surface */
+  --scrim:         rgba(38, 29, 22, 0.46);
+
+  /* ---- The one accent (actions + "now" only) ---- */
+  --accent:        #A6532F;  /* clay: toggles on, active tab icon, now-line */
+  --accent-press:  #8F4627;
+  --accent-ink:    #97492A;  /* accent-colored text: links, back, wordmark */
+  --accent-soft:   #F5E3D6;  /* accent tint: badges, picker fill */
+  --on-accent:     #FFFCF7;
+  --fab-bg:        #A6532F;  /* center + */
+  --fab-press:     #8F4627;
+  --on-fab:        #FFFCF7;
+  --primary-bg:    #A6532F;  /* primary button fill (dimmed to soft at night) */
+  --primary-press: #8F4627;
+  --on-primary:    #FFFCF7;
+
+  /* ---- Live pill + toast: dark in BOTH themes so "running" reads anywhere ---- */
+  --pill-bg:       #2B2420;
+  --pill-text:     #F6EFE4;
+  --pill-text-2:   #C9BBAB;
+  --pill-well:     #40352D;
+  --pill-ring:     rgba(246, 239, 228, 0.10);
+  --pill-btn-bg:   #F6EFE4;  /* Finish button */
+  --pill-btn-text: #2B2420;
+  --pill-feed:     #E8AE6A;  /* category marks on the pill surface */
+  --pill-sleep:    #B9AEE2;
+  --pill-pump:     #E39DAF;
+  --pill-warn:     #F0C47A;
+
+  /* ---- Status ---- */
+  --warn-tint:     #FBE9C8;  --warn-ink:   #7F5310;
+  --ok-tint:       #E3ECDD;  --ok-ink:     #46663F;
+  --danger-tint:   #F8E0DA;  --danger-ink: #A3392A;
+  --on-danger:     #FFFCF7;
+
+  /* ---- Categories: tint (fills) / ink (text, icons) / mid (graphics) ----
+     card = since-last card + quick-log tile fill; well = icon well on that card.
+     Light: tinted cards with a pale well. Dark: neutral cards, tinted wells.  */
+  --well-on-tint:  rgba(255, 252, 247, 0.80);
+
+  --feed-tint:   #FBEBD0;  --feed-ink:   #8A5A12;  --feed-mid:   #9C6A1B;
+  --sleep-tint:  #ECE7F5;  --sleep-ink:  #5F538C;  --sleep-mid:  #7C6DB0;
+  --diaper-tint: #E3ECDD;  --diaper-ink: #46663F;  --diaper-mid: #5E8158;
+  --pump-tint:   #F7E2E6;  --pump-ink:   #9A4258;  --pump-mid:   #AD5169;
+  --mem-tint:    #E1ECEF;  --mem-ink:    #2F6378;  --mem-mid:    #4A7F96;
+
+  --feed-card:   var(--feed-tint);    --feed-well:   var(--well-on-tint);
+  --sleep-card:  var(--sleep-tint);   --sleep-well:  var(--well-on-tint);
+  --diaper-card: var(--diaper-tint);  --diaper-well: var(--well-on-tint);
+  --pump-card:   var(--pump-tint);    --pump-well:   var(--well-on-tint);
+  --mem-card:    var(--mem-tint);     --mem-well:    var(--well-on-tint);
+  --track-on-card: rgba(43, 36, 32, 0.10);
+
+  /* ---- Imagery ---- */
+  --photo-filter:  none;
+  --avatar-filter: none;
+
+  /* ---- Elevation (light uses shadows; dark uses luminance steps) ---- */
+  --shadow-1: 0 1px 2px rgba(60, 40, 20, 0.05), 0 4px 14px -6px rgba(60, 40, 20, 0.10);
+  --shadow-2: 0 10px 30px -8px rgba(43, 36, 32, 0.38), 0 2px 6px rgba(43, 36, 32, 0.12);
+  --shadow-sheet: 0 -12px 40px rgba(30, 20, 12, 0.20);
+  --shadow-fab: 0 6px 16px -4px rgba(166, 83, 47, 0.55);
+
+  /* ---- Type weights (dark drops 30 on the variable axis) ---- */
+  --fw-body:    600;
+  --fw-strong:  700;
+  --fw-heavy:   800;
+  --fw-numeral: 700;
+  --fw-title:   560;  /* Fraunces */
+
+  /* ---- Focus: two-layer ring survives on tints and surfaces ---- */
+  --focus-ring: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent-ink);
+}
+
+/* =====================================================================
+   DARK / NIGHT: warm charcoal, nothing brighter than --text (#DCD0BF),
+   neutral cards, category color only in icons and wells, only the +
+   carries an accent fill.
+   ===================================================================== */
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg:            #191512;
+  --surface:       #221D19;
+  --surface-2:     #2C2520;
+  --band:          #120F0D;
+  --sheet-bg:      #26201C;
+  --nav-bg:        #1D1915;
+  --line:          #2F2823;
+  --line-strong:   #7E7163;
+  --knob:          #D3C7B6;
+  --toggle-on:     #9A5E40;
+  --text:          #DCD0BF;  /* luminance ceiling */
+  --text-2:        #A89A89;
+  --text-3:        #988B7C;
+  --scrim:         rgba(0, 0, 0, 0.60);
+
+  --accent:        #D48660;
+  --accent-press:  #C27A56;
+  --accent-ink:    #E09A76;
+  --accent-soft:   #3A2A20;
+  --on-accent:     #1C130E;
+  --fab-bg:        #B9714F;  /* dimmer than --accent: the + is never the brightest thing */
+  --fab-press:     #A8653F;
+  --on-fab:        #1C130E;
+  --primary-bg:    #3A2A20;  /* soft ember: only the + is a lit accent fill at night */
+  --primary-press: #46332A;
+  --on-primary:    #E09A76;
+
+  --pill-bg:       #2E2722;
+  --pill-text:     #DCD0BF;
+  --pill-text-2:   #A89A89;
+  --pill-well:     #3B322B;
+  --pill-ring:     rgba(220, 208, 191, 0.10);
+  --pill-btn-bg:   #463B33;
+  --pill-btn-text: #DCD0BF;
+  --pill-feed:     #D9A45E;
+  --pill-sleep:    #ABA1D8;
+  --pill-pump:     #D896A8;
+  --pill-warn:     #E2B565;
+
+  --warn-tint:     #352A16;  --warn-ink:   #E2B565;
+  --ok-tint:       #1F2A1F;  --ok-ink:     #98BB91;
+  --danger-tint:   #3A201B;  --danger-ink: #E58F80;
+  --on-danger:     #1C130E;
+
+  --well-on-tint:  rgba(220, 208, 191, 0.07);
+
+  --feed-tint:   #33271A;  --feed-ink:   #D9A45E;  --feed-mid:   #B8884A;
+  --sleep-tint:  #272336;  --sleep-ink:  #ABA1D8;  --sleep-mid:  #8A7FBE;
+  --diaper-tint: #202A1F;  --diaper-ink: #95B58E;  --diaper-mid: #779770;
+  --pump-tint:   #36222A;  --pump-ink:   #D896A8;  --pump-mid:   #B36F82;
+  --mem-tint:    #1E2B30;  --mem-ink:    #8DB6C6;  --mem-mid:    #6A97A9;
+
+  --feed-card:   var(--surface);  --feed-well:   var(--feed-tint);
+  --sleep-card:  var(--surface);  --sleep-well:  var(--sleep-tint);
+  --diaper-card: var(--surface);  --diaper-well: var(--diaper-tint);
+  --pump-card:   var(--surface);  --pump-well:   var(--pump-tint);
+  --mem-card:    var(--surface);  --mem-well:    var(--mem-tint);
+  --track-on-card: rgba(220, 208, 191, 0.10);
+
+  --photo-filter:  brightness(0.78) saturate(0.85);
+  --avatar-filter: brightness(0.82) saturate(0.9);
+
+  --shadow-1: 0 0 0 1px rgba(255, 240, 220, 0.03);
+  --shadow-2: 0 10px 30px -8px rgba(0, 0, 0, 0.70), 0 0 0 1px rgba(255, 240, 220, 0.06);
+  --shadow-sheet: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  --shadow-fab: none;  /* no glow at night */
+
+  --fw-body:    570;
+  --fw-strong:  670;
+  --fw-heavy:   770;
+  --fw-numeral: 670;
+  --fw-title:   530;
+
+  --focus-ring: 0 0 0 3px var(--bg), 0 0 0 5px var(--accent-ink);
+}
+
+/* =====================================================================
+   Theme-independent tokens
+   ===================================================================== */
+:root {
+  /* ---- Families ---- */
+  --font-ui: "Nunito", ui-rounded, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+  --numeric: tabular-nums lining-nums;  /* Nunito digits are fixed-width natively; this keeps fallbacks tabular */
+
+  /* ---- Type scale (rem; 1rem = 16px). See DESIGN.md section 4 ---- */
+  --fs-caption:   0.75rem;    /* 12  minimum anywhere */
+  --fs-footnote:  0.8125rem;  /* 13 */
+  --fs-subhead:   0.875rem;   /* 14 */
+  --fs-callout:   0.9375rem;  /* 15 */
+  --fs-body:      1rem;       /* 16  inputs never smaller (iOS zoom) */
+  --fs-headline:  1.0625rem;  /* 17 */
+  --fs-title-3:   1.25rem;    /* 20  Nunito section / row-amount */
+  --fs-title-2:   1.375rem;   /* 22  Fraunces section head */
+  --fs-title-1:   1.625rem;   /* 26  Fraunces sheet title */
+  --fs-title-l:   2rem;       /* 32  Fraunces screen title */
+  --fs-name:      2.125rem;   /* 34  Fraunces baby name (masthead) */
+  --fs-hero:      2.5rem;     /* 40  Fraunces onboarding headline */
+  --fs-age:       1.125rem;   /* 18  Fraunces italic age line */
+  --fs-timer:     1.5rem;     /* 24  live pill timer, Nunito tnum */
+  --fs-numeral:   2.625rem;   /* 42  since-last values, Nunito tnum */
+  --fs-unit:      1.3125rem;  /* 21  half-size units after a numeral */
+  --fs-stat:      1.125rem;   /* 18  timeline summary values */
+  --fs-amount:    3.25rem;    /* 52  stepper / use-next amount */
+  --fs-display:   3.5rem;     /* 56  stash total, sheet timer */
+
+  --lh-tight: 1.0;
+  --lh-title: 1.12;
+  --lh-ui:    1.35;
+  --lh-body:  1.45;
+  --tracking-display: -0.015em;
+  --tracking-numeral: -0.02em;
+  --tracking-caps:     0.07em;
+
+  /* ---- Spacing (4pt grid) ---- */
+  --s-1: 4px;   --s-2: 8px;   --s-3: 12px;  --s-4: 16px;  --s-5: 20px;
+  --s-6: 24px;  --s-8: 32px;  --s-10: 40px; --s-12: 48px; --s-16: 64px;
+  --gutter: 20px;
+  --gutter-onboarding: 24px;
+
+  /* ---- Radii ---- */
+  --r-xs: 8px;      /* strip tracks, small badges */
+  --r-sm: 14px;     /* icon chips, fields, thumbs */
+  --r-md: 18px;     /* stat tiles, day cells */
+  --r-lg: 22px;     /* lists, white cards, sheet tiles */
+  --r-xl: 24px;     /* since-last cards, Use-next hero */
+  --r-sheet: 28px;  /* sheet top corners */
+  --r-print: 4px;   /* mounted photo prints (Memories) */
+  --r-pill: 9999px; /* buttons, chips, live pill, toggles, avatar */
+
+  /* ---- Sizing + layout ---- */
+  --tap-min: 44px;
+  --icon: 24px;
+  --icon-stroke: 1.75;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --header-h: 88px;   /* Today masthead */
+  --nav-h: 56px;      /* + safe-bottom */
+  --nav-total: calc(var(--nav-h) + var(--safe-bottom));
+  --fab-size: 58px;
+  --fab-raise: 8px;   /* fab top sits 8px above the nav's top edge */
+  --pill-h: 60px;
+  --pill-gap: 12px;   /* clearance between pill and the + ring */
+  --pill-inset: 16px;
+  --pill-bottom: calc(var(--nav-total) + var(--fab-raise) + var(--pill-gap) - 6px);
+  --content-bottom-pad: calc(var(--nav-total) + var(--pill-h) + 28px);
+  --sheet-max-h: calc(100dvh - var(--safe-top) - 24px);
+  --card-h: 152px;    /* since-last card */
+  --row-h: 64px;      /* list row minimum */
+
+  /* ---- Motion ---- */
+  --dur-press: 120ms;    /* press, color, toggle knob */
+  --dur-fast: 200ms;     /* fades, toasts, scrim */
+  --dur-base: 280ms;     /* tabs, steps, sheet close, row insert */
+  --dur-morph: 320ms;    /* shared-element moves (timer header <-> pill) */
+  --dur-sheet: 380ms;    /* sheet open (spring) */
+  --dur-grow: 420ms;     /* quick-log / express pad grow from + */
+  --dur-theme: 600ms;    /* theme cross-fade */
+  --dur-highlight: 1200ms; /* new-row tint wash */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in: cubic-bezier(0.4, 0, 1, 1);
+  --ease-std: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.32, 1.2, 0.5, 1); /* <= 2% overshoot: sheets + pill only */
+  --move-sm: 8px;        /* tile stagger rise, toast drop */
+  --move-md: 16px;       /* toast rise, row slide */
+  --move-lg: 24px;       /* tab slide */
+  --move-xl: 32px;       /* step slide */
+  --press-scale: 0.97;
+  --card-press-scale: 0.98;
+  --page-behind-scale: 0.985;
+  --fab-rotate: 45deg;
+
+  /* ---- z-index scale ---- */
+  --z-content: 1;
+  --z-fade: 2;
+  --z-nav: 30;
+  --z-pill: 40;
+  --z-toast: 50;
+  --z-scrim: 60;
+  --z-sheet: 70;
+  --z-fab-over-sheet: 80; /* the + stays above its own sheet as the x */
+  --z-coach: 90;
+  --z-splash: 100;
+}
+
+/* ---- Category scope helpers: set once on a component root ---- */
+.cat-feed   { --c-tint: var(--feed-tint);   --c-ink: var(--feed-ink);   --c-mid: var(--feed-mid);   --c-card: var(--feed-card);   --c-well: var(--feed-well); }
+.cat-sleep  { --c-tint: var(--sleep-tint);  --c-ink: var(--sleep-ink);  --c-mid: var(--sleep-mid);  --c-card: var(--sleep-card);  --c-well: var(--sleep-well); }
+.cat-diaper { --c-tint: var(--diaper-tint); --c-ink: var(--diaper-ink); --c-mid: var(--diaper-mid); --c-card: var(--diaper-card); --c-well: var(--diaper-well); }
+.cat-pump   { --c-tint: var(--pump-tint);   --c-ink: var(--pump-ink);   --c-mid: var(--pump-mid);   --c-card: var(--pump-card);   --c-well: var(--pump-well); }
+.cat-mem    { --c-tint: var(--mem-tint);    --c-ink: var(--mem-ink);    --c-mid: var(--mem-mid);    --c-card: var(--mem-card);    --c-well: var(--mem-well); }
+.cat-accent { --c-tint: var(--accent-soft); --c-ink: var(--accent-ink); --c-mid: var(--accent);     --c-card: var(--accent-soft); --c-well: var(--well-on-tint); }
+.cat-neutral{ --c-tint: var(--surface-2);   --c-ink: var(--text-2);     --c-mid: var(--line-strong);--c-card: var(--surface);     --c-well: var(--surface-2); }
+
+/* =====================================================================
+   Reduced motion: no transform motion anywhere. Surfaces keep only an
+   opacity cross-fade (<= 150ms). Color cues (new-row tint) survive.
+   [data-motion="reduce"] is the in-app Settings mirror of the query.
+   ===================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --move-sm: 0px; --move-md: 0px; --move-lg: 0px; --move-xl: 0px;
+    --press-scale: 1; --card-press-scale: 1; --page-behind-scale: 1; --fab-rotate: 0deg;
+    --dur-base: 150ms; --dur-morph: 150ms; --dur-sheet: 150ms; --dur-grow: 150ms;
+    --dur-theme: 150ms; --dur-highlight: 600ms;
+    --ease-spring: linear; --ease-out: linear; --ease-in: linear; --ease-std: linear;
+  }
+}
+:root[data-motion="reduce"] {
+  --move-sm: 0px; --move-md: 0px; --move-lg: 0px; --move-xl: 0px;
+  --press-scale: 1; --card-press-scale: 1; --page-behind-scale: 1; --fab-rotate: 0deg;
+  --dur-base: 150ms; --dur-morph: 150ms; --dur-sheet: 150ms; --dur-grow: 150ms;
+  --dur-theme: 150ms; --dur-highlight: 600ms;
+  --ease-spring: linear; --ease-out: linear; --ease-in: linear; --ease-std: linear;
+}
