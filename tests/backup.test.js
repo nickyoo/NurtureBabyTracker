@@ -8,6 +8,7 @@ import {
   BACKUP_APP, BACKUP_SCHEMA, MAX_RECORDS, V1_IMPORT_BABY_ID, BackupError,
 } from '../js/core/backup.js';
 import { LIMITS } from '../js/core/store.js';
+import { pickUseNext, latestThawAt } from '../js/domain/inventory.js';
 
 const HOUR = 3600 * 1000;
 const NOW = new Date('2026-10-15T12:00:00').getTime();
@@ -456,4 +457,38 @@ test('regression: future timestamps in a file are rejected (start) or replaced (
   const edited = { ...feed({ id: 'evt_copy' }), note: 'my real edit', updatedAt: NOW };
   const { stats } = mergeBackup({ events: [edited], babies }, { events: again.data.events, babies });
   assert.deepEqual([stats.events.updated, stats.events.unchanged], [0, 1], 'the real edit wins');
+});
+
+// ---------------------------------------------------- regressions (R2) ---
+
+test('regression (R2): a thawed pouch can\'t carry a fresh thawedAt on years-old milk', () => {
+  const pumpedAt = Date.UTC(2021, 0, 1);
+  const ancient = pouch({ id: 'inv_ancient', pumpedAt, quantity: 4, unit: 'oz', location: 'thawed', thawedAt: NOW - HOUR, expiresAt: NOW + 2 * DAY, createdAt: pumpedAt });
+  const v = validateBackup(v2({ inventory: [ancient] }), { now: NOW });
+  const p = v.data.inventory[0];
+  assert.equal(p.id, 'inv_ancient', 'kept: it is still the family\'s record');
+  assert.ok(!('thawedAt' in p), 'a thaw after the longest frozen window ran out is not a real thaw');
+  assert.ok(p.expiresAt <= latestThawAt(pumpedAt) + 72 * HOUR, 'never outlives pumped + longest frozen + longest thawed window');
+  assert.ok(p.expiresAt < NOW, 'reads expired');
+  assert.equal(pickUseNext([p], NOW), null, 'never offered as the next feed');
+  // A thaw before the milk was pumped is dropped too; a real thaw is kept.
+  const backwards = validateBackup(v2({ inventory: [pouch({ location: 'thawed', pumpedAt: NOW - 10 * DAY, thawedAt: NOW - 20 * DAY, expiresAt: NOW + HOUR })] }), { now: NOW }).data.inventory[0];
+  assert.ok(!('thawedAt' in backwards));
+  const real = validateBackup(v2({ inventory: [pouch({ location: 'thawed', pumpedAt: NOW - 90 * DAY, thawedAt: NOW - HOUR, expiresAt: NOW + 23 * HOUR })] }), { now: NOW }).data.inventory[0];
+  assert.deepEqual([real.thawedAt, real.expiresAt], [NOW - HOUR, NOW + 23 * HOUR]);
+});
+
+test('regression (R2): numbers in a file are parsed in linear time (a 100 KB file can\'t freeze the import)', () => {
+  const long = `${'1'.repeat(40000)}x`;
+  let t0 = performance.now();
+  const bad = validateBackup({ app: BACKUP_APP, schema: long, events: [] }, { now: NOW });
+  assert.equal(bad.ok, false);
+  assert.ok(performance.now() - t0 < 200, `schema: ${(performance.now() - t0).toFixed(0)} ms`);
+  t0 = performance.now();
+  const v = validateBackup(v2({
+    events: Array.from({ length: 5 }, (_, i) => feed({ id: `evt_${i}`, startTime: `${'1'.repeat(20000)}x` })),
+    inventory: Array.from({ length: 5 }, (_, i) => pouch({ id: `inv_${i}`, quantity: `${'9'.repeat(20000)}x` })),
+  }), { now: NOW });
+  assert.ok(performance.now() - t0 < 200, `records: ${(performance.now() - t0).toFixed(0)} ms`);
+  assert.deepEqual([v.stats.events.rejected, v.stats.inventory.rejected], [5, 5]);
 });

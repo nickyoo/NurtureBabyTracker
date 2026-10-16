@@ -8,8 +8,10 @@ const {
   InventoryManager, buildThawUpdate, summarizeStash, THAWED_LOCATION, FROZEN_LOCATIONS, shouldShowThawTile,
   calculateExpiration, getUrgency, effectiveStatus, isUsable, compareFifo, filterInventory, pickUseNext,
   buildInventoryItem, applyInventoryPatch, consumeUpdate, inventoryUpdatedAt, DEFAULT_STORAGE_WINDOWS, LOCATIONS, STATUSES,
-  MAX_STORAGE_WINDOWS, maxExpiresAt,
+  MAX_STORAGE_WINDOWS, maxExpiresAt, POUCH_LIMITS, latestThawAt, isPlausibleThaw,
 } = await import('../js/domain/inventory.js');
+const { sanitizeInventoryItem } = await import('../js/core/stash.js');
+const { FUTURE_SKEW_MS } = await import('../js/core/store.js');
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -284,4 +286,63 @@ test('maxExpiresAt: the longest window any setting allows, per location', () => 
   }
   const thawed = buildThawUpdate({ ...pouch({ location: 'freezer' }) }, MAX_STORAGE_WINDOWS, NOW);
   assert.ok(thawed.expiresAt <= maxExpiresAt(thawed));
+});
+
+// ---------------------------------------------------- regressions (R2) ---
+
+test('regression (R2): every pouch the app builds, thaws or edits passes the Undo/import sanitizer unchanged', () => {
+  assert.equal(POUCH_LIMITS.futureSkewMs, FUTURE_SKEW_MS, 'same clock-skew allowance as events');
+  const same = (item, why) => assert.deepEqual(sanitizeInventoryItem(item, { now: NOW }), item, why);
+  for (const windows of [DEFAULT_STORAGE_WINDOWS, MAX_STORAGE_WINDOWS, { ...MAX_STORAGE_WINDOWS, fridgeDays: 1000, freezerMonths: 600 }]) {
+    for (const location of ['room', 'fridge', 'freezer', 'deepFreezer']) {
+      for (const pumpedAt of [NOW, NOW - 30 * DAY, NOW + 23 * HOUR, POUCH_LIMITS.minTime]) {
+        const item = buildInventoryItem({ quantity: 4.04, unit: 'oz', location, pumpedAt, notes: 'n' }, windows, { now: NOW, id: 'inv_x', deviceId: 'dev_abcdef' });
+        const why = `${location} pumped ${pumpedAt}`;
+        assert.notEqual(sanitizeInventoryItem(item, { now: NOW }), null, why);
+        same(item, why);
+        assert.ok(item.expiresAt <= maxExpiresAt(item), `${why}: expiry within the longest allowed window`);
+        // stash.thaw() only thaws a pouch that is still good.
+        const thawed = isUsable(item, NOW) && buildThawUpdate(item, windows, NOW);
+        if (thawed) same(thawed, `${why}: thawed`);
+      }
+    }
+  }
+  same(buildInventoryItem({ quantity: POUCH_LIMITS.maxQuantity, unit: 'mL', location: 'fridge' }, undefined, { now: NOW, id: 'inv_big' }), 'largest pouch');
+  const p = buildInventoryItem({ quantity: 4, location: 'fridge', pumpedAt: NOW - DAY }, DEFAULT_STORAGE_WINDOWS, { now: NOW, id: 'inv_p' });
+  for (const patch of [{ pumpedAt: NOW + 20 * HOUR }, { location: 'deepFreezer' }, { quantity: 9999 }, { expiresAt: NOW + DAY }, { notes: 'x' }]) {
+    same(applyInventoryPatch(p, patch, MAX_STORAGE_WINDOWS, NOW), JSON.stringify(patch));
+  }
+});
+
+test('regression (R2): stash writes refuse what Undo and import would refuse (future/ancient pumpedAt, absurd quantity, too-late expiry)', () => {
+  const build = input => () => buildInventoryItem({ quantity: 4, location: 'freezer', ...input }, DEFAULT_STORAGE_WINDOWS, { now: NOW, id: 'inv_x' });
+  for (const pumpedAt of [NOW + 3 * DAY, Date.UTC(2062, 0, 1), 0, -1, Date.UTC(1999, 11, 31)]) {
+    assert.throws(build({ pumpedAt }), RangeError, `pumpedAt ${pumpedAt}`);
+  }
+  assert.throws(build({ quantity: POUCH_LIMITS.maxQuantity + 1 }), RangeError, 'absurd quantity');
+  assert.equal(build({ pumpedAt: NOW + 23 * HOUR })().pumpedAt, NOW + 23 * HOUR, 'clock skew between phones is fine');
+  const p = pouch({ location: 'fridge', pumpedAt: NOW - DAY });
+  for (const [patch, why] of [
+    [{ pumpedAt: NOW + 3 * DAY }, 'future pumpedAt'], [{ pumpedAt: 0 }, 'pumpedAt 0'], [{ quantity: 1e6 }, 'absurd quantity'],
+    [{ expiresAt: Date.UTC(2099, 0, 1) }, 'fridge milk kept until 2099'], [{ expiresAt: 5 }, 'expiry in 1970'],
+  ]) assert.throws(() => applyInventoryPatch(p, patch, DEFAULT_STORAGE_WINDOWS, NOW), RangeError, why);
+  // A thawed pouch can't be re-dated to after its thaw.
+  const thawed = buildThawUpdate(pouch({ location: 'freezer', pumpedAt: NOW - 30 * DAY }), DEFAULT_STORAGE_WINDOWS, NOW - HOUR);
+  assert.throws(() => applyInventoryPatch(thawed, { pumpedAt: NOW - HOUR + 2 * DAY }, DEFAULT_STORAGE_WINDOWS, NOW), RangeError);
+  assert.equal(applyInventoryPatch(thawed, { pumpedAt: NOW - 40 * DAY }, DEFAULT_STORAGE_WINDOWS, NOW).expiresAt, thawed.expiresAt);
+  // A recomputed expiry is capped at the longest allowed window, whatever windows are passed.
+  const moved = applyInventoryPatch(p, { location: 'freezer' }, { freezerMonths: 600 }, NOW);
+  assert.equal(moved.expiresAt, maxExpiresAt(moved));
+});
+
+test('regression (R2): a thawed pouch never outlives pumped + longest frozen + longest thawed window', () => {
+  const pumpedAt = Date.UTC(2021, 0, 1);
+  const two = new Date(pumpedAt); two.setMonth(two.getMonth() + 24);
+  assert.equal(latestThawAt(pumpedAt), two.getTime());
+  assert.equal(maxExpiresAt({ pumpedAt, location: 'thawed', thawedAt: NOW - HOUR }), two.getTime() + 72 * HOUR, '"thawed an hour ago" can\'t restart the clock');
+  assert.ok(maxExpiresAt({ pumpedAt, location: 'thawed', thawedAt: NOW - HOUR }) < NOW);
+  assert.equal(isPlausibleThaw(NOW - HOUR, pumpedAt), false);
+  assert.equal(isPlausibleThaw(pumpedAt - 2 * DAY, pumpedAt), false, 'thawed before it was pumped');
+  assert.equal(isPlausibleThaw(pumpedAt + 30 * DAY, pumpedAt), true);
+  assert.equal(isPlausibleThaw(pumpedAt - HOUR, pumpedAt), true, 'clock skew between two phones');
 });

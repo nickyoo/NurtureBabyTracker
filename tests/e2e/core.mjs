@@ -29,6 +29,8 @@ const SUITES = [
   ['persist'],
   ['data-invariants'],
   ['import-guards'],
+  ['migration-v1-edits'],
+  ['data-invariants-r2'],
 ];
 
 // Files each suite must have actually downloaded (checked from disk, not

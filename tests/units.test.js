@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ML_PER_OZ, normalizeUnit, convertQty, roundForUnit, amountOf, sumAmounts, amountParts, formatAmount,
-  clampAmount, inputConfig, stepAmount, switchUnit, toFiniteNumber,
+  clampAmount, inputConfig, stepAmount, switchUnit, toFiniteNumber, MAX_NUMBER_STRING,
 } from '../js/core/units.js';
 
 test('normalizeUnit: mL in any case, everything else oz', () => {
@@ -130,4 +130,26 @@ test('switchUnit: converts an in-progress amount and snaps to the new unit', () 
   assert.equal(switchUnit(120, 'mL', 'oz'), 4.1);
   assert.equal(switchUnit(4, 'oz', 'oz'), 4);
   assert.equal(switchUnit(null, 'oz', 'mL'), 0);
+});
+
+// ---------------------------------------------------- regressions (R2) ---
+
+test('regression: toFiniteNumber rejects a huge numeric-looking string at once (import ReDoS)', () => {
+  // Was quadratic: 40k digits + 'x' took ~5 s, so a 100 KB backup froze the tab.
+  const t0 = performance.now();
+  assert.equal(toFiniteNumber('1'.repeat(1e5) + 'x'), null);
+  assert.equal(toFiniteNumber(' '.repeat(1e5) + '1'), null);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 50, `took ${ms.toFixed(1)} ms`);
+  // Up to the cap, the (now unambiguous) pattern still fails fast on garbage.
+  const t1 = performance.now();
+  for (let i = 0; i < 2000; i++) toFiniteNumber(`${'1'.repeat(MAX_NUMBER_STRING - 1)}x`);
+  assert.ok(performance.now() - t1 < 200, 'near-cap garbage stays cheap');
+  assert.equal(toFiniteNumber('1'.repeat(MAX_NUMBER_STRING)), Number('1'.repeat(MAX_NUMBER_STRING)), 'a string at the cap still parses');
+  assert.equal(toFiniteNumber('1'.repeat(MAX_NUMBER_STRING + 1)), null);
+  // Same accepted / refused forms as before the rewrite.
+  for (const [str, n] of [['4.', 4], ['+3', 3], ['-1.5e-2', -0.015], [' 2 ', 2], ['.5e1', 5], ['1.e2', 100], ['007', 7]]) {
+    assert.equal(toFiniteNumber(str), n, str);
+  }
+  for (const str of ['.', '1..2', 'e5', '1e', '--1', '1.2.3', '1 2', '.e1', '+']) assert.equal(toFiniteNumber(str), null, str);
 });

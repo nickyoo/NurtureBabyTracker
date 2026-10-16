@@ -116,7 +116,7 @@ Per-type `data`:
 
 | type | data |
 |---|---|
-| `feed` | `{ method: 'bottle', milk: 'formula'\|'breastmilk', amount: number, unit: 'oz'\|'mL', prepared?: number, sourceInventoryId?: string }` **or** `{ method: 'breast', left: sec, right: sec, lastSide: 'left'\|'right', activeSide?: 'left'\|'right'\|null }` |
+| `feed` | `{ method: 'bottle', milk: 'formula'\|'breastmilk', amount: number, unit: 'oz'\|'mL', prepared?: number, sourceInventoryId?: string }` **or** `{ method: 'breast', left: sec, right: sec, lastSide: 'left'\|'right', activeSide?: 'left'\|'right'\|null, activeSince?: number\|null }` |
 | `pump` | `{ amount: number, unit, storedTo: 'fridge'\|'freezer'\|'deepFreezer'\|null, inventoryId?: string }` |
 | `sleep` | `{ kind: 'nap'\|'night' }` |
 | `diaper` | `{ kind: 'wet'\|'dirty'\|'both'\|'dry', color?: string, consistency?: string }` |
@@ -130,7 +130,7 @@ Amounts are stored **in the unit they were entered in** with the unit recorded; 
 
 A running activity is simply an event with `endTime: null`:
 - **Bottle feed** (`feed`, method bottle): safety countdown derives from `startTime` + `domain/safety.js`. Finish → set `endTime`, final `amount`; cancel → delete.
-- **Breastfeeding**: `data.activeSide` + side seconds accumulate; switching sides updates `data`.
+- **Breastfeeding**: `data.activeSide` + side seconds accumulate; `data.activeSince` (epoch ms) is when the live side started — `left`/`right` hold only *banked* seconds, the live side adds `now − activeSince` (`domain/safety.js` `breastSideTotals`). `activeSide` and `activeSince` always agree: a live side given without `activeSince` counts from `startTime` on create (`events.start('feed', { method:'breast', activeSide:'left' })`) and from *now* on edit. Switching sides is `events.update(id, { data: { activeSide } })`: without an explicit `activeSince` the old side's seconds are banked first (`switchBreastSide`). Stopping banks the live side up to `endTime`.
 - **Pump timer**: amount entered on stop.
 - **Sleep**: stop sets `endTime`.
 
@@ -143,6 +143,7 @@ On upgrade (or first v2 boot if `settings.migratedV2 !== true`):
   - `pump` → `{ type:'pump', startTime, endTime, data:{ amount: s.outputQty, unit: s.unit||'oz', storedTo: null } }`
   - `feed` → `{ type:'feed', data:{ method:'bottle', milk: s.feedType==='formula'?'formula':'breastmilk', amount: s.outputQty, unit: s.unit||'oz' } }`, `endTime = startTime + durationSec*1000` (or startTime)
   - non-finite `outputQty` (the v1.6 NaN bug) → `amount: null` and `note` "Amount wasn't recorded" so the UI shows "—" and offers edit.
+  - times v1 accepted are never a reason to drop a record (v1's edit modal takes any date): a session ending more than a day in the future is moved to **end now** (length kept), a `durationSec` over 24 h is capped, and the note gets "Time was adjusted (please check)". `runMigration()` reports `rejected` / `rejectedIds` for sessions that truly can't be migrated (unknown type, no usable time) so the UI can tell the parent.
   - auto-generated v1 notes ("Formula Feeding", "Breast Milk Bottle Feed", "Pumped session (…)") are dropped; real user notes kept.
 - v1 settings keys mapped: `dailyGoalOz`, `pumpIntervalMinutes`, `units`, `themeMode`, `soundEnabled`, `storageWindows`, `parentName`, `babyName`, `onboarding_completed` → v2 settings (§6). Junk keys (`dailyPumpingGoal`, `reminderIntervalHours`, `preferredUnit`) ignored.
 - v1 `localStorage` live timers (`nurture_active_pump_timer`, `nurture_bottle_timer`) → running events, then the keys are removed.

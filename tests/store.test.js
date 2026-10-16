@@ -9,6 +9,7 @@ import {
   EVENT_TYPES, BABY_TYPES, PARENT_TYPES, LIMITS, FUTURE_SKEW_MS, RunningActivityError, NotFoundError,
 } from '../js/core/store.js';
 import { rangeTotals } from '../js/domain/trends.js';
+import { breastSideTotals } from '../js/domain/safety.js';
 
 const NOW = new Date('2026-10-15T12:00:00').getTime();
 const BABY = 'baby_11111111-2222-3333-4444-555555555555';
@@ -248,4 +249,39 @@ test('regression: imported times far in the future are rejected; far-future crea
   // …so a real edit (now or later) is newer than any re-import of that copy.
   const edited = applyEventPatch(e, { note: 'my real edit' }, NOW);
   assert.ok(edited.updatedAt > e.updatedAt && edited.updatedAt <= NOW + 1);
+});
+
+// ---------------------------------------------------- regressions (R2) ---
+
+const breast = (data, over = {}) => sanitizeEvent({ id: 'evt_br', type: 'feed', startTime: NOW - 10 * MIN, endTime: null, babyId: BABY, createdAt: NOW - 10 * MIN, updatedAt: NOW - 10 * MIN, data: { method: 'breast', left: 0, right: 0, lastSide: 'left', ...data }, ...over }, { now: NOW, strict: true }).value;
+const sides = d => [d.left, d.right, d.activeSide, d.activeSince, d.lastSide];
+
+test('regression (R2): a breastfeed started with the §3 data shape (activeSide, no activeSince) counts from its start', () => {
+  const e = breast({ activeSide: 'left' });
+  assert.equal(e.data.activeSince, e.startTime, 'the live side started with the feed');
+  assert.equal(breastSideTotals(e.data, NOW).left, 600, '10 minutes in');
+  const done = applyEventPatch(e, { endTime: NOW }, NOW);
+  assert.deepEqual(sides(done.data), [600, 0, null, null, 'left'], 'finished: the 10 min are banked');
+  // A garbage activeSince is treated as missing, too.
+  assert.equal(breast({ activeSide: 'right', activeSince: 'soon' }).data.activeSince, NOW - 10 * MIN);
+  // With no start to count from, the side is paused (never live with a clock that can't count).
+  assert.deepEqual(sides(sanitizeEventData('feed', { method: 'breast', activeSide: 'right' }).value), [0, 0, null, null, 'right']);
+});
+
+test('regression (R2): changing data.activeSide via update banks the old side first', () => {
+  const start = NOW - 10 * MIN;
+  const running = breast({ activeSide: 'left', activeSince: start });
+  const switched = applyEventPatch(running, { data: { activeSide: 'right' } }, NOW);
+  assert.deepEqual(sides(switched.data), [600, 0, 'right', NOW, 'right'], 'left banked, right starts now');
+  const stopped = applyEventPatch(switched, { endTime: NOW + 5 * MIN }, NOW + 5 * MIN);
+  assert.deepEqual([stopped.data.left, stopped.data.right], [600, 300], 'not 0 / 900');
+  assert.deepEqual(sides(applyEventPatch(running, { data: { activeSide: null } }, NOW).data), [600, 0, null, null, 'left'], 'pause banks too');
+  assert.equal(applyEventPatch(running, { data: { activeSide: 'left' } }, NOW).data.activeSince, start, 'same side: clock untouched');
+  assert.deepEqual(sides(applyEventPatch(running, { data: { activeSide: 'right', activeSince: NOW - MIN } }, NOW).data), [0, 0, 'right', NOW - MIN, 'left'], 'an explicit activeSince is taken as given');
+  assert.deepEqual(sides(applyEventPatch(running, { data: { activeSide: 'right', left: 120 } }, NOW).data), [120, 0, 'right', NOW, 'right'], 'explicit totals still win');
+  const fin = applyEventPatch(running, { endTime: start + 4 * MIN, data: { activeSide: null } }, NOW);
+  assert.deepEqual(sides(fin.data), [240, 0, null, null, 'left'], 'pausing and finishing at once banks up to the end only');
+  // A live side stored without a clock (before this fix) counts from the edit.
+  const stuck = { ...running, data: { ...running.data, activeSince: null } };
+  assert.equal(applyEventPatch(stuck, { note: 'x' }, NOW).data.activeSince, NOW);
 });

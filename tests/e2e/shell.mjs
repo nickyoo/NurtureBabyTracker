@@ -141,16 +141,30 @@ try {
   await page.waitForSelector('[data-view="settings"]');
   await settle();
   check('avatar pushes Settings (nav hidden, chrome = screen)', await page.evaluate(() => document.body.dataset.chrome === 'screen' && document.getElementById('tabBar').inert));
+  check('the covered tab and the nav are hidden under the screen (its bottom fade can\'t show them)', await page.evaluate(() => {
+    const today = document.querySelector('[data-view="today"]');
+    return getComputedStyle(today).visibility === 'hidden' && getComputedStyle(document.getElementById('tabBar')).visibility === 'hidden';
+  }));
   await page.click('[data-view="settings"] [data-action="customize"]');
   await page.waitForFunction(() => document.querySelectorAll('[data-view="settings"]').length === 2);
   await settle();
+  check('Settings under its sub-page is hidden too', await page.evaluate(() => getComputedStyle(document.querySelectorAll('[data-view="settings"]')[0]).visibility === 'hidden'));
   await page.goBack();
   await page.waitForFunction(() => document.querySelectorAll('[data-view="settings"]').length === 1);
-  check('Back pops the sub-page', true);
+  check('Back pops the sub-page (and reveals Settings)', await page.evaluate(() => getComputedStyle(document.querySelector('[data-view="settings"]')).visibility === 'visible'));
   await page.goBack();
   await page.waitForFunction(() => !document.querySelector('[data-view="settings"]'));
   await settle();
   check('Back pops Settings to Today', await activeView() === 'today' && await page.evaluate(() => document.body.dataset.chrome === 'tabs'));
+  // In-app Back (router.back(), e.g. "‹ Today") must not ALSO trigger a
+  // browser back that leaves the app.
+  await page.click('[data-view="today"] [data-action="settings"]');
+  await page.waitForSelector('[data-view="settings"]');
+  await settle();
+  await page.click('[data-view="settings"] [data-action="back"]');
+  await page.waitForFunction(() => !document.querySelector('[data-view="settings"]'));
+  await settle(600);
+  check('in-app Back pops Settings and stays in the app', page.url().startsWith(BASE_URL) && await activeView() === 'today');
   await page.click('#tabBar [data-tab="timeline"]');
   await page.waitForSelector('[data-view="timeline"]');
   await settle();

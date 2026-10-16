@@ -15,7 +15,7 @@ import { get as getSetting, load as loadSettings, deviceId as getDeviceId, clean
 import { ID_RE, FUTURE_SKEW_MS } from './store.js';
 import {
   buildThawUpdate, summarizeStash, filterInventory, pickUseNext, buildInventoryItem,
-  applyInventoryPatch, consumeUpdate, effectiveStatus, maxExpiresAt, LOCATIONS, STATUSES,
+  applyInventoryPatch, consumeUpdate, effectiveStatus, maxExpiresAt, isPlausibleThaw, LOCATIONS, STATUSES, POUCH_LIMITS,
 } from '../domain/inventory.js';
 import { normalizeUnit, toFiniteNumber } from './units.js';
 
@@ -179,7 +179,9 @@ export async function useNext({ now = Date.now() } = {}) {
 
 /**
  * Store a new pouch. Expiry comes from the location + Settings storage
- * windows. Throws RangeError on a non-positive quantity or bad location.
+ * windows. Throws RangeError on a non-positive or absurd quantity, a bad
+ * location, or a pumpedAt before 2000 / more than a day ahead (the bounds
+ * Undo and backup import check — see POUCH_LIMITS).
  * @param {{pumpedAt?: number, quantity: number, unit?: 'oz'|'mL', location: 'room'|'fridge'|'freezer'|'deepFreezer', notes?: string}} input
  * @returns {Promise<object>}
  */
@@ -344,7 +346,12 @@ const own = (o, k) => (o !== null && typeof o === 'object' && Object.prototype.h
  * dates it by its own lifecycle stamps, so a far-future updatedAt can't win
  * every merge); and its expiresAt can never be later than the longest
  * storage window Settings allows (maxExpiresAt), so spoiled milk can't be
- * imported as usable.
+ * imported as usable. A thawedAt that can't be a real thaw of this milk
+ * (before it was pumped, or after the longest frozen window ran out — e.g.
+ * 2021 milk "thawed an hour ago") is dropped, so it can't restart the
+ * thawed-milk clock on years-old milk. The bounds are POUCH_LIMITS, the same
+ * ones the app's own writes check (domain/inventory.js), so every pouch the
+ * app stores passes here.
  * @param {unknown} raw
  * @param {{ now?: number }} [opts]
  * @returns {object|null}
@@ -356,18 +363,19 @@ export function sanitizeInventoryItem(raw, { now = Date.now() } = {}) {
   const latest = now + FUTURE_SKEW_MS;
   const time = k => {
     const n = toFiniteNumber(own(raw, k));
-    return n !== null && n >= Date.UTC(2000, 0, 1) && n <= Date.UTC(2100, 0, 1) ? n : null;
+    return n !== null && n >= POUCH_LIMITS.minTime && n <= POUCH_LIMITS.maxTime ? n : null;
   };
   const pastTime = k => {
     const t = time(k);
     return t !== null && t <= latest ? t : null;
   };
   const pumpedAt = time('pumpedAt');
-  const thawedAt = time('thawedAt');
+  let thawedAt = time('thawedAt');
   const quantity = toFiniteNumber(own(raw, 'quantity'));
   const location = own(raw, 'location');
   if (pumpedAt === null || pumpedAt > latest || (thawedAt !== null && thawedAt > latest)) return null;
-  if (quantity === null || quantity < 0 || quantity > 10000 || !LOCATIONS.includes(location)) return null;
+  if (quantity === null || quantity < 0 || quantity > POUCH_LIMITS.maxQuantity || !LOCATIONS.includes(location)) return null;
+  if (thawedAt !== null && !isPlausibleThaw(thawedAt, pumpedAt)) thawedAt = null;
   const status = STATUSES.includes(own(raw, 'status')) ? own(raw, 'status') : 'active';
   const item = {
     id,

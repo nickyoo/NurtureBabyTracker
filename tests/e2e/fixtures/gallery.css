@@ -1,0 +1,8 @@
+/* Gallery-only: simulate the reference iPhone's safe areas (47 top, 34
+   bottom) so screenshots line up with docs/design/final/frame-*.png, and
+   stand-in "photos" (the app shows real photos via <img>). Never shipped. */
+html.is-device:root { --safe-top: 47px; --safe-bottom: 34px; }
+.ph { display: block; background: linear-gradient(160deg, #E9C9B3, #C98F78 55%, #8C5A4B); }
+.print > i.ph { background: linear-gradient(160deg, #E9C9B3, #C98F78); }
+.ph-2, .print > i.ph-2 { background: linear-gradient(160deg, #D9D2C4, #A99886); }
+.ph-3, .print > i.ph-3 { background: linear-gradient(160deg, #CFE0E6, #8FB0BD); }

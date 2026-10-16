@@ -45,6 +45,7 @@ const ASSETS = [
   './icons/icon-512.png',
   './icons/icon.svg',
   './js/app.js',
+  './js/theme-boot.js',
   './js/core/audio.js',
   './js/core/backup.js',
   './js/core/db.js',

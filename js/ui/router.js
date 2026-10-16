@@ -182,7 +182,9 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
       renderViewError(section, id);
     } else {
       try {
-        const ctx = { ...getCtx(), params: params || {} };
+        // Copy descriptors, not values, so live getters (ctx.fab) stay live.
+        const ctx = Object.defineProperties({}, Object.getOwnPropertyDescriptors(getCtx()));
+        ctx.params = params || {};
         handle = mod.mount(section, ctx, params || {}) || null;
       } catch (err) {
         console.error(`view "${id}" failed to mount`, err);
@@ -274,7 +276,10 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
   }
 
   function syncHistory() {
-    if (typeof history === 'undefined') return;
+    // While a history.back() we issued is still in flight, history.state is
+    // stale (still the guard): acting on it would issue a SECOND back and
+    // leave the app. The popstate handler re-syncs once it lands.
+    if (typeof history === 'undefined' || ignorePops > 0) return;
     const want = depth() > 0;
     const onGuard = !!(history.state && history.state.nurture === 'guard');
     if (want && !onGuard) {
@@ -313,11 +318,25 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
     }
   }
 
+  // Hide what a pushed screen covers once its slide-in has finished (see
+  // .view.is-covered in base.css), and reveal it again before a pop.
+  function coverBelow(top, below, animate) {
+    if (!below) return;
+    below.section.inert = true;
+    const cover = () => { if (screens.includes(top) && screens[screens.length - 1] !== below) below.section.classList.add('is-covered'); };
+    if (animate && !motionReduced()) afterTransition(top.section, 520, cover); else cover();
+  }
+  function uncover(v) {
+    if (!v) return;
+    v.section.inert = false;
+    v.section.classList.remove('is-covered');
+  }
+
   function popScreen({ animate = true } = {}) {
     const top = screens.pop();
     if (!top) return;
     const below = screens[screens.length - 1] || tabView;
-    if (below) below.section.inert = false;
+    uncover(below);
     unmountView(top, { animateOut: animate ? 'is-leaving-right' : null });
     setChrome();
     emit();
@@ -336,7 +355,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
       while (screens.length) unmountView(screens.pop());
       if (next === tab && tabView) {
         // Tapping the active tab scrolls it back to the top.
-        tabView.section.inert = false;
+        uncover(tabView);
         tabView.section.scrollTo({ top: 0, behavior: motionReduced() ? 'auto' : 'smooth' });
         setChrome();
         updateNavCurrent();
@@ -378,10 +397,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
       const v = mountView(id, params, 'screen');
       screens.push(v);
       if (animate) enter(v.section, 'is-entering-push');
-      if (below) {
-        // let the slide finish before hiding the page underneath from AT
-        below.section.inert = true;
-      }
+      coverBelow(v, below, animate);
       setChrome();
       emit();
       syncHistory();
@@ -468,8 +484,27 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
   settings.subscribe((change) => {
     if (!change || (change.key !== 'trackers' && change.key !== '*')) return;
     renderNav();
-    if (tab && !visibleTabs(trackers()).includes(tab) && !rootView) api.go('today', { animate: false });
-    else updateNavCurrent();
+    if (tab && !visibleTabs(trackers()).includes(tab) && !rootView) {
+      if (screens.length) {
+        // Usually the parent is IN Settings → Customize when they hide the
+        // tab underneath. Keep them there: swap the hidden tab for Today
+        // beneath the screen stack, so Back lands on Today.
+        const prev = tabView;
+        scrollMemory.delete(prev.id);
+        tab = 'today';
+        tabView = mountView('today', {}, 'tab');
+        tabView.section.inert = true;
+        tabView.section.classList.add('is-covered');
+        viewport.insertBefore(tabView.section, screens[0].section);
+        unmountView(prev);
+        setChrome();
+        emit();
+        syncHistory();
+      } else {
+        api.go('today', { animate: false });
+      }
+    }
+    updateNavCurrent();
   });
 
   renderNav();

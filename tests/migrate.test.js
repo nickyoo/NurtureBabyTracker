@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sessionToEvent, mapV1Settings, liveTimersToEvents, planDefaultBaby, isAutoNote, migratedEventId, v1BabyName,
-  MISSING_AMOUNT_NOTE, LIVE_TIMER_KEYS,
+  MISSING_AMOUNT_NOTE, LIVE_TIMER_KEYS, CHECK_TIME_NOTE, MAX_SESSION_MS,
 } from '../js/core/migrate.js';
 import { DEFAULT_STORAGE_WINDOWS } from '../js/domain/inventory.js';
 
@@ -192,4 +192,48 @@ test('liveTimersToEvents: inactive, corrupt, hostile or future timers', () => {
   assert.ok(!('sourceInventoryId' in hostile.data) && !('prepared' in hostile.data));
   assert.equal(hostile.data.milk, 'formula');
   assert.equal(hostile.data.unit, 'oz', 'unit defaults to oz');
+});
+
+// ---------------------------------------------------- regressions (R2) ---
+
+test('regression (R2): v1 sessions saved in the future are kept, moved to end now, and flagged', () => {
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  // v1's edit modal accepts any date: a feed moved to the wrong day…
+  const wrongDay = sessionToEvent({ id: 'sess_wrongday', type: 'feed', feedType: 'breastmilk', startTime: NOW + 3 * DAY, endTime: NOW - 5 * HOUR, durationSec: 0, outputQty: 5, unit: 'oz', notes: 'first bottle from daddy', createdAt: NOW - 5 * HOUR, updatedAt: NOW - 4 * HOUR }, ctx);
+  assert.notEqual(wrongDay, null);
+  assert.deepEqual([wrongDay.startTime, wrongDay.endTime, wrongDay.data.amount, wrongDay.babyId], [NOW, NOW, 5, BABY]);
+  assert.equal(wrongDay.note, `first bottle from daddy — ${CHECK_TIME_NOTE}`);
+  assert.deepEqual([wrongDay.createdAt, wrongDay.updatedAt, wrongDay.migratedFrom], [NOW - 5 * HOUR, NOW - 4 * HOUR, 'sess_wrongday']);
+  // …and a pump with a year typo keep their length and amount.
+  const typo = sessionToEvent({ id: 'pump_typo', type: 'pump', startTime: Date.UTC(2062, 0, 5, 9), endTime: Date.UTC(2062, 0, 5, 9, 20), durationSec: 1200, outputQty: 6, unit: 'oz', notes: '', createdAt: NOW - 6 * HOUR, updatedAt: NOW - 6 * HOUR }, ctx);
+  assert.deepEqual([typo.startTime, typo.endTime, typo.data.amount, typo.note, typo.babyId], [NOW - 20 * MIN, NOW, 6, CHECK_TIME_NOTE, null]);
+  const both = sessionToEvent({ id: 'pump_both', type: 'pump', startTime: NOW + 5 * DAY, durationSec: 600, outputQty: NaN }, ctx);
+  assert.deepEqual([both.startTime, both.endTime, both.note], [NOW - 10 * MIN, NOW, `${CHECK_TIME_NOTE} — ${MISSING_AMOUNT_NOTE}`]);
+  // A hand-made file without (or with future) stamps: deterministic, old stamps,
+  // so re-importing it later can't beat the parent's fix in a newest-wins merge.
+  const noStamps = { id: 'sess_ns', type: 'feed', startTime: Date.UTC(2262, 0, 1), outputQty: 2, updatedAt: Date.UTC(2262, 0, 1) };
+  const first = sessionToEvent(noStamps, ctx);
+  const later = sessionToEvent(noStamps, { ...ctx, now: NOW + 3 * DAY });
+  assert.equal(first.endTime, NOW);
+  assert.deepEqual([first.createdAt, first.updatedAt], [later.createdAt, later.updatedAt]);
+  assert.ok(first.updatedAt < NOW, 'older than any real edit');
+  // Within the clock-skew allowance nothing moves.
+  const skew = sessionToEvent({ id: 'sess_skew', type: 'feed', startTime: NOW + HOUR, outputQty: 3 }, ctx);
+  assert.deepEqual([skew.startTime, skew.note], [NOW + HOUR, '']);
+});
+
+test('regression (R2): an absurd v1 duration is capped (never pushes the start before 2000), not a reason to drop the feed', () => {
+  const T = NOW - 24 * 60 * MIN;
+  const big = sessionToEvent({ id: 'sess_bigdur', type: 'feed', feedType: 'formula', startTime: T, endTime: T, durationSec: 1e12, outputQty: 4, unit: 'oz', notes: 'night feed', createdAt: T }, ctx);
+  assert.deepEqual([big.startTime, big.endTime, big.data.amount, big.note], [T - MAX_SESSION_MS, T, 4, `night feed — ${CHECK_TIME_NOTE}`]);
+  const early = sessionToEvent({ id: 'sess_y2k', type: 'feed', startTime: Date.UTC(2000, 0, 1, 6), durationSec: 86400, outputQty: 1 }, ctx);
+  assert.equal(early.startTime, Date.UTC(2000, 0, 1));
+  // A pump whose endTime a v1 start-time edit left behind uses its recorded duration (no note: v1 showed that).
+  const moved = sessionToEvent({ id: 'pump_moved', type: 'pump', startTime: T - 3 * 24 * 60 * MIN, endTime: T, durationSec: 1200, outputQty: 3 }, ctx);
+  assert.deepEqual([moved.endTime - moved.startTime, moved.note], [20 * MIN, '']);
+  const junkDur = sessionToEvent({ id: 'pump_ok', type: 'pump', startTime: T, endTime: T + 20 * MIN, durationSec: 1e12, outputQty: 3 }, ctx);
+  assert.deepEqual([junkDur.endTime, junkDur.note], [T + 20 * MIN, ''], 'a good endTime wins over a junk duration');
+  // Still unmigratable: no usable time at all.
+  assert.equal(sessionToEvent({ id: 'sess_1970', type: 'feed', startTime: 5, outputQty: 1 }, ctx), null);
 });

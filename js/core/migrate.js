@@ -16,7 +16,7 @@
 // and reused rather than adding a second one.
 
 import { transaction, STORES } from './db.js';
-import { sanitizeEvent, notifyEvents, ID_RE } from './store.js';
+import { sanitizeEvent, notifyEvents, ID_RE, FUTURE_SKEW_MS, MIN_TIME } from './store.js';
 import {
   deviceId as getDeviceId, get as getSetting, reload as reloadSettings, sanitizeSetting, makeBaby, cleanText, NAME_MAX,
 } from './settings.js';
@@ -24,6 +24,13 @@ import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from './units
 
 /** Note put on events whose v1 amount was NaN/null (the v1.6 NaN-pump bug). */
 export const MISSING_AMOUNT_NOTE = 'Amount wasn’t recorded';
+/** Note put on events whose v1 time had to be moved (saved in the future, or
+ * an impossible length) so the parent knows to check it. */
+export const CHECK_TIME_NOTE = 'Time was adjusted (please check)';
+/** Longest a v1 feed or pump can have lasted; a longer durationSec is junk. */
+export const MAX_SESSION_MS = 24 * 3600 * 1000;
+/** How many rejected v1 session ids runMigration reports (the count is exact). */
+const MAX_REPORTED_IDS = 50;
 
 /** v1 localStorage keys for live timers. */
 export const LIVE_TIMER_KEYS = Object.freeze({
@@ -81,6 +88,13 @@ export function migratedEventId(s) {
  * start with a real endTime, so they map directly.
  *
  * Feeds go to `babyId` (the default baby); pumps always get babyId null.
+ *
+ * Times v1 accepted are never a reason to drop the record (v1's edit modal
+ * takes any date, and v1 kept and showed it): a session whose end lies more
+ * than FUTURE_SKEW_MS ahead (a wrong day, a year typo) is moved to END NOW,
+ * keeping its length; a durationSec over MAX_SESSION_MS is capped (and a
+ * start before MIN_TIME raised to it). Either way the note gets
+ * CHECK_TIME_NOTE so the parent can fix the time.
  * @param {object} s v1 session
  * @param {{ deviceId?: string, now?: number, babyId?: string }} [ctx]
  * @returns {object|null}
@@ -91,35 +105,60 @@ export function sessionToEvent(s, { deviceId, now = Date.now(), babyId } = {}) {
   if (type !== 'pump' && type !== 'feed') return null;
   const stamp = toFiniteNumber(own(s, 'startTime'));
   if (stamp === null) return null;
-  const durSec = Math.max(0, toFiniteNumber(own(s, 'durationSec')) ?? 0);
+  const rawDurMs = Math.max(0, toFiniteNumber(own(s, 'durationSec')) ?? 0) * 1000;
+  const durMs = Math.min(rawDurMs, MAX_SESSION_MS);
+  const durCapped = rawDurMs > MAX_SESSION_MS;
+  let timeFixed = false;
   const unit = normalizeUnit(own(s, 'unit') || 'oz');
   const qty = toFiniteNumber(own(s, 'outputQty'));
   const amount = qty !== null && qty >= 0 ? qty : null;
 
   const rawNote = typeof own(s, 'notes') === 'string' ? own(s, 'notes').trim() : '';
   const userNote = isAutoNote(rawNote) ? '' : rawNote;
-  const note = amount === null
-    ? (userNote ? `${userNote} — ${MISSING_AMOUNT_NOTE}` : MISSING_AMOUNT_NOTE)
-    : userNote;
 
   let startTime;
   let endTime;
   let data;
   if (type === 'pump') {
     startTime = stamp;
+    // v1 edits move startTime but leave endTime alone unless the duration
+    // changes too, so an endTime that isn't a plausible end falls back to
+    // the recorded duration.
     const end = toFiniteNumber(own(s, 'endTime'));
-    endTime = end !== null && end >= stamp ? end : stamp + durSec * 1000;
+    if (end !== null && end >= stamp && end - stamp <= MAX_SESSION_MS) endTime = end;
+    else { endTime = stamp + durMs; timeFixed = durCapped; }
     data = { amount, unit, storedTo: null };
   } else {
     endTime = stamp;
-    startTime = stamp - durSec * 1000;
+    startTime = stamp - durMs;
+    timeFixed = durCapped;
     data = { method: 'bottle', milk: own(s, 'feedType') === 'formula' ? 'formula' : 'breastmilk', amount, unit };
     const m = PREPARED_NOTE.exec(rawNote);
     if (m) data.prepared = roundForUnit(convertQty(Number(m[1]), normalizeUnit(m[2]), unit), unit);
   }
+  const latest = now + FUTURE_SKEW_MS;
+  const moved = endTime > latest;
+  if (moved) {
+    // Saved in the future: it happened, just not then. End it now.
+    startTime = now - (endTime - startTime);
+    endTime = now;
+    timeFixed = true;
+  }
+  if (startTime < MIN_TIME && endTime >= MIN_TIME) { startTime = MIN_TIME; timeFixed = true; }
 
-  const createdAt = toFiniteNumber(own(s, 'createdAt')) ?? stamp;
-  const updatedAt = toFiniteNumber(own(s, 'updatedAt')) ?? createdAt;
+  const note = [userNote, timeFixed ? CHECK_TIME_NOTE : '', amount === null ? MISSING_AMOUNT_NOTE : '']
+    .filter(Boolean).join(' — ');
+
+  // A moved session's times depend on WHEN it is migrated/imported, so its
+  // stamps must not: re-importing the same v1 file must never beat the
+  // parent's later fix in a newest-wins merge. (v1 always stamped createdAt;
+  // this only matters for hand-made files.)
+  const ownStamp = k => {
+    const t = toFiniteNumber(own(s, k));
+    return moved && t !== null && t > latest ? null : t;
+  };
+  const createdAt = ownStamp('createdAt') ?? (moved ? MIN_TIME : stamp);
+  const updatedAt = ownStamp('updatedAt') ?? createdAt;
   const res = sanitizeEvent({
     id: migratedEventId(s),
     type,
@@ -272,8 +311,12 @@ function safeStorage(storage) {
 /**
  * Run the v1 → v2 migration once (idempotent; safe to call on every boot,
  * and it MUST be awaited before views mount). Also loads settings.
+ * `rejected` counts the v1 sessions that could not be migrated at all (not a
+ * feed/pump, or no usable time) and `rejectedIds` lists up to 50 of their
+ * v1 ids, so the UI can tell the parent instead of losing them silently.
+ * (They stay in the read-only v1 `sessions` store.)
  * @param {{ storage?: Storage, now?: number }} [opts] storage defaults to localStorage
- * @returns {Promise<{ skipped: boolean, events: number, settings: string[], liveTimers: number, babyId?: string }>}
+ * @returns {Promise<{ skipped: boolean, events: number, rejected: number, rejectedIds: string[], settings: string[], liveTimers: number, babyId?: string }>}
  */
 export async function runMigration({ storage, now = Date.now() } = {}) {
   const deviceId = await getDeviceId(); // also loads settings
@@ -281,7 +324,7 @@ export async function runMigration({ storage, now = Date.now() } = {}) {
     const flag = s.settings.get('migratedV2');
     flag.onsuccess = () => {
       if (flag.result && flag.result.value === true) {
-        ctx.done({ skipped: true, events: 0, settings: [] });
+        ctx.done({ skipped: true, events: 0, rejected: 0, rejectedIds: [], settings: [] });
         return;
       }
       const sessionsReq = s.sessions.getAll();
@@ -304,9 +347,17 @@ export async function runMigration({ storage, now = Date.now() } = {}) {
 
         const existing = new Set(keysReq.result);
         let added = 0;
+        let rejected = 0;
+        const rejectedIds = [];
         for (const session of sessionsReq.result || []) {
           const ev = sessionToEvent(session, { deviceId, now, babyId });
-          if (!ev || existing.has(ev.id)) continue;
+          if (!ev) {
+            rejected += 1;
+            const sid = own(session, 'id');
+            if (rejectedIds.length < MAX_REPORTED_IDS) rejectedIds.push(typeof sid === 'string' ? sid.slice(0, 100) : String(sid).slice(0, 100));
+            continue;
+          }
+          if (existing.has(ev.id)) continue;
           existing.add(ev.id);
           s.events.put(ev);
           added += 1;
@@ -322,7 +373,7 @@ export async function runMigration({ storage, now = Date.now() } = {}) {
         }
         s.settings.put({ key: 'migratedV2', value: true, updatedAt: now });
         written.push('migratedV2');
-        ctx.done({ skipped: false, events: added, settings: written, babyId });
+        ctx.done({ skipped: false, events: added, rejected, rejectedIds, settings: written, babyId });
       };
     };
   });

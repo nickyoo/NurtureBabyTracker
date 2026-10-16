@@ -175,16 +175,25 @@ export function switchUnit(value, fromUnit, toUnit) {
   return clampAmount(convertQty(value, fromUnit, to), cfg.min, Number.MAX_SAFE_INTEGER, cfg.fineStep);
 }
 
+/** Longest string toFiniteNumber will parse. Import runs it on every number
+ * in an untrusted file, so a huge "number" must be rejected in O(1). */
+export const MAX_NUMBER_STRING = 64;
+// Unambiguous: every digit can belong to exactly one quantifier, so a long
+// run of digits ending in garbage fails in linear time (the old
+// `\d+\.?\d*` tried every split of the run — quadratic, seconds for 40 KB).
+const NUMBER_RE = /^\s*[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?\s*$/;
+
 /**
  * Strict number coercion used across the data layer: finite numbers and
  * plain numeric strings only. Booleans, '', arrays, objects → null (so
- * `Number(true) === 1` style accidents can't sneak in).
+ * `Number(true) === 1` style accidents can't sneak in). Strings longer than
+ * MAX_NUMBER_STRING → null.
  * @param {unknown} v
  * @returns {number|null}
  */
 export function toFiniteNumber(v) {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
-  if (typeof v === 'string' && /^\s*[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/.test(v)) {
+  if (typeof v === 'string' && v.length <= MAX_NUMBER_STRING && NUMBER_RE.test(v)) {
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }

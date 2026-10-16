@@ -181,6 +181,13 @@ html.is-theme-switching *::after {
 .view-screen.is-entering-push { transform: translateX(100%); transition: none; }
 .view-screen.is-leaving-right { transform: translateX(100%); transition: transform var(--dur-base) var(--ease-in); pointer-events: none; }
 
+/* Whatever a pushed screen covers is hidden once the slide-in ends
+   (router.js adds .is-covered; the nav hides after --dur-base). Otherwise
+   the screen's bottom fade (mask-image makes its own background
+   transparent) would show the tab and the nav through it. */
+.view.is-covered { visibility: hidden; }
+body[data-chrome="screen"] #tabBar { visibility: hidden; transition: visibility 0s linear var(--dur-base); }
+
 /* Reduced motion: no transform motion; a short cross-fade instead. The
    token block in tokens.css zeroes --move-*; these cover the non-token
    100% slides. */

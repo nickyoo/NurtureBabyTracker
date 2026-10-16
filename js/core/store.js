@@ -84,9 +84,14 @@ function seconds(v) {
 /**
  * Validate + normalise per-type `data`. Builds a NEW object from known keys
  * only, so unknown keys (including __proto__/constructor) never survive.
+ * Breastfeeding: activeSide and activeSince always agree. A live side with
+ * no usable activeSince has been running since `startTime` (the §3 shape
+ * `{ activeSide }` alone starts the clock with the feed); with no startTime
+ * either, the side is paused (it becomes lastSide) rather than left live
+ * with a clock that can never count.
  * @param {string} type
  * @param {unknown} data
- * @param {{ startTime?: number }} [ctx] used to default sleep.kind
+ * @param {{ startTime?: number }} [ctx] used to default sleep.kind and breast activeSince
  * @returns {{ ok: true, value: object } | { ok: false, error: string }}
  */
 export function sanitizeEventData(type, data, { startTime } = {}) {
@@ -103,7 +108,12 @@ export function sanitizeEventData(type, data, { startTime } = {}) {
           activeSide: side(own(d, 'activeSide')),
         };
         const since = toFiniteNumber(own(d, 'activeSince'));
-        out.activeSince = out.activeSide && isTime(since) ? since : null;
+        const start = toFiniteNumber(startTime);
+        out.activeSince = !out.activeSide ? null : isTime(since) ? since : isTime(start) ? start : null;
+        if (out.activeSide && out.activeSince === null) {
+          out.lastSide = out.activeSide;
+          out.activeSide = null;
+        }
         return { ok: true, value: out };
       }
       const out = {
@@ -253,6 +263,10 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false,
  * babyId — "this was actually the other twin"), merge `data` one level deep,
  * bump updatedAt. id/type/createdAt/deviceId are immutable (changing type
  * would orphan the data); a pump's babyId stays null. Pure; throws on invalid.
+ * Breastfeeding: a patch that changes data.activeSide without its own
+ * activeSince is a side switch/pause — the old side's seconds are banked
+ * first (switchBreastSide) and the new side counts from `now`. A live side
+ * that still has no activeSince after the merge counts from `now`.
  * @param {object} event
  * @param {object} patch
  * @param {number} [now]
@@ -263,7 +277,26 @@ export function applyEventPatch(event, patch, now = Date.now()) {
   if (own(p, 'type') !== undefined && own(p, 'type') !== event.type) throw new TypeError('An event\'s type cannot change');
   const merged = { ...event };
   for (const k of ['startTime', 'endTime', 'note', 'babyId']) if (own(p, k) !== undefined) merged[k] = own(p, k);
-  if (isPlainObject(own(p, 'data'))) merged.data = { ...event.data, ...own(p, 'data') };
+  const pData = own(p, 'data');
+  if (isPlainObject(pData)) {
+    const prev = isPlainObject(event.data) ? event.data : {};
+    const sideOf = v => (v === 'left' || v === 'right' ? v : null);
+    const switching = prev.method === 'breast' && own(pData, 'activeSide') !== undefined
+      && own(pData, 'activeSince') === undefined && sideOf(own(pData, 'activeSide')) !== sideOf(prev.activeSide);
+    // Banked up to now — or to the end, when the same patch finishes it
+    // earlier. Explicit keys in the patch (e.g. corrected totals) still win,
+    // as in stop().
+    const end = toFiniteNumber(merged.endTime);
+    const at = end !== null ? Math.min(now, end) : now;
+    merged.data = switching
+      ? { ...prev, ...switchBreastSide(prev, sideOf(own(pData, 'activeSide')), at), ...pData }
+      : { ...prev, ...pData };
+  }
+  const md = merged.data;
+  if (isPlainObject(md) && md.method === 'breast' && (md.activeSide === 'left' || md.activeSide === 'right')
+    && !isTime(toFiniteNumber(md.activeSince))) {
+    merged.data = { ...md, activeSince: now };
+  }
   // Strictly increasing, so merge-by-updatedAt always sees an edit as newer
   // even when two edits land in the same millisecond.
   merged.updatedAt = Math.max(now, (event.updatedAt || 0) + 1);

@@ -164,6 +164,7 @@ SUITES.migration = async () => {
     report = await runMigration();
     eq(report.skipped, false, 'first run not skipped');
     eq(report.events, 6, '6 migratable sessions (unknown type skipped)');
+    eq([report.rejected, report.rejectedIds], [1, ['bot_zzz']], 'the skipped session is reported, not silently lost');
     eq(report.liveTimers, 2, 'pump + bottle live timers');
     ok(bulk.includes('bulk'), 'events bus announced a bulk change');
   });
@@ -1121,6 +1122,129 @@ SUITES['import-guards'] = async () => {
     let called = false;
     const fresh = await backup.importBackup(file({ events: [], settings: { parentName: 'Eve' } }), { mode: 'replace', safetyBackup: () => { called = true; } });
     eq([called, fresh.safetyBackup], [false, null], 'a fresh device has nothing to protect');
+  });
+};
+
+// ------------------------------------------------- regressions (round 2)
+
+// v1's edit modal accepts any date and v1 kept + showed such records, so the
+// migration must keep them too (moved to end now, flagged) and report what
+// it truly could not migrate.
+SUITES['migration-v1-edits'] = async () => {
+  const sessions = [
+    { id: 'sess_ok', type: 'feed', feedType: 'formula', startTime: NOW - 2 * HOUR, endTime: NOW - 2 * HOUR, durationSec: 0, outputQty: 4, unit: 'oz', notes: 'Formula Feeding', createdAt: NOW - 2 * HOUR },
+    { id: 'sess_wrongday', type: 'feed', feedType: 'breastmilk', startTime: NOW + 3 * DAY, endTime: NOW - 5 * HOUR, durationSec: 0, outputQty: 5, unit: 'oz', notes: 'first bottle from daddy', createdAt: NOW - 5 * HOUR, updatedAt: NOW - 4 * HOUR },
+    { id: 'pump_typo', type: 'pump', startTime: Date.UTC(2062, 0, 5, 9), endTime: Date.UTC(2062, 0, 5, 9, 20), durationSec: 1200, outputQty: 6, unit: 'oz', notes: '', createdAt: NOW - 6 * HOUR, updatedAt: NOW - 6 * HOUR },
+    { id: 'sess_bigdur', type: 'feed', feedType: 'formula', startTime: NOW - DAY, endTime: NOW - DAY, durationSec: 1e12, outputQty: 4, unit: 'oz', notes: 'night feed', createdAt: NOW - DAY },
+    { id: 'sess_nostart', type: 'feed', feedType: 'formula', outputQty: 2, unit: 'oz', notes: '' },
+  ];
+  const db = await rawOpen(1, v1Schema);
+  await rawTx(db, ['sessions', 'settings'], 'readwrite', (tx) => {
+    for (const x of sessions) tx.objectStore('sessions').put(x);
+    tx.objectStore('settings').put({ key: 'babyName', value: 'Clara', updatedAt: NOW - DAY });
+  });
+  db.close();
+  const { runMigration, CHECK_TIME_NOTE } = await import('../../../js/core/migrate.js');
+  const { events } = await import('../../../js/core/store.js');
+
+  await test('future-dated and absurd-length v1 sessions are migrated, moved to end now and flagged; the rest is reported', async () => {
+    const before = Date.now();
+    const report = await runMigration();
+    eq([report.events, report.rejected, report.rejectedIds], [4, 1, ['sess_nostart']]);
+    const all = await events.query();
+    eq(all.map(e => e.migratedFrom).sort(), ['pump_typo', 'sess_bigdur', 'sess_ok', 'sess_wrongday']);
+    const by = id => all.find(e => e.migratedFrom === id);
+    const wrong = by('sess_wrongday');
+    ok(wrong.endTime >= before && wrong.endTime <= Date.now(), 'the wrong-day feed ends now');
+    eq([wrong.data.amount, wrong.note], [5, `first bottle from daddy — ${CHECK_TIME_NOTE}`]);
+    const typo = by('pump_typo');
+    eq([typo.endTime - typo.startTime, typo.data.amount, typo.note, typo.babyId], [20 * MIN, 6, CHECK_TIME_NOTE, null]);
+    ok(typo.endTime <= Date.now(), 'the 2062 pump is not in the future');
+    const big = by('sess_bigdur');
+    eq([big.endTime - big.startTime, big.note], [DAY, `night feed — ${CHECK_TIME_NOTE}`]);
+    eq((await events.last('feed')).migratedFrom, 'sess_wrongday', 'shows as the latest feed, where the parent can fix it');
+  });
+};
+
+SUITES['data-invariants-r2'] = async () => {
+  const { events } = await import('../../../js/core/store.js');
+  const { stash } = await import('../../../js/core/stash.js');
+  const backup = await import('../../../js/core/backup.js');
+  const settings = await import('../../../js/core/settings.js');
+  await settings.load();
+  const file = over => JSON.stringify({ app: 'nurture', schema: 2, ...over });
+
+  await test('stash.add/update refuse a pumpedAt that Undo and import would refuse; nothing is stored', async () => {
+    for (const pumpedAt of [Date.now() + 3 * DAY, 0, Date.UTC(2062, 0, 1)]) {
+      await rejects(stash.add({ quantity: 5, unit: 'oz', location: 'freezer', pumpedAt }), e => e instanceof RangeError, `pumpedAt ${pumpedAt}`);
+    }
+    await rejects(stash.add({ quantity: 1e6, unit: 'oz', location: 'freezer' }), e => e instanceof RangeError, 'absurd quantity');
+    eq((await stash.list({ filter: 'everything' })).length, 0, 'nothing stored');
+    const p = await stash.add({ quantity: 5, unit: 'oz', location: 'freezer', pumpedAt: Date.now() - HOUR });
+    await rejects(stash.update(p.id, { pumpedAt: Date.now() + 3 * DAY }), e => e instanceof RangeError, 'update');
+    await rejects(stash.update(p.id, { expiresAt: Date.UTC(2099, 0, 1) }), e => e instanceof RangeError, 'expiry past the longest window');
+    eq((await stash.get(p.id)).pumpedAt, p.pumpedAt, 'unchanged');
+  });
+
+  await test('every pouch the app stores survives Undo (remove/markUsed → restore) and its own backup', async () => {
+    const skewed = await stash.add({ quantity: 4, unit: 'oz', location: 'fridge', pumpedAt: Date.now() + 20 * HOUR, notes: 'partner phone clock' });
+    const byKey = o => Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1)));
+    const removed = await stash.remove(skewed.id);
+    eq(byKey(await stash.restore(removed)), byKey(skewed), 'remove → Undo');
+    const before = await stash.get(skewed.id);
+    await stash.markUsed(skewed.id);
+    eq((await stash.restore(before)).status, 'active', 'markUsed → Undo');
+    const thawed = await stash.thaw((await stash.list({ filter: 'frozen' }))[0].id);
+    eq(byKey(await stash.restore(await stash.remove(thawed.id))), byKey(thawed), 'thawed pouch: remove → Undo');
+    const json = JSON.stringify(await backup.exportBackup());
+    const ids = (await stash.list({ filter: 'everything' })).map(i => i.id).sort();
+    const res = await backup.importBackup(json, { mode: 'replace', safetyBackup: () => {} });
+    eq([res.stats.rejected.inventory, res.warnings], [0, []], 'nothing dropped');
+    eq((await stash.list({ filter: 'everything' })).map(i => i.id).sort(), ids, 'every pouch restored');
+  });
+
+  await test('a breastfeed started with the §3 shape (activeSide only) records its time', async () => {
+    const start = Date.now() - 10 * MIN;
+    const ev = await events.start('feed', { method: 'breast', left: 0, right: 0, lastSide: 'left', activeSide: 'left' }, { startTime: start });
+    eq([ev.data.activeSide, ev.data.activeSince], ['left', start], 'the live side counts from the start');
+    const done = await events.stop(ev.id);
+    ok(done.data.left >= 600 && done.data.left < 620, `left = ${done.data.left}`);
+    eq([done.data.right, done.data.activeSide], [0, null]);
+  });
+
+  await test('switching sides with update({ data: { activeSide } }) credits each side its own time', async () => {
+    const start = Date.now() - 10 * MIN;
+    const ev = await events.start('feed', { method: 'breast', activeSide: 'left', activeSince: start }, { startTime: start });
+    const switched = await events.update(ev.id, { data: { activeSide: 'right' } });
+    ok(switched.data.left >= 600 && switched.data.left < 620, `left banked: ${switched.data.left}`);
+    eq(switched.data.activeSide, 'right');
+    const done = await events.stop(ev.id);
+    ok(done.data.left >= 600 && done.data.left < 620 && done.data.right < 20, `stopped: ${JSON.stringify(done.data)}`);
+  });
+
+  await test('an imported "thawed an hour ago" pouch of years-old milk is never offered as the next feed', async () => {
+    const res = await backup.importBackup(file({ inventory: [{ id: 'inv_ancient', pumpedAt: Date.UTC(2021, 0, 1), quantity: 4, unit: 'oz', location: 'thawed', thawedAt: Date.now() - HOUR, expiresAt: Date.now() + 2 * DAY, status: 'active' }] }), { mode: 'merge' });
+    eq(res.stats.inventory.added, 1, 'kept as a record');
+    const next = await stash.useNext();
+    ok(!next || next.id !== 'inv_ancient', `not the next feed (${next && next.id})`);
+    ok(!(await stash.thawed()).some(x => x.id === 'inv_ancient'), 'not listed as thawed milk');
+    eq((await stash.get('inv_ancient')).status, 'expired', 'swept as expired');
+  });
+
+  await test('a 120 KB backup full of huge numeric-looking strings imports in well under a second', async () => {
+    const huge = `${'1'.repeat(30000)}x`;
+    const good = { id: 'evt_good', type: 'diaper', startTime: Date.now() - HOUR, data: { kind: 'wet' } };
+    const text = file({ events: [good, ...Array.from({ length: 4 }, (_, i) => ({ id: `evt_${i}`, type: 'diaper', startTime: huge, data: { kind: 'wet' } }))] });
+    ok(text.length > 120000, `${text.length} bytes`);
+    let t0 = performance.now();
+    const res = await backup.importBackup(new File([text], 'b.json', { type: 'application/json' }), { mode: 'merge' });
+    let ms = performance.now() - t0;
+    ok(ms < 1000, `records: ${ms.toFixed(0)} ms`);
+    eq([res.stats.events.added, res.stats.rejected.events], [1, 4]);
+    t0 = performance.now();
+    await rejects(backup.importBackup(new File([JSON.stringify({ app: 'nurture', schema: `${'1'.repeat(120000)}x` })], 'c.json'), { mode: 'merge' }), e => e.name === 'BackupError');
+    ms = performance.now() - t0;
+    ok(ms < 1000, `schema: ${ms.toFixed(0)} ms`);
   });
 };
 

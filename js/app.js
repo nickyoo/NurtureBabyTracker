@@ -1,5 +1,6 @@
 // Nurture v2 bootstrap (ARCHITECTURE §2, §5.2, §8). Bootstrap ONLY:
-//   1. theme on <html> before first paint (from a per-device cache)
+//   1. theme on <html> before first paint: js/theme-boot.js (a blocking
+//      classic script) does it from the per-device cache this file keeps
 //   2. service worker
 //   3. await runMigration()  (opens the v2 DB, migrates v1, loads settings)
 //   4. baby-photo app icon, theme + motion from settings
@@ -30,7 +31,7 @@ import { format } from './ui/format.js';
 
 // ------------------------------------------------------------------ theme
 
-const THEME_CACHE_KEY = 'nurture.theme';     // per-device: last applied theme, for first paint
+const THEME_PREF_KEY = 'nurture.themePref'; // per-device copy of settings.theme, read by js/theme-boot.js
 const MOTION_CACHE_KEY = 'nurture.motion';   // per-device: last applied motion preference
 const NIGHT_START_HOUR = 19;                 // ARCHITECTURE §6: night hours 19:00–08:00
 const NIGHT_END_HOUR = 8;
@@ -39,9 +40,6 @@ const BG = Object.freeze({ light: '#F6F1E8', dark: '#191512' }); // = --bg (toke
 const root = document.documentElement;
 const darkQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
 
-function storageGet(key) {
-  try { return localStorage.getItem(key); } catch { return null; }
-}
 function storageSet(key, value) {
   try { localStorage.setItem(key, value); } catch { /* private mode: fine */ }
 }
@@ -82,11 +80,12 @@ function applyTheme(theme, { animate = true } = {}) {
   }
   root.setAttribute('data-theme', theme);
   for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute('content', BG[theme]);
-  storageSet(THEME_CACHE_KEY, theme);
 }
 
 function applyThemeFromSettings(animate = true) {
-  applyTheme(resolveTheme(settings.get('theme')), { animate });
+  const pref = settings.get('theme');
+  storageSet(THEME_PREF_KEY, pref);
+  applyTheme(resolveTheme(pref), { animate });
 }
 
 /** In-app Reduce motion: true → 'reduce', false → 'full', unset → follow the system. */
@@ -97,14 +96,10 @@ function applyMotion(pref) {
   storageSet(MOTION_CACHE_KEY, pref === true ? 'reduce' : pref === false ? 'full' : '');
 }
 
-// First paint: base.css keeps #app hidden until data-theme exists, so set it
-// right now from the cache (or the clock/system), before any await.
-(() => {
-  const cached = storageGet(THEME_CACHE_KEY);
-  root.setAttribute('data-theme', cached === 'light' || cached === 'dark' ? cached : resolveTheme('auto'));
-  const motion = storageGet(MOTION_CACHE_KEY);
-  if (motion === 'reduce' || motion === 'full') root.setAttribute('data-motion', motion);
-})();
+// First paint: js/theme-boot.js already set data-theme / data-motion from
+// the cache. If it couldn't run (e.g. a stale cached index.html), resolve
+// now so base.css's paint gate (#app hidden until data-theme) still lifts.
+if (!root.hasAttribute('data-theme')) root.setAttribute('data-theme', resolveTheme('auto'));
 
 // -------------------------------------------------------------- app icon
 
