@@ -1,6 +1,6 @@
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
-const root = '/home/user/NurtureBabyTracker/docs/design';
+const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 const out = root + '/final'; mkdirSync(out, { recursive: true });
 const only = process.argv[2];
 const b = await chromium.launch();

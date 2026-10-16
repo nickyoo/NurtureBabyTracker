@@ -1,6 +1,6 @@
 // Computes WCAG 2.1 contrast for every token pair Nurture uses, read straight from css/tokens.css.
 import { readFileSync } from 'node:fs';
-const css = readFileSync(process.argv[2] || '/home/user/NurtureBabyTracker/css/tokens.css', 'utf8');
+const css = readFileSync(process.argv[2] || new URL('../../../css/tokens.css', import.meta.url), 'utf8');
 function block(selStart) {
   const i = css.indexOf(selStart); const open = css.indexOf('{', i); let depth = 0, j = open;
   for (; j < css.length; j++) { if (css[j] === '{') depth++; else if (css[j] === '}') { depth--; if (!depth) break; } }
