@@ -3,21 +3,32 @@
 // Everything that happened is an event in the `events` store. A RUNNING
 // activity (live bottle, breastfeeding, pump timer, sleep) is simply an event
 // with `endTime: null`, so it survives reloads with no localStorage, and at
-// most one runs per type. Every write emits a change after its transaction
-// commits; views subscribe and re-render instead of calling each other.
+// most one runs per type PER BABY (twins can nap at the same time; pumping is
+// the parent's, so there is one running pump). Every write emits a change
+// after its transaction commits; views subscribe and re-render instead of
+// calling each other.
+//
+// Multiple babies (§3): feed/sleep/diaper/milestone events carry the babyId
+// of the child they're about; pump events carry babyId: null. add()/start()
+// default to the active baby, so a view that never thinks about twins still
+// writes correct data.
 //
 // The pure half (sanitizeEvent / applyEventPatch) is shared with
 // core/backup.js, so an imported file goes through exactly the same schema
 // as an event the app creates itself.
 
 import { transaction, getAll, get as dbGet, newId, STORES } from './db.js';
-import { deviceId as getDeviceId, cleanText } from './settings.js';
+import { deviceId as getDeviceId, cleanText, get as getSetting, BABY_ID_RE } from './settings.js';
 import { normalizeUnit, toFiniteNumber } from './units.js';
 import { classifyNapOrNight } from '../domain/sleep.js';
 import { switchBreastSide } from '../domain/safety.js';
 
 /** Event types (ARCHITECTURE §3). */
 export const EVENT_TYPES = Object.freeze(['feed', 'pump', 'sleep', 'diaper', 'milestone']);
+/** Types that are about one child and carry a babyId. */
+export const BABY_TYPES = Object.freeze(['feed', 'sleep', 'diaper', 'milestone']);
+/** Parent-level types (babyId is always null). */
+export const PARENT_TYPES = Object.freeze(['pump']);
 /** String caps — import is a trust boundary (AUDIT §6.5). */
 export const LIMITS = Object.freeze({ note: 2000, title: 200, short: 40, key: 60, photoIds: 20, amount: 10000, sideSec: 24 * 3600 });
 /** Plausible timestamp range; anything outside is corrupt or hostile. */
@@ -29,11 +40,12 @@ const DIAPER_KINDS = ['wet', 'dirty', 'both', 'dry'];
 const STORED_TO = ['fridge', 'freezer', 'deepFreezer'];
 const MILESTONE_KEY_RE = /^[a-z0-9][a-z0-9-]{0,59}$/;
 
-/** Thrown by start()/add()/restore() when that type already has a running event. */
+/** Thrown by start()/add()/restore() when that type already has a running
+ * event for the same baby (or, for pumps, at all). */
 export class RunningActivityError extends Error {
   /** @param {object} running the event that is already running */
   constructor(running) {
-    super(`A ${running.type} is already running`);
+    super(`A ${running.type} is already running${running.babyId ? ' for this baby' : ''}`);
     this.name = 'RunningActivityError';
     this.running = running;
   }
@@ -149,13 +161,17 @@ export function sanitizeEventData(type, data, { startTime } = {}) {
 
 /**
  * Validate + normalise a whole event record. Pure. Output contains only the
- * §3 keys. `strict` (app writes) rejects endTime < startTime; lenient
- * (imports) clamps it.
+ * §3 keys. `strict` (app writes) rejects endTime < startTime and a missing
+ * babyId; lenient (imports, undo) clamps the time and falls back to
+ * `defaultBabyId` for a baby-level event without one. (With no default
+ * either, babyId stays null: the event then shows for every baby rather than
+ * being dropped — import must never lose data.) Pump events always get
+ * babyId: null.
  * @param {unknown} raw
- * @param {{ now?: number, deviceId?: string, strict?: boolean }} [opts]
+ * @param {{ now?: number, deviceId?: string, strict?: boolean, defaultBabyId?: string }} [opts]
  * @returns {{ ok: true, value: object } | { ok: false, error: string }}
  */
-export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false } = {}) {
+export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false, defaultBabyId } = {}) {
   if (!isPlainObject(raw)) return { ok: false, error: 'event must be an object' };
   const type = own(raw, 'type');
   if (!EVENT_TYPES.includes(type)) return { ok: false, error: `unknown event type: ${String(type).slice(0, 40)}` };
@@ -179,6 +195,14 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false 
   const data = sanitizeEventData(type, own(raw, 'data'), { startTime });
   if (!data.ok) return data;
 
+  let babyId = null;
+  if (BABY_TYPES.includes(type)) {
+    const b = own(raw, 'babyId');
+    if (typeof b === 'string' && BABY_ID_RE.test(b)) babyId = b;
+    else if (strict) return { ok: false, error: `a ${type} needs a babyId` };
+    else if (typeof defaultBabyId === 'string' && BABY_ID_RE.test(defaultBabyId)) babyId = defaultBabyId;
+  }
+
   const createdAt = toFiniteNumber(own(raw, 'createdAt'));
   const updatedAt = toFiniteNumber(own(raw, 'updatedAt'));
   const event = {
@@ -190,6 +214,7 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false 
     data: data.value,
     createdAt: isTime(createdAt) ? createdAt : now,
     updatedAt: 0,
+    babyId,
     deviceId: undefined,
   };
   event.updatedAt = isTime(updatedAt) ? updatedAt : event.createdAt;
@@ -203,9 +228,10 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false 
 }
 
 /**
- * Apply an edit: shallow-merge top-level fields (startTime, endTime, note),
- * merge `data` one level deep, bump updatedAt. id/type/createdAt/deviceId are
- * immutable (changing type would orphan the data). Pure; throws on invalid.
+ * Apply an edit: shallow-merge top-level fields (startTime, endTime, note,
+ * babyId — "this was actually the other twin"), merge `data` one level deep,
+ * bump updatedAt. id/type/createdAt/deviceId are immutable (changing type
+ * would orphan the data); a pump's babyId stays null. Pure; throws on invalid.
  * @param {object} event
  * @param {object} patch
  * @param {number} [now]
@@ -215,7 +241,7 @@ export function applyEventPatch(event, patch, now = Date.now()) {
   const p = isPlainObject(patch) ? patch : {};
   if (own(p, 'type') !== undefined && own(p, 'type') !== event.type) throw new TypeError('An event\'s type cannot change');
   const merged = { ...event };
-  for (const k of ['startTime', 'endTime', 'note']) if (own(p, k) !== undefined) merged[k] = own(p, k);
+  for (const k of ['startTime', 'endTime', 'note', 'babyId']) if (own(p, k) !== undefined) merged[k] = own(p, k);
   if (isPlainObject(own(p, 'data'))) merged.data = { ...event.data, ...own(p, 'data') };
   // Strictly increasing, so merge-by-updatedAt always sees an edit as newer
   // even when two edits land in the same millisecond.
@@ -234,6 +260,23 @@ export function applyEventPatch(event, patch, now = Date.now()) {
 export function compareNewestFirst(a, b) {
   return (b.startTime - a.startTime) || ((b.createdAt || 0) - (a.createdAt || 0)) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 }
+
+/**
+ * Does `event` belong in a view of `babyId`? undefined → every event; a baby
+ * id → that baby's events plus parent-level ones (pumps, babyId null); null →
+ * parent-level only. Pure.
+ * @param {object} event
+ * @param {string|null|undefined} babyId
+ * @returns {boolean}
+ */
+export function matchesBaby(event, babyId) {
+  if (babyId === undefined) return true;
+  const b = event && event.babyId !== undefined ? event.babyId : null;
+  return babyId === null ? b === null : (b === babyId || b === null);
+}
+
+// Same (type, baby) slot → at most one running event in it.
+const sameSlot = (a, b) => a.type === b.type && (a.babyId ?? null) === (b.babyId ?? null);
 
 // -------------------------------------------------------------- change bus
 
@@ -279,11 +322,13 @@ export async function get(id) {
  *    whose [startTime, endTime ?? now] touches the window (night sleeps that
  *    began yesterday)
  *  - running: true → only running, false → only finished
+ *  - babyId: that baby's events + parent-level (pump) events; null → only
+ *    parent-level (see matchesBaby)
  *  - limit: max results
- * @param {{type?: string, types?: string[], from?: number, to?: number, running?: boolean, overlap?: boolean, limit?: number}} [q]
+ * @param {{type?: string, types?: string[], from?: number, to?: number, running?: boolean, overlap?: boolean, babyId?: string|null, limit?: number}} [q]
  * @returns {Promise<object[]>}
  */
-export async function query({ type, types, from, to, running, overlap = false, limit } = {}) {
+export async function query({ type, types, from, to, running, overlap = false, babyId, limit } = {}) {
   const lo = Number.isFinite(from) && !overlap ? from : -Infinity;
   const hi = Number.isFinite(to) ? to : Infinity;
   let rows;
@@ -299,6 +344,7 @@ export async function query({ type, types, from, to, running, overlap = false, l
     if (typeSet && !typeSet.has(e.type)) return false;
     if (running === true && e.endTime !== null) return false;
     if (running === false && e.endTime === null) return false;
+    if (!matchesBaby(e, babyId)) return false;
     if (overlap && Number.isFinite(from)) {
       const end = e.endTime === null ? Infinity : e.endTime;
       if (!(e.startTime >= from || end > from)) return false;
@@ -310,12 +356,14 @@ export async function query({ type, types, from, to, running, overlap = false, l
 
 /**
  * Most recent FINISHED event of a type (by startTime), optionally matching a
- * synchronous predicate. Walks the index backwards, so it's cheap.
+ * synchronous predicate and/or a baby (see matchesBaby). Walks the index
+ * backwards, so it's cheap.
  * @param {string} type
  * @param {(e: object) => boolean} [predicate]
+ * @param {{ babyId?: string|null }} [opts]
  * @returns {Promise<object|null>}
  */
-export function last(type, predicate) {
+export function last(type, predicate, { babyId } = {}) {
   return transaction(STORES.events, 'readonly', (s, ctx) => {
     const range = IDBKeyRange.bound([type, -Infinity], [type, Infinity]);
     const req = s.events.index('type_startTime').openCursor(range, 'prev');
@@ -324,7 +372,7 @@ export function last(type, predicate) {
       const cur = req.result;
       if (!cur) return;
       const e = cur.value;
-      let match = e.endTime !== null;
+      let match = e.endTime !== null && matchesBaby(e, babyId);
       if (match && predicate) {
         try { match = !!predicate(e); } catch (err) { ctx.fail(err); return; }
       }
@@ -336,21 +384,24 @@ export function last(type, predicate) {
 
 /**
  * Running events (endTime === null), oldest first — so live pills keep their
- * order when another activity starts.
+ * order when another activity starts. Optionally for one baby (+ the
+ * parent's running pump).
  * @param {string} [type]
+ * @param {{ babyId?: string|null }} [opts]
  * @returns {Promise<object[]>}
  */
-export async function running(type) {
+export async function running(type, { babyId } = {}) {
   const rows = typeof type === 'string'
     ? await getAll(STORES.events, { index: 'type', query: type })
     : await getAll(STORES.events);
-  return rows.filter(e => e.endTime === null).sort((a, b) => (a.startTime - b.startTime) || (a.createdAt - b.createdAt));
+  return rows.filter(e => e.endTime === null && matchesBaby(e, babyId))
+    .sort((a, b) => (a.startTime - b.startTime) || (a.createdAt - b.createdAt));
 }
 
 // ------------------------------------------------------------------ writes
 
-// Insert/put inside one transaction that ALSO checks the one-running-per-type
-// rule, so two quick taps (or two tabs) can't both start a timer.
+// Insert/put inside one transaction that ALSO checks the one-running-per-
+// type-per-baby rule, so two quick taps (or two tabs) can't both start a timer.
 function writeWithRunningGuard(event, { overwrite }) {
   return transaction(STORES.events, 'readwrite', (s, ctx) => {
     const write = () => {
@@ -360,24 +411,34 @@ function writeWithRunningGuard(event, { overwrite }) {
     if (event.endTime !== null) { write(); return; }
     const q = s.events.index('type').getAll(event.type);
     q.onsuccess = () => {
-      const other = q.result.find(e => e.endTime === null && e.id !== event.id);
+      const other = q.result.find(e => e.endTime === null && e.id !== event.id && sameSlot(e, event));
       if (other) ctx.fail(new RunningActivityError(other));
       else write();
     };
   });
 }
 
+// App writes may only point at a baby that exists (a stale id from an old
+// sheet would otherwise create events no view can ever show).
+function assertKnownBaby(event) {
+  if (event.babyId === null) return;
+  const known = getSetting('babies').some(b => b.id === event.babyId);
+  if (!known) throw new RangeError('Unknown babyId');
+}
+
 /**
- * Create an event. id/createdAt/updatedAt/deviceId are filled in. endTime
- * defaults to startTime (an instant); pass endTime: null to create a running
- * event (prefer start()). Throws RangeError on invalid input and
- * RunningActivityError if that type is already running.
- * @param {{type: string, startTime?: number, endTime?: number|null, note?: string, data?: object}} input
+ * Create an event. id/createdAt/updatedAt/deviceId are filled in; babyId
+ * defaults to the active baby for feed/sleep/diaper/milestone and is always
+ * null for pump. endTime defaults to startTime (an instant); pass endTime:
+ * null to create a running event (prefer start()). Throws RangeError on
+ * invalid input (incl. an unknown babyId) and RunningActivityError if that
+ * type is already running for that baby.
+ * @param {{type: string, startTime?: number, endTime?: number|null, note?: string, data?: object, babyId?: string}} input
  * @returns {Promise<object>} the stored event
  */
 export async function add(input) {
   const now = Date.now();
-  const deviceId = await getDeviceId();
+  const deviceId = await getDeviceId(); // also loads settings (babies)
   const raw = isPlainObject(input) ? input : {};
   const res = sanitizeEvent({
     type: own(raw, 'type'),
@@ -385,10 +446,12 @@ export async function add(input) {
     endTime: own(raw, 'endTime'),
     note: own(raw, 'note'),
     data: own(raw, 'data'),
+    babyId: own(raw, 'babyId') ?? getSetting('activeBabyId'),
     id: newId('evt'),
     createdAt: now,
     updatedAt: now,
   }, { now, deviceId, strict: true });
+  if (res.ok) assertKnownBaby(res.value);
   if (!res.ok) throw new RangeError(res.error);
   const event = await writeWithRunningGuard(res.value, { overwrite: false });
   notifyEvents({ op: 'add', event });
@@ -403,19 +466,25 @@ export async function add(input) {
  */
 export async function update(id, patch) {
   const now = Date.now();
+  await getDeviceId(); // settings loaded, so a babyId change can be checked
   const { prev, next } = await transaction(STORES.events, 'readwrite', (s, ctx) => {
     const g = s.events.get(id);
     g.onsuccess = () => {
       const prevEvent = g.result;
       if (!prevEvent) { ctx.fail(new NotFoundError(id)); return; }
       let nextEvent;
-      try { nextEvent = applyEventPatch(prevEvent, patch, now); } catch (err) { ctx.fail(err); return; }
+      try {
+        nextEvent = applyEventPatch(prevEvent, patch, now);
+        if (nextEvent.babyId !== prevEvent.babyId) assertKnownBaby(nextEvent);
+      } catch (err) { ctx.fail(err); return; }
       const finish = () => { s.events.put(nextEvent); ctx.done({ prev: prevEvent, next: nextEvent }); };
-      if (nextEvent.endTime !== null || prevEvent.endTime === null) { finish(); return; }
-      // Re-opening a finished event: same one-running rule as start().
+      const movedSlot = nextEvent.babyId !== prevEvent.babyId;
+      if (nextEvent.endTime !== null || (prevEvent.endTime === null && !movedSlot)) { finish(); return; }
+      // Re-opening a finished event, or moving a running one to another
+      // baby: same one-running rule as start().
       const q = s.events.index('type').getAll(nextEvent.type);
       q.onsuccess = () => {
-        const other = q.result.find(e => e.endTime === null && e.id !== id);
+        const other = q.result.find(e => e.endTime === null && e.id !== id && sameSlot(e, nextEvent));
         if (other) ctx.fail(new RunningActivityError(other)); else finish();
       };
     };
@@ -458,16 +527,17 @@ export async function restore(event) {
 }
 
 /**
- * Start a running activity of `type`. Throws RunningActivityError (with
- * `.running`) if one of that type is already running — the UI can offer to
+ * Start a running activity of `type` (for `babyId`, default the active baby;
+ * pumps are the parent's). Throws RunningActivityError (with `.running`) if
+ * one of that type is already running for that baby — the UI can offer to
  * open it instead.
  * @param {string} type
  * @param {object} [data]
- * @param {{ startTime?: number, note?: string }} [opts]
+ * @param {{ startTime?: number, note?: string, babyId?: string }} [opts]
  * @returns {Promise<object>}
  */
-export function start(type, data = {}, { startTime, note } = {}) {
-  return add({ type, data, note, startTime: startTime ?? Date.now(), endTime: null });
+export function start(type, data = {}, { startTime, note, babyId } = {}) {
+  return add({ type, data, note, babyId, startTime: startTime ?? Date.now(), endTime: null });
 }
 
 /**
@@ -507,4 +577,4 @@ export async function stop(id, patch = {}) {
 }
 
 /** The events API as one object, for ctx injection (ARCHITECTURE §4). */
-export const events = Object.freeze({ add, update, remove, restore, get, query, last, running, start, stop, subscribe, TYPES: EVENT_TYPES });
+export const events = Object.freeze({ add, update, remove, restore, get, query, last, running, start, stop, subscribe, matchesBaby, TYPES: EVENT_TYPES });

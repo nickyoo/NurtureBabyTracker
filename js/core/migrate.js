@@ -8,10 +8,18 @@
 //  - v1 data is never deleted (the `sessions` store stays, read-only).
 // Live timers are a separate idempotent step that runs on every boot, so a
 // crash between "event written" and "localStorage key removed" self-heals.
+//
+// Babies (§3): v1 tracked one child. Migration puts every v1 feed (and the
+// live bottle) on ONE default baby named from the v1 `babyName`; pumps are
+// the parent's and get babyId: null. settings.load() may already have
+// created an unnamed default baby on this boot — if so, that baby is named
+// and reused rather than adding a second one.
 
 import { transaction, STORES } from './db.js';
 import { sanitizeEvent, notifyEvents, ID_RE } from './store.js';
-import { deviceId as getDeviceId, get as getSetting, reload as reloadSettings, sanitizeSetting } from './settings.js';
+import {
+  deviceId as getDeviceId, get as getSetting, reload as reloadSettings, sanitizeSetting, makeBaby, cleanText, NAME_MAX,
+} from './settings.js';
 import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from './units.js';
 
 /** Note put on events whose v1 amount was NaN/null (the v1.6 NaN-pump bug). */
@@ -71,11 +79,13 @@ export function migratedEventId(s) {
  * durationSec earlier. (Adding the duration instead would push the end of
  * every timed bottle into the future.) Pumps were stamped at the timer's
  * start with a real endTime, so they map directly.
+ *
+ * Feeds go to `babyId` (the default baby); pumps always get babyId null.
  * @param {object} s v1 session
- * @param {{ deviceId?: string, now?: number }} [ctx]
+ * @param {{ deviceId?: string, now?: number, babyId?: string }} [ctx]
  * @returns {object|null}
  */
-export function sessionToEvent(s, { deviceId, now = Date.now() } = {}) {
+export function sessionToEvent(s, { deviceId, now = Date.now(), babyId } = {}) {
   if (s === null || typeof s !== 'object') return null;
   const type = own(s, 'type');
   if (type !== 'pump' && type !== 'feed') return null;
@@ -119,23 +129,15 @@ export function sessionToEvent(s, { deviceId, now = Date.now() } = {}) {
     data,
     createdAt,
     updatedAt,
+    babyId,
     deviceId,
     migratedFrom: typeof own(s, 'id') === 'string' ? own(s, 'id') : undefined,
   }, { now, deviceId });
   return res.ok ? res.value : null;
 }
 
-/**
- * Map v1 settings to v2 keys (pure). Accepts the v1 `settings` store as an
- * array of { key, value } records or as a { key: value } map. Only keys that
- * were present AND valid come out. Junk keys v1's onboarding wrote by mistake
- * (dailyPumpingGoal, reminderIntervalHours, preferredUnit — AUDIT F3) are
- * ignored on purpose.
- * @param {object[]|object} v1
- * @returns {object} partial v2 settings
- */
-export function mapV1Settings(v1) {
-  const map = {};
+function v1SettingsMap(v1) {
+  const map = Object.create(null);
   if (Array.isArray(v1)) {
     for (const r of v1) {
       const k = own(r, 'key');
@@ -144,6 +146,37 @@ export function mapV1Settings(v1) {
   } else if (v1 && typeof v1 === 'object') {
     for (const k of Object.keys(v1)) map[k] = v1[k];
   }
+  return map;
+}
+
+/**
+ * The v1 baby's name (pure): trimmed, capped, and '' for v1's 'Baby'
+ * placeholder, which was never a real name.
+ * @param {object[]|object} v1 the v1 settings (records or map)
+ * @returns {string}
+ */
+export function v1BabyName(v1) {
+  const raw = v1SettingsMap(v1).babyName;
+  const name = cleanText(raw, NAME_MAX).trim();
+  return name.toLowerCase() === 'baby' ? '' : name;
+}
+
+/**
+ * Map v1 settings to v2 keys (pure). Accepts the v1 `settings` store as an
+ * array of { key, value } records or as a { key: value } map. Only keys that
+ * were present AND valid come out. Junk keys v1's onboarding wrote by mistake
+ * (dailyPumpingGoal, reminderIntervalHours, preferredUnit — AUDIT F3) are
+ * ignored on purpose.
+ *
+ * With `babyId`, the result also carries `babies` (one baby, named from the
+ * v1 babyName) and `activeBabyId`. Without it, babies are left to the caller
+ * (runMigration reuses a default baby that may already exist).
+ * @param {object[]|object} v1
+ * @param {{ babyId?: string, now?: number }} [ctx]
+ * @returns {object} partial v2 settings
+ */
+export function mapV1Settings(v1, { babyId, now = Date.now() } = {}) {
+  const map = v1SettingsMap(v1);
   const has = k => Object.prototype.hasOwnProperty.call(map, k);
   const out = {};
   const put = (key, value) => {
@@ -158,11 +191,10 @@ export function mapV1Settings(v1) {
   // (silent at night, AUDIT §4); anyone who turned it off stays off.
   if (has('soundEnabled')) put('sound', map.soundEnabled === false ? 'off' : 'night-off');
   if (has('storageWindows')) put('storageWindows', map.storageWindows);
-  if (has('parentName') || has('babyName')) {
-    // v1 used 'Baby' as a placeholder name; treat it as unset.
-    const baby = typeof map.babyName === 'string' && map.babyName.trim().toLowerCase() !== 'baby' ? map.babyName.trim() : '';
-    const parent = typeof map.parentName === 'string' ? map.parentName.trim() : '';
-    put('profile', { babyName: baby, parentName: parent, birthDate: null, photoId: null });
+  if (has('parentName')) put('parentName', typeof map.parentName === 'string' ? map.parentName : '');
+  if (typeof babyId === 'string') {
+    put('babies', [{ id: babyId, name: v1BabyName(map), birthDate: null, photoId: null, createdAt: Number.isFinite(now) ? now : null }]);
+    if (out.babies) out.activeBabyId = babyId;
   }
   if (has('onboarding_completed')) put('onboarded', map.onboarding_completed === true);
   return out;
@@ -177,12 +209,13 @@ function parseJson(raw) {
  * v1 localStorage live timers → RUNNING v2 events (pure). Inputs are the raw
  * localStorage strings (or null). Amounts are unknown until the activity is
  * stopped, so they start null; the bottle's prepared amount (canonical oz in
- * v1) is converted to the user's unit.
+ * v1) is converted to the user's unit. The bottle belongs to `babyId`; the
+ * pump to the parent (null).
  * @param {{ pump?: string|null, bottle?: string|null }} raw
- * @param {{ deviceId?: string, now?: number, unit?: 'oz'|'mL' }} [ctx]
+ * @param {{ deviceId?: string, now?: number, unit?: 'oz'|'mL', babyId?: string }} [ctx]
  * @returns {object[]}
  */
-export function liveTimersToEvents({ pump, bottle } = {}, { deviceId, now = Date.now(), unit = 'oz' } = {}) {
+export function liveTimersToEvents({ pump, bottle } = {}, { deviceId, now = Date.now(), unit = 'oz', babyId } = {}) {
   const u = normalizeUnit(unit);
   const out = [];
   const p = parseJson(pump);
@@ -218,6 +251,7 @@ export function liveTimersToEvents({ pump, bottle } = {}, { deviceId, now = Date
       startTime: Math.min(bottleStart, now),
       endTime: null,
       data,
+      babyId,
       createdAt: now,
       updatedAt: now,
     }, { now, deviceId });
@@ -239,7 +273,7 @@ function safeStorage(storage) {
  * Run the v1 → v2 migration once (idempotent; safe to call on every boot,
  * and it MUST be awaited before views mount). Also loads settings.
  * @param {{ storage?: Storage, now?: number }} [opts] storage defaults to localStorage
- * @returns {Promise<{ skipped: boolean, events: number, settings: string[], liveTimers: number }>}
+ * @returns {Promise<{ skipped: boolean, events: number, settings: string[], liveTimers: number, babyId?: string }>}
  */
 export async function runMigration({ storage, now = Date.now() } = {}) {
   const deviceId = await getDeviceId(); // also loads settings
@@ -255,19 +289,30 @@ export async function runMigration({ storage, now = Date.now() } = {}) {
       const keysReq = s.events.getAllKeys();
       keysReq.onsuccess = () => {
         // All three requests resolve in order within the transaction.
+        const records = settingsReq.result || [];
+        const byKey = new Map(records.filter(r => r && typeof r.key === 'string').map(r => [r.key, r.value]));
+        const written = [];
+        const { babies, babyId, changed } = planDefaultBaby(byKey.get('babies'), byKey.get('activeBabyId'), v1BabyName(records), now);
+        if (changed) {
+          s.settings.put({ key: 'babies', value: babies, updatedAt: now });
+          written.push('babies');
+        }
+        if (byKey.get('activeBabyId') !== babyId) {
+          s.settings.put({ key: 'activeBabyId', value: babyId, updatedAt: now });
+          written.push('activeBabyId');
+        }
+
         const existing = new Set(keysReq.result);
         let added = 0;
         for (const session of sessionsReq.result || []) {
-          const ev = sessionToEvent(session, { deviceId, now });
+          const ev = sessionToEvent(session, { deviceId, now, babyId });
           if (!ev || existing.has(ev.id)) continue;
           existing.add(ev.id);
           s.events.put(ev);
           added += 1;
         }
-        const records = settingsReq.result || [];
-        const present = new Set(records.map(r => r && r.key));
+        const present = new Set(byKey.keys());
         const mapped = mapV1Settings(records);
-        const written = [];
         for (const [key, value] of Object.entries(mapped)) {
           // Never clobber a v2 value (v1 and v2 share some key names, e.g.
           // units/storageWindows/pumpIntervalMinutes, with the same meaning).
@@ -277,18 +322,47 @@ export async function runMigration({ storage, now = Date.now() } = {}) {
         }
         s.settings.put({ key: 'migratedV2', value: true, updatedAt: now });
         written.push('migratedV2');
-        ctx.done({ skipped: false, events: added, settings: written });
+        ctx.done({ skipped: false, events: added, settings: written, babyId });
       };
     };
   });
 
   if (!report.skipped) await reloadSettings();
-  const liveTimers = await migrateLiveTimers({ storage, now, deviceId });
+  const liveTimers = await migrateLiveTimers({ storage, now, deviceId, babyId: getSetting('activeBabyId') });
   if (report.events > 0 || liveTimers > 0) notifyEvents({ op: 'bulk' });
   return { ...report, liveTimers };
 }
 
-async function migrateLiveTimers({ storage, now, deviceId }) {
+/**
+ * Which baby the v1 data goes to (pure). Reuses a valid stored babies list —
+ * naming its only baby from v1 if that baby is still unnamed (the default
+ * settings.load() creates) — or creates the default baby. `babyId` is the
+ * stored activeBabyId when it names one of the babies, else the first baby.
+ * @param {unknown} storedBabies
+ * @param {unknown} storedActiveId
+ * @param {string} v1Name
+ * @param {number} [now]
+ * @returns {{ babies: object[], babyId: string, changed: boolean }}
+ */
+export function planDefaultBaby(storedBabies, storedActiveId, v1Name, now = Date.now()) {
+  const res = sanitizeSetting('babies', storedBabies, { lenient: true });
+  let babies;
+  let changed = false;
+  if (res.ok) {
+    babies = res.value;
+    if (v1Name && babies.length === 1 && !babies[0].name) {
+      babies = [{ ...babies[0], name: v1Name }];
+      changed = true;
+    }
+  } else {
+    babies = [makeBaby({ name: v1Name }, now)];
+    changed = true;
+  }
+  const babyId = babies.some(b => b.id === storedActiveId) ? storedActiveId : babies[0].id;
+  return { babies, babyId, changed };
+}
+
+async function migrateLiveTimers({ storage, now, deviceId, babyId }) {
   const store = safeStorage(storage);
   if (!store) return 0;
   let raw;
@@ -301,7 +375,7 @@ async function migrateLiveTimers({ storage, now, deviceId }) {
     return 0;
   }
   if (!raw.pump && !raw.bottle) return 0;
-  const candidates = liveTimersToEvents(raw, { deviceId, now, unit: getSetting('units') });
+  const candidates = liveTimersToEvents(raw, { deviceId, now, unit: getSetting('units'), babyId });
   const added = await transaction(STORES.events, 'readwrite', (s, ctx) => {
     let count = 0;
     ctx.done(0);
@@ -310,8 +384,8 @@ async function migrateLiveTimers({ storage, now, deviceId }) {
       const rows = all.result || [];
       for (const ev of candidates) {
         if (rows.some(e => e.id === ev.id)) continue;
-        // One running per type: a v2 activity already running wins.
-        if (rows.some(e => e.type === ev.type && e.endTime === null)) continue;
+        // One running per type per baby: a v2 activity already running wins.
+        if (rows.some(e => e.type === ev.type && e.endTime === null && (e.babyId ?? null) === ev.babyId)) continue;
         s.events.put(ev);
         rows.push(ev);
         count += 1;

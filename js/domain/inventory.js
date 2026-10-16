@@ -364,9 +364,11 @@ export function applyInventoryPatch(item, patch, storageWindows, now = Date.now(
 
 /**
  * Consume `amount` (in `amountUnit`) from a pouch after a feed. Using all of
- * it (within ~1.5 mL) marks it used; a partial use leaves the remainder in the
- * pouch, rounded in the pouch's own unit. Returns null when nothing changes
- * (unusable pouch, missing/zero amount).
+ * it (within 0.1 oz ≈ 3 mL) marks it used; a partial use leaves the remainder
+ * in the pouch, rounded in the pouch's own unit. The tolerance absorbs
+ * oz↔mL rounding: a "120 mL" pouch fed as "4 oz" (118.3 mL) must not leave a
+ * 2 mL ghost pouch that someone has to discard by hand. Returns null when
+ * nothing changes (unusable pouch, missing/zero amount).
  * @param {object} item
  * @param {unknown} amount
  * @param {unknown} amountUnit
@@ -379,7 +381,7 @@ export function consumeUpdate(item, amount, amountUnit, now = Date.now()) {
   if (n === null || n <= 0) return null;
   const unit = normalizeUnit(item.unit);
   const used = convertQty(n, amountUnit, unit);
-  const tolerance = convertQty(0.05, 'oz', unit);
+  const tolerance = convertQty(0.1, 'oz', unit);
   if (used >= item.quantity - tolerance) {
     return { ...item, status: 'used', usedAt: now, updatedAt: now };
   }

@@ -1,14 +1,18 @@
-// Settings + profile + tracker visibility (ARCHITECTURE §6).
+// Settings, babies, parent profile + tracker visibility (ARCHITECTURE §6).
 //
 // Values live in the `settings` store as { key, value, updatedAt } and are
 // cached in memory after `load()`, so `get()` is synchronous and views can
 // render without awaiting. app.js must `await settings.load()` (directly or
 // via migrate.runMigration) before mounting views; before that, get() returns
-// defaults.
+// defaults (and an empty babies list).
 //
 // Every known key has a sanitizer. set() throws on a bad value (a UI bug we
 // want to see); reads and imports fall back to the default instead, so a
 // corrupt or hostile stored value can never reach the UI as-is.
+//
+// Babies: there is always at least one. load() creates a default (unnamed)
+// baby once per install, exactly like deviceId, so every feed/sleep/diaper/
+// milestone event always has a real babyId to point at (§3 "Multiple babies").
 
 import { transaction, getAll, STORES, newId } from './db.js';
 import { DEFAULT_STORAGE_WINDOWS } from '../domain/inventory.js';
@@ -18,10 +22,21 @@ import { toFiniteNumber } from './units.js';
 export const TRACKER_KEYS = Object.freeze(['bottle', 'formula', 'breastfeeding', 'pump', 'stash', 'sleep', 'diaper', 'memories']);
 /** Cards on Today, in their default order. */
 export const TODAY_CARDS = Object.freeze(['feed', 'sleep', 'diaper', 'pump', 'stash']);
+/** 'baby_<uuid>' — the id format for babies (events reference it as babyId). */
+export const BABY_ID_RE = /^baby_[A-Za-z0-9_-]{1,90}$/;
+/** Twins, triplets, siblings… a family-sized cap so a hostile list stays small. */
+export const MAX_BABIES = 12;
+/** Max length of a baby's or parent's name. */
+export const NAME_MAX = 100;
 
 /** §6 defaults. Treat as read-only; get() hands out copies. */
 export const DEFAULTS = deepFreeze({
-  profile: { babyName: '', birthDate: null, photoId: null, parentName: '' },
+  babies: [],            // load() guarantees ≥ 1 (generated once per install)
+  activeBabyId: null,    // get() falls back to the first baby
+  parentName: '',
+  lastBackupAt: null,    // drives the weekly backup nudge (§10b)
+  persistGranted: null,  // result of navigator.storage.persist()
+  feedbackEmail: '',     // owner-configured mailto target (no tracking)
   units: 'oz',
   theme: 'auto',
   trackers: Object.fromEntries(TRACKER_KEYS.map(k => [k, true])),
@@ -36,9 +51,13 @@ export const DEFAULTS = deepFreeze({
   iconDataUrl: null, // §10: 180×180 PNG of the baby photo for apple-touch-icon
 });
 
-/** Keys a backup may carry. deviceId / migratedV2 are per-install state;
- * iconDataUrl is per-device and derived from the photo. */
-export const EXPORTABLE_KEYS = Object.freeze(['profile', 'units', 'theme', 'trackers', 'todayOrder', 'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound', 'onboarded']);
+/** Keys a backup may carry. deviceId / migratedV2 / lastBackupAt /
+ * persistGranted are per-install state; iconDataUrl is per-device and derived
+ * from the photo; feedbackEmail is the app owner's, not the family's. */
+export const EXPORTABLE_KEYS = Object.freeze([
+  'babies', 'activeBabyId', 'parentName', 'units', 'theme', 'trackers', 'todayOrder',
+  'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound', 'onboarded',
+]);
 
 const STORAGE_WINDOW_RANGES = Object.freeze({
   roomTempHours: [1, 24],
@@ -51,10 +70,16 @@ const STORAGE_WINDOW_RANGES = Object.freeze({
 
 const ID_RE = /^[A-Za-z0-9_.:-]{1,100}$/;
 const KEY_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
+// Deliberately narrow: this ends up in a mailto: href, so no '?', '&', '#',
+// quotes, angle brackets or whitespace can ride along.
+const EMAIL_RE = /^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]{1,63}(\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,24}$/;
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const MIN_TIME = Date.UTC(2000, 0, 1);
+const MAX_TIME = Date.UTC(2100, 0, 1);
 
 const own = (o, k) => (o !== null && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined);
 const isPlainObject = v => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isTime = n => typeof n === 'number' && Number.isFinite(n) && n >= MIN_TIME && n <= MAX_TIME;
 const fail = error => ({ ok: false, error });
 const pass = value => ({ ok: true, value });
 
@@ -73,24 +98,92 @@ export function cleanText(v, max) {
 }
 
 /**
- * Validate one setting. Pure.
+ * 'YYYY-MM-DD' that is a real calendar date.
+ * @param {string} s
+ * @returns {boolean}
+ */
+export function isValidDateString(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const y = Number(m[1]); const mo = Number(m[2]); const d = Number(m[3]);
+  if (y < 1900 || y > 2200) return false;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
+/**
+ * Validate one baby record ({ id, name, birthDate, photoId, createdAt }).
+ * Builds a NEW object from known keys only. Strict (app writes) rejects any
+ * present-but-invalid field; lenient (stored values, imports) replaces it
+ * with its default so one bad field can't drop a whole child from the list.
+ * @param {unknown} raw
+ * @param {{ lenient?: boolean }} [opts]
+ * @returns {{id:string, name:string, birthDate:string|null, photoId:string|null, createdAt:number|null}|null}
+ */
+export function sanitizeBaby(raw, { lenient = false } = {}) {
+  if (!isPlainObject(raw)) return null;
+  const id = own(raw, 'id');
+  if (typeof id !== 'string' || !BABY_ID_RE.test(id)) return null;
+  const name = own(raw, 'name');
+  const birth = own(raw, 'birthDate');
+  const photo = own(raw, 'photoId');
+  const created = toFiniteNumber(own(raw, 'createdAt'));
+  const nameOk = name === undefined || typeof name === 'string';
+  const birthOk = birth === undefined || birth === null || (typeof birth === 'string' && isValidDateString(birth));
+  const photoOk = photo === undefined || photo === null || (typeof photo === 'string' && ID_RE.test(photo));
+  const createdOk = own(raw, 'createdAt') === undefined || own(raw, 'createdAt') === null || isTime(created);
+  if (!lenient && !(nameOk && birthOk && photoOk && createdOk)) return null;
+  return {
+    id,
+    name: cleanText(name, NAME_MAX).trim(),
+    birthDate: birthOk && typeof birth === 'string' ? birth : null,
+    photoId: photoOk && typeof photo === 'string' ? photo : null,
+    createdAt: isTime(created) ? created : null,
+  };
+}
+
+/**
+ * Validate one setting. Pure. `lenient` is for reads and imports: list-like
+ * values drop bad entries instead of failing outright.
  * @param {string} key
  * @param {unknown} value
+ * @param {{ lenient?: boolean }} [opts]
  * @returns {{ ok: true, value: any } | { ok: false, error: string }}
  */
-export function sanitizeSetting(key, value) {
+export function sanitizeSetting(key, value, { lenient = false } = {}) {
   switch (key) {
-    case 'profile': {
-      if (!isPlainObject(value)) return fail('profile must be an object');
-      const birth = own(value, 'birthDate');
-      const photo = own(value, 'photoId');
-      return pass({
-        babyName: cleanText(own(value, 'babyName'), 100),
-        birthDate: typeof birth === 'string' && isValidDateString(birth) ? birth : null,
-        photoId: typeof photo === 'string' && ID_RE.test(photo) ? photo : null,
-        parentName: cleanText(own(value, 'parentName'), 100),
-      });
+    case 'babies': {
+      if (!Array.isArray(value)) return fail('babies must be a list');
+      if (!lenient && value.length > MAX_BABIES) return fail(`at most ${MAX_BABIES} babies`);
+      const out = [];
+      const seen = new Set();
+      for (const raw of value.slice(0, lenient ? 1000 : MAX_BABIES)) {
+        const b = sanitizeBaby(raw, { lenient });
+        if (!b) {
+          if (!lenient) return fail('invalid baby');
+          continue;
+        }
+        if (seen.has(b.id)) {
+          if (!lenient) return fail('duplicate baby id');
+          continue;
+        }
+        seen.add(b.id);
+        out.push(b);
+        if (out.length === MAX_BABIES) break;
+      }
+      return out.length ? pass(out) : fail('babies must list at least one baby');
     }
+    case 'activeBabyId':
+      return typeof value === 'string' && BABY_ID_RE.test(value) ? pass(value) : fail('bad activeBabyId');
+    case 'parentName':
+      return typeof value === 'string' ? pass(cleanText(value, NAME_MAX).trim()) : fail('parentName must be text');
+    case 'lastBackupAt':
+      return value === null || isTime(value) ? pass(value) : fail('lastBackupAt must be a timestamp or null');
+    case 'persistGranted':
+      return value === null || typeof value === 'boolean' ? pass(value) : fail('persistGranted must be boolean or null');
+    case 'feedbackEmail':
+      return value === '' || (typeof value === 'string' && value.length <= 254 && EMAIL_RE.test(value))
+        ? pass(value) : fail('feedbackEmail must be an email address');
     case 'units': return value === 'oz' || value === 'mL' ? pass(value) : fail('units must be oz or mL');
     case 'theme': return ['auto', 'light', 'dark'].includes(value) ? pass(value) : fail('theme must be auto, light or dark');
     case 'sound': return ['on', 'off', 'night-off'].includes(value) ? pass(value) : fail('sound must be on, off or night-off');
@@ -135,17 +228,13 @@ export function sanitizeSetting(key, value) {
 }
 
 /**
- * 'YYYY-MM-DD' that is a real calendar date.
- * @param {string} s
- * @returns {boolean}
+ * A fresh, unnamed baby record (onboarding fills in the name).
+ * @param {{ name?: string, birthDate?: string|null, photoId?: string|null }} [fields]
+ * @param {number} [now]
+ * @returns {{id:string, name:string, birthDate:string|null, photoId:string|null, createdAt:number}}
  */
-export function isValidDateString(s) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return false;
-  const y = Number(m[1]); const mo = Number(m[2]); const d = Number(m[3]);
-  if (y < 1900 || y > 2200) return false;
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+export function makeBaby({ name = '', birthDate = null, photoId = null } = {}, now = Date.now()) {
+  return { id: newId('baby'), name: cleanText(name, NAME_MAX).trim(), birthDate, photoId, createdAt: now };
 }
 
 // ------------------------------------------------------------------ state
@@ -166,8 +255,8 @@ function emit(change) {
 }
 
 /**
- * Load every stored setting into memory (idempotent) and make sure this
- * install has a deviceId. Resolves with all().
+ * Load every stored setting into memory (idempotent), and make sure this
+ * install has a deviceId and at least one baby. Resolves with all().
  * @returns {Promise<object>}
  */
 export function load() {
@@ -176,7 +265,7 @@ export function load() {
       const records = await getAll(STORES.settings);
       cache.clear();
       for (const r of records) if (r && typeof r.key === 'string') cache.set(r.key, r.value);
-      await ensureDeviceId();
+      await ensureInstallState();
       return all();
     })();
     loadPromise.catch(() => { loadPromise = null; });
@@ -196,22 +285,38 @@ export async function reload() {
   return values;
 }
 
-// Get-or-create in ONE readwrite transaction, so two tabs (or two callers
-// racing on first boot) can't mint two different device ids.
-async function ensureDeviceId() {
-  if (sanitizeSetting('deviceId', cache.get('deviceId')).ok) return cache.get('deviceId');
-  const id = await transaction(STORES.settings, 'readwrite', (s, ctx) => {
-    const req = s.settings.get('deviceId');
-    req.onsuccess = () => {
-      const existing = req.result && req.result.value;
-      if (sanitizeSetting('deviceId', existing).ok) { ctx.done(existing); return; }
-      const fresh = newId('dev');
-      s.settings.put({ key: 'deviceId', value: fresh, updatedAt: Date.now() });
-      ctx.done(fresh);
+// Get-or-create the per-install values (deviceId, the default baby) in ONE
+// readwrite transaction, so two tabs (or two callers racing on first boot)
+// can't mint two different device ids or two "first" babies.
+async function ensureInstallState() {
+  const haveDevice = sanitizeSetting('deviceId', cache.get('deviceId')).ok;
+  const haveBabies = sanitizeSetting('babies', cache.get('babies'), { lenient: true }).ok;
+  if (haveDevice && haveBabies) return;
+  const now = Date.now();
+  const written = await transaction(STORES.settings, 'readwrite', (s, ctx) => {
+    const devReq = s.settings.get('deviceId');
+    const babiesReq = s.settings.get('babies');
+    babiesReq.onsuccess = () => {
+      const out = {};
+      const dev = devReq.result && devReq.result.value;
+      if (sanitizeSetting('deviceId', dev).ok) out.deviceId = dev;
+      else {
+        out.deviceId = newId('dev');
+        s.settings.put({ key: 'deviceId', value: out.deviceId, updatedAt: now });
+      }
+      const stored = babiesReq.result && babiesReq.result.value;
+      if (sanitizeSetting('babies', stored, { lenient: true }).ok) out.babies = stored;
+      else {
+        const baby = makeBaby({}, now);
+        out.babies = [baby];
+        out.activeBabyId = baby.id;
+        s.settings.put({ key: 'babies', value: out.babies, updatedAt: now });
+        s.settings.put({ key: 'activeBabyId', value: baby.id, updatedAt: now });
+      }
+      ctx.done(out);
     };
   });
-  cache.set('deviceId', id);
-  return id;
+  for (const [k, v] of Object.entries(written)) cache.set(k, v);
 }
 
 /**
@@ -226,14 +331,22 @@ export async function deviceId() {
 /**
  * Current value (synchronous, from the cache). Known keys fall back to their
  * default when unset or invalid; unknown keys return undefined when unset.
- * Objects are copies — mutate freely, then set().
+ * `activeBabyId` always names a baby in `babies` (the first one when the
+ * stored id is missing or stale). Objects are copies — mutate freely, then
+ * set().
  * @param {string} key
  * @returns {any}
  */
 export function get(key) {
+  if (key === 'activeBabyId') {
+    const list = get('babies');
+    const stored = cache.get('activeBabyId');
+    if (typeof stored === 'string' && list.some(b => b.id === stored)) return stored;
+    return list.length ? list[0].id : null;
+  }
   const known = Object.prototype.hasOwnProperty.call(DEFAULTS, key);
   if (cache.has(key)) {
-    const res = sanitizeSetting(key, cache.get(key));
+    const res = sanitizeSetting(key, cache.get(key), { lenient: true });
     if (res.ok) return clone(res.value);
   }
   return known ? clone(DEFAULTS[key]) : undefined;
@@ -252,7 +365,8 @@ export function all() {
 
 /**
  * Persist a setting and notify subscribers. Throws TypeError on an invalid
- * value. Setting an equal value is a no-op (no write, no event).
+ * value (including an activeBabyId that isn't one of the babies). Setting an
+ * equal value is a no-op (no write, no event).
  * @param {string} key
  * @param {any} value
  * @returns {Promise<any>} the stored (sanitized) value
@@ -261,6 +375,9 @@ export async function set(key, value) {
   const res = sanitizeSetting(key, value);
   if (!res.ok) throw new TypeError(res.error);
   await load();
+  if (key === 'activeBabyId' && !get('babies').some(b => b.id === res.value)) {
+    throw new TypeError('activeBabyId must be one of the babies');
+  }
   const prev = get(key);
   if (cache.has(key) && JSON.stringify(prev) === JSON.stringify(res.value)) return clone(res.value);
   const stored = clone(res.value);
@@ -273,7 +390,7 @@ export async function set(key, value) {
 }
 
 /**
- * Shallow-merge into an object setting: patch('profile', { babyName: 'Clara' }).
+ * Shallow-merge into an object setting: patch('trackers', { pump: false }).
  * @param {string} key
  * @param {object} partial
  * @returns {Promise<any>}
@@ -283,6 +400,90 @@ export async function patch(key, partial) {
   const current = get(key);
   if (!isPlainObject(current)) throw new TypeError(`${key} is not an object setting`);
   return set(key, { ...current, ...(isPlainObject(partial) ? partial : {}) });
+}
+
+// ----------------------------------------------------------------- babies
+
+// Baby edits are read-modify-write on one list; queue them so two quick
+// edits (add twin, rename) can't both read the old list and drop each other.
+let babyQueue = Promise.resolve();
+function queueBabyEdit(fn) {
+  const run = babyQueue.then(async () => { await load(); return fn(); });
+  babyQueue = run.catch(() => {});
+  return run;
+}
+
+const BABY_FIELDS = ['name', 'birthDate', 'photoId'];
+function pickBabyFields(input) {
+  const out = {};
+  if (!isPlainObject(input)) return out;
+  for (const k of BABY_FIELDS) if (own(input, k) !== undefined) out[k] = own(input, k);
+  return out;
+}
+
+/**
+ * All babies, oldest first (a copy).
+ * @returns {Array<{id:string, name:string, birthDate:string|null, photoId:string|null, createdAt:number|null}>}
+ */
+export function babies() {
+  return get('babies');
+}
+
+/**
+ * The baby Today/Timeline/sheets are showing (or null before load()).
+ * @returns {{id:string, name:string, birthDate:string|null, photoId:string|null, createdAt:number|null}|null}
+ */
+export function activeBaby() {
+  const id = get('activeBabyId');
+  return get('babies').find(b => b.id === id) || null;
+}
+
+/**
+ * Add a baby (twins/siblings). Doesn't switch to it — call setActiveBaby().
+ * Throws TypeError on an invalid field or when the family cap is reached.
+ * @param {{ name?: string, birthDate?: string|null, photoId?: string|null }} [fields]
+ * @returns {Promise<object>} the new baby
+ */
+export function addBaby(fields = {}) {
+  return queueBabyEdit(async () => {
+    const draft = { ...makeBaby({}, Date.now()), ...pickBabyFields(fields) };
+    const baby = sanitizeBaby(draft);
+    if (!baby) throw new TypeError('Invalid baby details');
+    const list = get('babies');
+    if (list.length >= MAX_BABIES) throw new TypeError(`At most ${MAX_BABIES} babies`);
+    await set('babies', [...list, baby]);
+    return clone(baby);
+  });
+}
+
+/**
+ * Edit a baby's name / birthDate / photoId. Throws TypeError for an unknown
+ * id or an invalid field.
+ * @param {string} id
+ * @param {{ name?: string, birthDate?: string|null, photoId?: string|null }} fields
+ * @returns {Promise<object>} the updated baby
+ */
+export function updateBaby(id, fields) {
+  return queueBabyEdit(async () => {
+    const list = get('babies');
+    const i = list.findIndex(b => b.id === id);
+    if (i === -1) throw new TypeError(`No baby with id ${String(id).slice(0, 100)}`);
+    const next = sanitizeBaby({ ...list[i], ...pickBabyFields(fields) });
+    if (!next) throw new TypeError('Invalid baby details');
+    const updated = list.slice();
+    updated[i] = next;
+    await set('babies', updated);
+    return clone(next);
+  });
+}
+
+/**
+ * Switch the active baby.
+ * @param {string} id
+ * @returns {Promise<string>}
+ */
+export function setActiveBaby(id) {
+  return set('activeBabyId', id);
 }
 
 /**
@@ -297,7 +498,11 @@ export function subscribe(fn) {
 }
 
 /** The settings API as one object, for ctx injection (ARCHITECTURE §5.2). */
-export const settings = Object.freeze({ load, reload, get, set, patch, all, subscribe, deviceId, DEFAULTS, TRACKER_KEYS, TODAY_CARDS });
+export const settings = Object.freeze({
+  load, reload, get, set, patch, all, subscribe, deviceId,
+  babies, activeBaby, addBaby, updateBaby, setActiveBaby,
+  DEFAULTS, TRACKER_KEYS, TODAY_CARDS,
+});
 
 function deepFreeze(o) {
   for (const v of Object.values(o)) if (v && typeof v === 'object') deepFreeze(v);

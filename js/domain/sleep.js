@@ -60,16 +60,19 @@ export function wakeWindowForAge(birthDate, now = Date.now()) {
  *  - 'awake' since the most recent finished sleep's end
  *  - 'unknown' when no sleep has been logged
  * Sleeps that start after `now` (clock skew, future edits) are ignored.
+ * Pass `babyId` when `events` may hold more than one child's sleeps (twins).
  * @param {object[]} events
  * @param {Date|number} [now]
+ * @param {{ babyId?: string }} [opts]
  * @returns {{ state: 'asleep'|'awake'|'unknown', since: number|null, event: object|null }}
  */
-export function sleepState(events, now = Date.now()) {
+export function sleepState(events, now = Date.now(), { babyId } = {}) {
   const n = toMs(now);
   let running = null;
   let lastEnded = null;
   for (const e of events || []) {
     if (!e || e.type !== 'sleep' || !Number.isFinite(e.startTime) || e.startTime > n) continue;
+    if (babyId !== undefined && e.babyId !== babyId) continue;
     if (e.endTime === null || e.endTime === undefined || e.endTime > n) {
       if (!running || e.startTime > running.startTime) running = e;
     } else if (!lastEnded || e.endTime > lastEnded.endTime) {
@@ -87,10 +90,11 @@ export function sleepState(events, now = Date.now()) {
  * When the baby last woke up (epoch ms), or null if asleep now or unknown.
  * @param {object[]} events
  * @param {Date|number} [now]
+ * @param {{ babyId?: string }} [opts]
  * @returns {number|null}
  */
-export function awakeSince(events, now = Date.now()) {
-  const s = sleepState(events, now);
+export function awakeSince(events, now = Date.now(), opts = {}) {
+  const s = sleepState(events, now, opts);
   return s.state === 'awake' ? s.since : null;
 }
 

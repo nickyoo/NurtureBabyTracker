@@ -8,6 +8,9 @@
 //  - Running feeds/pumps (endTime null) are excluded from counts and amounts
 //    until they're finished — their final amount isn't known yet.
 //  - Amounts convert per event from the unit they were entered in.
+//  - Aggregates count whatever events they're given: pass one baby's events
+//    (events.query({ babyId }) or forBaby()) for per-child cards. Pumps are
+//    the parent's (babyId null) and belong to every baby's view.
 
 import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from '../core/units.js';
 import { dayBounds, addDays, dayKey, toMs } from '../core/time.js';
@@ -43,6 +46,19 @@ export function overlapMs(event, from, to, now = Date.now()) {
 }
 
 const isRunning = e => e.endTime === null || e.endTime === undefined;
+
+/**
+ * One baby's events plus the parent-level ones (babyId null — pumps), the
+ * same rule as events.query({ babyId }). undefined babyId → all events.
+ * @param {object[]} events
+ * @param {string} [babyId]
+ * @returns {object[]}
+ */
+export function forBaby(events, babyId) {
+  const list = (events || []).filter(Boolean);
+  if (babyId === undefined) return list;
+  return list.filter(e => (e.babyId ?? null) === null || e.babyId === babyId);
+}
 const inRange = (e, from, to) => Number.isFinite(e.startTime) && e.startTime >= from && e.startTime < to;
 
 /**

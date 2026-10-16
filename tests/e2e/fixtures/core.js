@@ -190,6 +190,19 @@ SUITES.migration = async () => {
     ok(all.every(e => e.deviceId === devId), 'events stamped with this device');
   });
 
+  await test('one default baby named from v1 babyName; feeds on it, pumps parent-level', async () => {
+    const babies = settings.get('babies');
+    eq(babies.length, 1, 'load() created an unnamed default first; migration named it instead of adding another');
+    eq(babies[0].name, 'Clara');
+    ok(/^baby_/.test(babies[0].id), 'baby_ id');
+    eq(settings.get('activeBabyId'), babies[0].id);
+    eq(report.babyId, babies[0].id);
+    for (const e of all) {
+      if (e.type === 'pump') eq(e.babyId, null, `${e.id} pump is parent-level`);
+      else eq(e.babyId, babies[0].id, `${e.id} belongs to Clara`);
+    }
+  });
+
   await test('pump maps directly; NaN/null amounts become null + note', async () => {
     const p = byFrom('pump_aaa');
     eq([p.type, p.startTime, p.endTime, p.data.amount, p.data.unit, p.data.storedTo, p.note],
@@ -220,7 +233,8 @@ SUITES.migration = async () => {
     eq([s.pumpGoalOz, s.pumpIntervalMinutes, s.units, s.theme, s.sound, s.onboarded, s.migratedV2],
       [26, 120, 'mL', 'dark', 'off', true, true]);
     eq(s.storageWindows.fridgeDays, 3);
-    eq([s.profile.babyName, s.profile.parentName, s.profile.birthDate], ['Clara', 'Nick', null]);
+    eq([s.parentName, s.babies[0].birthDate, s.lastBackupAt, s.persistGranted], ['Nick', null, null, null]);
+    ok(!('profile' in s), 'no v1-era profile object');
     ok(!('dailyPumpingGoal' in s) && !('preferredUnit' in s) && !('reminderIntervalHours' in s), 'junk keys not surfaced');
   });
 
@@ -229,9 +243,9 @@ SUITES.migration = async () => {
     eq(live.length, 2);
     const pump = live.find(e => e.type === 'pump');
     const feed = live.find(e => e.type === 'feed');
-    eq([pump.startTime, pump.endTime, pump.data.amount, pump.data.unit, pump.data.storedTo], [NOW - 10 * MIN, null, null, 'mL', 'freezer']);
-    eq([feed.startTime, feed.data.method, feed.data.milk, feed.data.prepared, feed.data.unit, feed.data.sourceInventoryId],
-      [NOW - 5 * MIN, 'bottle', 'breastmilk', 118, 'mL', THAWED_ID]);
+    eq([pump.startTime, pump.endTime, pump.data.amount, pump.data.unit, pump.data.storedTo, pump.babyId], [NOW - 10 * MIN, null, null, 'mL', 'freezer', null]);
+    eq([feed.startTime, feed.data.method, feed.data.milk, feed.data.prepared, feed.data.unit, feed.data.sourceInventoryId, feed.babyId],
+      [NOW - 5 * MIN, 'bottle', 'breastmilk', 118, 'mL', THAWED_ID, settings.get('activeBabyId')]);
     eq([localStorage.getItem('nurture_active_pump_timer'), localStorage.getItem('nurture_bottle_timer')], [null, null]);
     eq(localStorage.getItem('nurture_ui_tab'), 'today', 'unrelated keys untouched');
   });
@@ -273,12 +287,14 @@ SUITES.migration = async () => {
 SUITES['migration-reload'] = async () => {
   const { runMigration } = await import('../../../js/core/migrate.js');
   const { events } = await import('../../../js/core/store.js');
+  const settings = await import('../../../js/core/settings.js');
   await test('after reload: migration skipped, data intact, running pump survived', async () => {
     const r = await runMigration();
     eq(r.skipped, true);
     eq((await rawCounts()).events, 8);
     const live = await events.running();
     eq(live.map(e => e.type), ['pump']);
+    eq(settings.get('babies').map(b => b.name), ['Clara'], 'still exactly one baby');
   });
 };
 
@@ -417,6 +433,50 @@ SUITES.store = async () => {
     eq((await events.query({ from: day, to: day + DAY, types: ['diaper'] })).map(e => e.id), [d1.id]);
     eq((await events.query({ type: 'feed', from: day, to: day + DAY })).map(e => e.id), [f1.id]);
     eq((await events.query({ limit: 2 })).length, 2);
+  });
+
+  await test('babyId: defaults to the active baby; pumps are parent-level; unknown babies refused', async () => {
+    const active = settings.get('activeBabyId');
+    ok(/^baby_/.test(active), 'a default baby exists');
+    const d = await events.add({ type: 'diaper', data: { kind: 'wet' } });
+    eq(d.babyId, active);
+    const p = await events.add({ type: 'pump', babyId: active, data: { amount: 3, unit: 'oz' } });
+    eq(p.babyId, null, 'pump babyId forced to null');
+    await rejects(events.add({ type: 'diaper', babyId: 'baby_nobody', data: { kind: 'wet' } }), e => e instanceof RangeError);
+    await rejects(events.add({ type: 'diaper', babyId: '<img src=x>', data: { kind: 'wet' } }), e => e instanceof RangeError);
+  });
+
+  await test('twins: one running activity per type PER BABY; query/running/last filter by baby', async () => {
+    const a = settings.get('activeBabyId');
+    const twin = await settings.addBaby({ name: 'Max', birthDate: '2026-08-01' });
+    ok(/^baby_/.test(twin.id) && twin.id !== a);
+    const napA = await events.start('sleep', { kind: 'nap' });
+    const napB = await events.start('sleep', { kind: 'nap' }, { babyId: twin.id });
+    eq([napA.babyId, napB.babyId], [a, twin.id], 'twins nap at the same time');
+    await rejects(events.start('sleep', {}, { babyId: twin.id }), e => e instanceof RunningActivityError && e.running.id === napB.id);
+    const pump = await events.start('pump', { unit: 'oz' });
+    await rejects(events.start('pump', { unit: 'oz' }, { babyId: twin.id }), e => e instanceof RunningActivityError, 'one running pump, whoever is active');
+    const feedB = await events.add({ type: 'feed', babyId: twin.id, data: { method: 'bottle', milk: 'formula', amount: 2, unit: 'oz' } });
+
+    const forB = await events.query({ babyId: twin.id });
+    ok(forB.every(e => e.babyId === twin.id || e.babyId === null), 'only Max + parent-level');
+    ok(forB.some(e => e.id === pump.id) && forB.some(e => e.id === feedB.id) && !forB.some(e => e.id === napA.id), 'pump shows for every baby; the other twin does not');
+    const parentOnly = await events.query({ babyId: null });
+    ok(parentOnly.length > 0 && parentOnly.every(e => e.babyId === null), 'babyId null → parent-level only');
+    eq((await events.running('sleep', { babyId: twin.id })).map(e => e.id), [napB.id]);
+    eq((await events.running(undefined, { babyId: twin.id })).map(e => e.id).sort(), [napB.id, pump.id].sort());
+    eq((await events.last('feed', null, { babyId: twin.id })).id, feedB.id);
+    ok((await events.last('feed', null, { babyId: a })).babyId === a, 'last() per baby');
+
+    // Moving a running nap onto a baby who is already napping is refused…
+    await rejects(events.update(napA.id, { babyId: twin.id }), e => e instanceof RunningActivityError);
+    // …moving a finished event is fine.
+    const moved = await events.update(feedB.id, { babyId: a });
+    eq(moved.babyId, a);
+    await rejects(events.update(feedB.id, { babyId: 'baby_ghost' }), e => e instanceof RangeError);
+    await events.stop(napA.id);
+    await events.stop(napB.id);
+    await events.stop(pump.id, { data: { amount: 1 } });
   });
 
   await test('unsubscribe stops notifications', async () => {
@@ -611,10 +671,17 @@ SUITES.photos = async () => {
 
 SUITES.settings = async () => {
   const settings = await import('../../../js/core/settings.js');
-  await test('defaults + generated deviceId', async () => {
+  await test('defaults + generated deviceId + one default baby', async () => {
     const all = await settings.load();
     eq([all.units, all.theme, all.sound, all.pumpGoalOz, all.pumpIntervalMinutes, all.onboarded, all.migratedV2],
       ['oz', 'auto', 'night-off', 24, 180, false, false]);
+    eq([all.parentName, all.lastBackupAt, all.persistGranted, all.feedbackEmail], ['', null, null, '']);
+    eq(all.babies.length, 1);
+    eq([all.babies[0].name, all.babies[0].birthDate, all.babies[0].photoId], ['', null, null]);
+    ok(/^baby_/.test(all.babies[0].id) && all.babies[0].createdAt > 0, 'baby id + createdAt');
+    eq(all.activeBabyId, all.babies[0].id);
+    ok(!('profile' in all));
+    localStorage.setItem('babyIdSeen', all.babies[0].id);
     eq(all.todayOrder, ['feed', 'sleep', 'diaper', 'pump', 'stash']);
     ok(Object.values(all.trackers).every(v => v === true) && Object.keys(all.trackers).length === 8, 'all trackers on');
     ok(/^dev_/.test(all.deviceId));
@@ -631,23 +698,45 @@ SUITES.settings = async () => {
     await settings.patch('trackers', { pump: false });
     eq(settings.get('trackers').pump, false);
     eq(settings.get('trackers').sleep, true);
-    await settings.patch('profile', { babyName: 'Clara', birthDate: '2026-08-01' });
-    eq(settings.get('profile').birthDate, '2026-08-01');
-    eq(seen, ['units', 'trackers', 'profile']);
+    const first = settings.activeBaby();
+    const clara = await settings.updateBaby(first.id, { name: '  Clara ', birthDate: '2026-08-01' });
+    eq([clara.id, clara.name, clara.birthDate], [first.id, 'Clara', '2026-08-01']);
+    await settings.set('parentName', 'Nick');
+    eq(seen, ['units', 'trackers', 'babies', 'parentName']);
     await rejects(settings.set('units', 'cups'), e => e instanceof TypeError);
     await rejects(settings.set('__proto__', 1), e => e instanceof TypeError);
+    await rejects(settings.set('feedbackEmail', 'x@y.com?bcc=evil@z.com'), e => e instanceof TypeError);
+    await settings.set('feedbackEmail', 'hello@example.com');
+    await rejects(settings.updateBaby(first.id, { birthDate: '2026-02-31' }), e => e instanceof TypeError);
+    await rejects(settings.updateBaby('baby_nope', { name: 'x' }), e => e instanceof TypeError);
     const t = settings.get('trackers'); t.pump = true;
     eq(settings.get('trackers').pump, false, 'get() hands out copies');
+    const b = settings.get('babies'); b[0].name = 'mutated';
+    eq(settings.get('babies')[0].name, 'Clara', 'babies are copies too');
     off();
+  });
+
+  await test('babies: add twins concurrently (no lost update), switch active, refuse unknown active id', async () => {
+    const [max, ivy] = await Promise.all([settings.addBaby({ name: 'Max' }), settings.addBaby({ name: 'Ivy' })]);
+    eq(settings.get('babies').map(x => x.name), ['Clara', 'Max', 'Ivy']);
+    await settings.setActiveBaby(max.id);
+    eq([settings.get('activeBabyId'), settings.activeBaby().name], [max.id, 'Max']);
+    await rejects(settings.setActiveBaby('baby_ghost'), e => e instanceof TypeError);
+    await rejects(settings.addBaby({ name: 5 }), e => e instanceof TypeError);
+    eq(settings.get('activeBabyId'), max.id);
+    ok(ivy.id !== max.id);
   });
 };
 
 SUITES['settings-reload'] = async () => {
   const settings = await import('../../../js/core/settings.js');
-  await test('settings + deviceId persist across reload', async () => {
+  await test('settings + deviceId + babies persist across reload', async () => {
     const all = await settings.load();
     eq(all.deviceId, localStorage.getItem('deviceIdSeen'));
-    eq([all.units, all.trackers.pump, all.profile.babyName], ['mL', false, 'Clara']);
+    eq([all.units, all.trackers.pump, all.parentName, all.feedbackEmail], ['mL', false, 'Nick', 'hello@example.com']);
+    eq(all.babies.map(b => b.name), ['Clara', 'Max', 'Ivy']);
+    eq(all.babies[0].id, localStorage.getItem('babyIdSeen'), 'default baby kept its id (no second default minted)');
+    eq(settings.activeBaby().name, 'Max');
   });
 };
 
@@ -658,7 +747,8 @@ SUITES.backup = async () => {
   const photos = await import('../../../js/core/photos.js');
   const settings = await import('../../../js/core/settings.js');
   await settings.load();
-  await settings.patch('profile', { babyName: 'Clara' });
+  const claraId = settings.get('activeBabyId');
+  await settings.updateBaby(claraId, { name: 'Clara' });
 
   const feed = await events.add({ type: 'feed', startTime: Date.now() - HOUR, data: { method: 'bottle', milk: 'formula', amount: 4, unit: 'oz' }, note: '=HYPERLINK("http://x")' });
   await events.add({ type: 'diaper', data: { kind: 'dirty' } });
@@ -671,8 +761,10 @@ SUITES.backup = async () => {
   await test('exportBackup: v2 envelope, whitelisted settings, optional photos', async () => {
     const data = await backup.exportBackup({ includePhotos: true });
     eq([data.app, data.schema, data.events.length, data.inventory.length, data.photos.length], ['nurture', 2, 4, 1, 1]);
-    ok(!('deviceId' in data.settings) && !('migratedV2' in data.settings) && !('iconDataUrl' in data.settings), 'per-install keys not exported');
-    eq(data.settings.profile.babyName, 'Clara');
+    for (const k of ['deviceId', 'migratedV2', 'iconDataUrl', 'lastBackupAt', 'persistGranted', 'feedbackEmail']) ok(!(k in data.settings), `${k} not exported`);
+    eq(data.settings.babies.map(b => [b.id, b.name]), [[claraId, 'Clara']]);
+    eq(data.settings.activeBabyId, claraId);
+    ok(data.events.filter(e => e.type !== 'pump').every(e => e.babyId === claraId), 'events carry babyId');
     ok(typeof data.photos[0].data === 'string' && data.photos[0].data.length > 100, 'base64 photo');
     const noPhotos = await backup.exportBackup();
     ok(!('photos' in noPhotos), 'photos only when asked');
@@ -687,24 +779,52 @@ SUITES.backup = async () => {
     const text = await file.text();
     const lines = text.replace(/^﻿/, '').trim().split('\r\n');
     eq(lines.length, 5, 'header + 4 events');
-    ok(lines.some(l => l.includes('"Feed"') && l.includes('"118"') && l.includes('"mL"')), '4 oz shown as 118 mL');
+    ok(lines[0].includes('"Baby"'), 'Baby column');
+    ok(lines.some(l => l.includes('"Feed"') && l.includes('"118"') && l.includes('"mL"') && l.includes('"Clara"')), '4 oz shown as 118 mL, for Clara');
     ok(text.includes(`"'=HYPERLINK(""http://x"")"`), 'formula neutralised and quotes doubled');
     ok(text.includes('(in progress)'), 'running sleep marked');
   });
 
-  await test('eraseAll + import(replace) restores everything incl. photos', async () => {
+  await test('shareBackup downloads (no share sheet here) and stamps lastBackupAt', async () => {
+    eq(settings.get('lastBackupAt'), null);
+    const before = Date.now();
+    eq(await backup.shareBackup(), 'download');
+    ok(settings.get('lastBackupAt') >= before, 'lastBackupAt recorded');
+    eq(backup.backup.share, backup.shareBackup, 'backup.share() is the §10b entry point');
+  });
+
+  await test('replace refuses to run if the safety backup cannot be saved', async () => {
+    const err = await rejects(backup.importBackup(json, { mode: 'replace', safetyBackup: () => { throw new Error('disk full'); } }), e => e.name === 'BackupError');
+    ok(/safety copy/.test(err.message));
+    eq((await events.query()).length, 4, 'nothing replaced');
+  });
+
+  await test('replace downloads a safety backup of the current data first', async () => {
+    const extra = await events.add({ type: 'diaper', data: { kind: 'wet' }, note: 'only on this phone' });
+    const res = await backup.importBackup(json, { mode: 'replace' });
+    ok(/^nurture-backup-before-import-\d{4}-\d{2}-\d{2}\.json$/.test(res.safetyBackup), `safety file name (${res.safetyBackup})`);
+    eq(await events.get(extra.id), null, 'replaced');
+    window.__safetyEventId = extra.id; // core.mjs checks the downloaded file holds it
+  });
+
+  await test('eraseAll + import(replace) restores everything incl. photos and babies', async () => {
     await backup.eraseAll();
     eq((await events.query()).length, 0);
     eq((await stash.list({ filter: 'everything' })).length, 0);
     eq((await photos.usage()).count, 0);
-    const res = await backup.importBackup(new File([json], 'b.json', { type: 'application/json' }), { mode: 'replace' });
+    ok(settings.get('activeBabyId') !== claraId, 'erase minted a fresh default baby');
+    let called = false;
+    const res = await backup.importBackup(new File([json], 'b.json', { type: 'application/json' }), { mode: 'replace', safetyBackup: () => { called = true; } });
+    eq(called, false, 'nothing to protect on an empty device');
+    eq(res.safetyBackup, null);
     eq([res.format, res.stats.events.added, res.stats.inventory.added, res.stats.photos.added], ['v2', 4, 1, 1]);
     eq((await events.query()).length, 4);
     eq((await events.get(feed.id)).note, '=HYPERLINK("http://x")', 'stored as plain text');
     eq((await stash.get(pouch.id)).quantity, 120);
     const url = await photos.get(ph.id);
     eq((await loadImage(url)).naturalWidth, 400);
-    eq(settings.get('profile').babyName, 'Clara');
+    eq(settings.get('babies').map(b => [b.id, b.name]), [[claraId, 'Clara']], 'babies replaced by the file\'s');
+    eq(settings.get('activeBabyId'), claraId);
     eq((await events.running()).length, 1, 'running sleep came back running');
   });
 
@@ -721,6 +841,38 @@ SUITES.backup = async () => {
     eq([merged.stats.events.updated, merged.stats.events.unchanged], [1, 3]);
     eq((await events.get(feed.id)).note, 'edited on the other phone');
     eq((await events.get(local.id)).note, '', 'tie keeps local');
+  });
+
+  await test('partner merge: the other phone\'s Clara is OUR Clara; a new twin is added; orphans get a placeholder', async () => {
+    const t = Date.now() - 2 * HOUR;
+    const other = {
+      app: 'nurture', schema: 2, exportedAt: new Date().toISOString(),
+      settings: { babies: [{ id: 'baby_otherphone1', name: 'clara ', birthDate: '2026-07-30', photoId: null, createdAt: t }, { id: 'baby_otherphone2', name: 'Max', birthDate: '2026-07-30', photoId: null, createdAt: t }], activeBabyId: 'baby_otherphone1', units: 'mL' },
+      events: [
+        { id: 'evt_p1', type: 'diaper', startTime: t, babyId: 'baby_otherphone1', data: { kind: 'wet' }, createdAt: t, updatedAt: t },
+        { id: 'evt_p2', type: 'sleep', startTime: t, endTime: null, babyId: 'baby_otherphone1', data: { kind: 'nap' }, createdAt: t, updatedAt: t },
+        { id: 'evt_p3', type: 'feed', startTime: t, babyId: 'baby_otherphone2', data: { method: 'bottle', milk: 'formula', amount: 90, unit: 'mL' }, createdAt: t, updatedAt: t },
+        { id: 'evt_p4', type: 'diaper', startTime: t, babyId: 'baby_unlisted9', data: { kind: 'dirty' }, createdAt: t, updatedAt: t },
+        { id: 'evt_p5', type: 'pump', startTime: t, babyId: 'baby_otherphone1', data: { amount: 4, unit: 'oz' }, createdAt: t, updatedAt: t },
+      ],
+    };
+    const res = await backup.importBackup(JSON.stringify(other), { mode: 'merge' });
+    eq([res.stats.babies.matched, res.stats.babies.added, res.stats.babies.placeholders], [1, 1, 1]);
+    const babies = settings.get('babies');
+    eq(babies.map(b => b.name), ['Clara', 'Max', '']);
+    eq(babies[0].id, claraId, 'local id kept');
+    eq(babies[0].birthDate, '2026-07-30', 'empty local field filled from the partner');
+    eq((await events.get('evt_p1')).babyId, claraId, 'remapped onto our Clara');
+    const p2 = await events.get('evt_p2');
+    eq([p2.babyId, p2.endTime === p2.startTime], [claraId, true], 'Clara already napping here → incoming running nap stopped');
+    eq((await events.get('evt_p3')).babyId, babies[1].id);
+    eq((await events.get('evt_p4')).babyId, 'baby_unlisted9');
+    eq((await events.get('evt_p5')).babyId, null, 'pump stays parent-level');
+    eq(settings.get('units'), 'oz', 'merge leaves preferences alone');
+    eq(settings.get('activeBabyId'), claraId, 'merge leaves the active baby alone');
+    const again = await backup.importBackup(JSON.stringify(other), { mode: 'merge' });
+    eq([again.stats.events.added, again.stats.events.updated, again.stats.babies.added], [0, 0, 0], 'idempotent');
+    eq(settings.get('babies').length, 3);
   });
 
   await test('hostile import is neutralised', async () => {
@@ -754,6 +906,9 @@ SUITES.backup = async () => {
     const res = await backup.importBackup(JSON.stringify(v1), { mode: 'merge' });
     eq([res.format, res.stats.events.added, res.stats.inventory.added], ['v1', 4, 1]);
     eq((await events.get('evt_pump_nan')).data.amount, null);
+    eq((await events.get('evt_pump_nan')).babyId, null);
+    eq((await events.get('evt_sess_bbb')).babyId, claraId, 'v1 feeds land on the active baby');
+    eq(settings.get('babies').length, 3, 'no extra baby for a v1 file');
     ok(res.warnings.length >= 1, 'bottles warning');
   });
 
@@ -762,6 +917,46 @@ SUITES.backup = async () => {
     await rejects(backup.importBackup('{"app":"nurture","schema":3}'), e => e.name === 'BackupError' && /newer/.test(e.message));
     await rejects(backup.importBackup('[1,2,3]'), e => e.name === 'BackupError');
     await rejects(backup.importBackup('{}', { mode: 'nuke' }), e => e.name === 'BackupError');
+  });
+};
+
+SUITES.persist = async () => {
+  const persist = await import('../../../js/core/persist.js');
+  const settings = await import('../../../js/core/settings.js');
+  const { events } = await import('../../../js/core/store.js');
+  const ics = await import('../../../js/core/ics.js');
+  await settings.load();
+
+  await test('requestPersistence records the browser\'s answer', async () => {
+    const granted = await persist.requestPersistence();
+    ok(typeof granted === 'boolean', `boolean answer (${granted})`);
+    eq(settings.get('persistGranted'), granted);
+  });
+
+  await test('estimate reports usage/quota', async () => {
+    const e = await persist.estimate();
+    ok(Number.isFinite(e.usage) && Number.isFinite(e.quota) && e.quota > 0, JSON.stringify(e));
+    ok(typeof e.persisted === 'boolean');
+  });
+
+  await test('backup nudge: not with no data, due after a day of data, quiet after a backup', async () => {
+    eq(await persist.dataSince(), null);
+    eq(await persist.isBackupDue(), false, 'nothing to lose yet');
+    await events.add({ type: 'diaper', startTime: Date.now() - 2 * HOUR, data: { kind: 'wet' } });
+    eq(await persist.isBackupDue(), false, 'less than a day of data');
+    const old = Date.now() - 2 * DAY;
+    await events.add({ type: 'diaper', startTime: old, data: { kind: 'dirty' } });
+    eq(await persist.dataSince(), old);
+    eq(await persist.isBackupDue(), true);
+    await persist.markBackedUp();
+    eq(await persist.isBackupDue(), false);
+    eq(await persist.isBackupDue(Date.now() + 8 * DAY), true, 'due again a week later');
+  });
+
+  await test('shareIcs downloads a calendar file (no share sheet here)', async () => {
+    await events.add({ type: 'pump', startTime: Date.now() - HOUR, endTime: Date.now() - 40 * MIN, data: { amount: 3, unit: 'oz' } });
+    eq(await ics.shareIcs({ days: 2 }), 'download');
+    await rejects(ics.shareIcs({ intervalMinutes: 0 }), e => e instanceof RangeError);
   });
 };
 
