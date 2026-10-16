@@ -15,6 +15,7 @@ import { shareFile } from './backup.js';
 import { last } from './store.js';
 import { get as getSetting, load as loadSettings } from './settings.js';
 
+/** PRODID written into every calendar file. */
 export const ICS_PRODID = '-//Nurture//Pump schedule 1.0//EN';
 /** Hard cap on VEVENTs in one file (a 1-minute interval can't make 10k). */
 export const MAX_ICS_EVENTS = 500;

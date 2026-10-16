@@ -8,9 +8,10 @@
 
 import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from '../core/units.js';
 
-// Thawed stash lives in the fridge physically, so it gets its own location
-// value distinct from the frozen sources it came from.
+/** Thawed stash lives in the fridge physically, so it gets its own location
+ * value distinct from the frozen sources it came from. */
 export const THAWED_LOCATION = 'thawed';
+/** Locations whose pouches can be thawed. */
 export const FROZEN_LOCATIONS = ['freezer', 'deepFreezer'];
 
 /** Every location a pouch can be in. */

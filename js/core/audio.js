@@ -7,8 +7,9 @@
 
 import { get as getSetting } from './settings.js';
 
-/** Quiet hours for sound: 'night-off' is silent from 19:00 until 08:00. */
+/** Quiet hours for sound: 'night-off' is silent from 19:00… */
 export const QUIET_START_HOUR = 19;
+/** …until 08:00 (exclusive) local time. */
 export const QUIET_END_HOUR = 8;
 
 /**

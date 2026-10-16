@@ -34,7 +34,7 @@ export const LIMITS = Object.freeze({ note: 2000, title: 200, short: 40, key: 60
 /** Plausible timestamp range; anything outside is corrupt or hostile. */
 export const MIN_TIME = Date.UTC(2000, 0, 1);
 export const MAX_TIME = Date.UTC(2100, 0, 1);
-
+/** Record ids: short, and only characters that are safe as keys/selectors. */
 export const ID_RE = /^[A-Za-z0-9_.:-]{1,100}$/;
 const DIAPER_KINDS = ['wet', 'dirty', 'both', 'dry'];
 const STORED_TO = ['fridge', 'freezer', 'deepFreezer'];
@@ -165,13 +165,14 @@ export function sanitizeEventData(type, data, { startTime } = {}) {
  * babyId; lenient (imports, undo) clamps the time and falls back to
  * `defaultBabyId` for a baby-level event without one. (With no default
  * either, babyId stays null: the event then shows for every baby rather than
- * being dropped — import must never lose data.) Pump events always get
- * babyId: null.
+ * being dropped — import must never lose data.) `allowNullBaby` lets a
+ * strict write keep such an event's null babyId, so it stays editable. Pump
+ * events always get babyId: null.
  * @param {unknown} raw
- * @param {{ now?: number, deviceId?: string, strict?: boolean, defaultBabyId?: string }} [opts]
+ * @param {{ now?: number, deviceId?: string, strict?: boolean, defaultBabyId?: string, allowNullBaby?: boolean }} [opts]
  * @returns {{ ok: true, value: object } | { ok: false, error: string }}
  */
-export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false, defaultBabyId } = {}) {
+export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false, defaultBabyId, allowNullBaby = false } = {}) {
   if (!isPlainObject(raw)) return { ok: false, error: 'event must be an object' };
   const type = own(raw, 'type');
   if (!EVENT_TYPES.includes(type)) return { ok: false, error: `unknown event type: ${String(type).slice(0, 40)}` };
@@ -199,7 +200,7 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false,
   if (BABY_TYPES.includes(type)) {
     const b = own(raw, 'babyId');
     if (typeof b === 'string' && BABY_ID_RE.test(b)) babyId = b;
-    else if (strict) return { ok: false, error: `a ${type} needs a babyId` };
+    else if (strict && !(allowNullBaby && (b === null || b === undefined))) return { ok: false, error: `a ${type} needs a babyId` };
     else if (typeof defaultBabyId === 'string' && BABY_ID_RE.test(defaultBabyId)) babyId = defaultBabyId;
   }
 
@@ -246,7 +247,10 @@ export function applyEventPatch(event, patch, now = Date.now()) {
   // Strictly increasing, so merge-by-updatedAt always sees an edit as newer
   // even when two edits land in the same millisecond.
   merged.updatedAt = Math.max(now, (event.updatedAt || 0) + 1);
-  const res = sanitizeEvent(merged, { now, strict: true });
+  // An event that already had no baby (a lenient import/undo) stays editable
+  // as long as the edit doesn't explicitly set babyId to something invalid.
+  const keepsNullBaby = (event.babyId ?? null) === null && own(p, 'babyId') === undefined;
+  const res = sanitizeEvent(merged, { now, strict: true, allowNullBaby: keepsNullBaby });
   if (!res.ok) throw new RangeError(res.error);
   return res.value;
 }

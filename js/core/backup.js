@@ -33,7 +33,9 @@ import { breastSideTotals } from '../domain/safety.js';
 import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from './units.js';
 import { dayKey } from './time.js';
 
+/** `app` marker in every v2 backup file. */
 export const BACKUP_APP = 'nurture';
+/** Backup format version written by this build (files with a higher one are refused). */
 export const BACKUP_SCHEMA = 2;
 /** Refuse files bigger than this before reading them into memory. */
 export const MAX_IMPORT_BYTES = 200 * 1024 * 1024;
@@ -112,7 +114,9 @@ function sanitizePhotoEntry(raw) {
   };
 }
 
-function collect(list, cap, sanitize, label, warnings) {
+// Duplicate ids inside one file keep the newest version; `stampOf` says what
+// "newest" means for the record kind (v1 pouches have no updatedAt).
+function collect(list, cap, sanitize, label, warnings, stampOf = r => r.updatedAt || 0) {
   const out = new Map();
   let rejected = 0;
   if (list === undefined || list === null) return { items: [], rejected };
@@ -128,9 +132,8 @@ function collect(list, cap, sanitize, label, warnings) {
   for (let i = 0; i < n; i++) {
     const rec = sanitize(list[i]);
     if (!rec) { rejected += 1; continue; }
-    // Duplicate ids inside one file: keep the newest version.
     const prev = out.get(rec.id);
-    if (!prev || (rec.updatedAt || 0) > (prev.updatedAt || 0)) out.set(rec.id, rec);
+    if (!prev || stampOf(rec) > stampOf(prev)) out.set(rec.id, rec);
   }
   return { items: [...out.values()], rejected };
 }
@@ -215,7 +218,7 @@ export function validateBackup(input, { now = Date.now(), deviceId, defaultBabyI
     const bottles = own(input, 'bottles');
     if (Array.isArray(bottles) && bottles.length) warnings.push('Old prepared-bottle records aren’t used any more and were skipped');
   }
-  const inv = collect(own(input, 'inventory'), MAX_RECORDS.inventory, sanitizeInventoryItem, 'stash items', warnings);
+  const inv = collect(own(input, 'inventory'), MAX_RECORDS.inventory, sanitizeInventoryItem, 'stash items', warnings, inventoryUpdatedAt);
 
   const rawPhotos = own(input, 'photos');
   const ph = format === 'v2' && rawPhotos !== undefined && rawPhotos !== null
