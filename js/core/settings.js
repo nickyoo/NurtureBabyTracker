@@ -13,9 +13,15 @@
 // Babies: there is always at least one. load() creates a default (unnamed)
 // baby once per install, exactly like deviceId, so every feed/sleep/diaper/
 // milestone event always has a real babyId to point at (§3 "Multiple babies").
+//
+// Several tabs (e.g. the installed PWA window and a browser tab on Android)
+// share one database but each has its own cache. So every write is a
+// read-modify-write of the STORED value inside one readwrite transaction —
+// never a rewrite from this tab's possibly stale cache — and every write is
+// announced on a BroadcastChannel so the other tabs re-read the store.
 
 import { transaction, getAll, STORES, newId } from './db.js';
-import { DEFAULT_STORAGE_WINDOWS } from '../domain/inventory.js';
+import { DEFAULT_STORAGE_WINDOWS, MAX_STORAGE_WINDOWS } from '../domain/inventory.js';
 import { toFiniteNumber } from './units.js';
 
 /** Trackers that Settings → Customize can hide (hidden ≠ deleted). */
@@ -59,14 +65,11 @@ export const EXPORTABLE_KEYS = Object.freeze([
   'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound', 'onboarded',
 ]);
 
-const STORAGE_WINDOW_RANGES = Object.freeze({
-  roomTempHours: [1, 24],
-  fridgeDays: [1, 14],
-  freezerMonths: [1, 24],
-  deepFreezerMonths: [1, 24],
-  thawedBottleHours: [1, 72],
-  startedBottleHours: [1, 24],
-});
+// Upper bounds are shared with the stash import guard (domain/inventory.js),
+// so an imported pouch can never claim a longer window than Settings allows.
+const STORAGE_WINDOW_RANGES = Object.freeze(Object.fromEntries(
+  Object.keys(DEFAULT_STORAGE_WINDOWS).map(k => [k, [1, MAX_STORAGE_WINDOWS[k]]]),
+));
 
 const ID_RE = /^[A-Za-z0-9_.:-]{1,100}$/;
 const KEY_RE = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
@@ -254,6 +257,35 @@ function emit(change) {
   }
 }
 
+// --------------------------------------------------------- cross-tab sync
+
+/** BroadcastChannel name other tabs listen on for "settings changed". */
+export const SETTINGS_CHANNEL = 'nurture-settings';
+let channel = null; // null = not tried yet, false = unavailable
+
+function getChannel() {
+  if (channel === null) {
+    channel = false;
+    try {
+      if (typeof BroadcastChannel === 'function') {
+        const ch = new BroadcastChannel(SETTINGS_CHANNEL);
+        // Node has BroadcastChannel too; never let it keep a test process alive.
+        if (typeof ch.unref === 'function') ch.unref();
+        ch.onmessage = () => { refresh().catch(err => console.error('settings refresh failed', err)); };
+        channel = ch;
+      }
+    } catch { channel = false; }
+  }
+  return channel || null;
+}
+
+// Tell the other tabs to re-read (a channel never delivers to its sender).
+function broadcast(key) {
+  const ch = getChannel();
+  if (!ch) return;
+  try { ch.postMessage({ key }); } catch { /* channel closed */ }
+}
+
 /**
  * Load every stored setting into memory (idempotent), and make sure this
  * install has a deviceId and at least one baby. Resolves with all().
@@ -261,6 +293,7 @@ function emit(change) {
  */
 export function load() {
   if (!loadPromise) {
+    getChannel(); // start listening for other tabs' writes
     loadPromise = (async () => {
       const records = await getAll(STORES.settings);
       cache.clear();
@@ -273,15 +306,23 @@ export function load() {
   return loadPromise;
 }
 
-/**
- * Re-read the store (after migration / import / erase) and tell every
- * subscriber that anything may have changed ({ key: '*' }).
- * @returns {Promise<object>}
- */
-export async function reload() {
+// Re-read the store and tell this tab's subscribers ({ key: '*' }).
+async function refresh() {
   loadPromise = null;
   const values = await load();
   emit({ key: '*', value: undefined, prev: undefined });
+  return values;
+}
+
+/**
+ * Re-read the store (after migration / import / erase) and tell every
+ * subscriber that anything may have changed ({ key: '*' }). Other open tabs
+ * are told to re-read too.
+ * @returns {Promise<object>}
+ */
+export async function reload() {
+  const values = await refresh();
+  broadcast('*');
   return values;
 }
 
@@ -344,12 +385,17 @@ export function get(key) {
     if (typeof stored === 'string' && list.some(b => b.id === stored)) return stored;
     return list.length ? list[0].id : null;
   }
-  const known = Object.prototype.hasOwnProperty.call(DEFAULTS, key);
-  if (cache.has(key)) {
-    const res = sanitizeSetting(key, cache.get(key), { lenient: true });
+  return readValue(key, cache.has(key), cache.get(key));
+}
+
+// What get() returns for a stored (or missing) raw value: the leniently
+// sanitized value, else the default for a known key, else undefined. A copy.
+function readValue(key, has, raw) {
+  if (has) {
+    const res = sanitizeSetting(key, raw, { lenient: true });
     if (res.ok) return clone(res.value);
   }
-  return known ? clone(DEFAULTS[key]) : undefined;
+  return Object.prototype.hasOwnProperty.call(DEFAULTS, key) ? clone(DEFAULTS[key]) : undefined;
 }
 
 /**
@@ -378,34 +424,59 @@ export async function set(key, value) {
   if (key === 'activeBabyId' && !get('babies').some(b => b.id === res.value)) {
     throw new TypeError('activeBabyId must be one of the babies');
   }
-  const prev = get(key);
-  if (cache.has(key) && JSON.stringify(prev) === JSON.stringify(res.value)) return clone(res.value);
-  const stored = clone(res.value);
-  await transaction(STORES.settings, 'readwrite', (s) => {
-    s.settings.put({ key, value: stored, updatedAt: Date.now() });
-  });
-  cache.set(key, stored);
-  emit({ key, value: clone(stored), prev });
-  return clone(stored);
+  return writeSetting(key, () => res.value);
 }
 
 /**
  * Shallow-merge into an object setting: patch('trackers', { pump: false }).
+ * The merge reads the STORED value inside the write transaction, so two
+ * concurrent patches (or a patch from another tab) both survive.
  * @param {string} key
  * @param {object} partial
  * @returns {Promise<any>}
  */
 export async function patch(key, partial) {
+  const extra = isPlainObject(partial) ? { ...partial } : {};
+  return writeSetting(key, (current) => {
+    if (!isPlainObject(current)) throw new TypeError(`${key} is not an object setting`);
+    return { ...current, ...extra };
+  });
+}
+
+// Atomic read-modify-write of one key. `compute(current)` gets the value as
+// it is stored right now (sanitized, default-filled — what get() would say
+// in a fresh tab) and returns the next value; it may throw to abort. A value
+// equal to what is stored is not rewritten and emits nothing (unless this
+// tab's cache was stale). Resolves with the stored value.
+async function writeSetting(key, compute) {
   await load();
-  const current = get(key);
-  if (!isPlainObject(current)) throw new TypeError(`${key} is not an object setting`);
-  return set(key, { ...current, ...(isPlainObject(partial) ? partial : {}) });
+  const now = Date.now();
+  const { value, wrote } = await transaction(STORES.settings, 'readwrite', (s, ctx) => {
+    const g = s.settings.get(key);
+    g.onsuccess = () => {
+      const rec = g.result;
+      let res;
+      try {
+        res = sanitizeSetting(key, compute(readValue(key, !!rec, rec && rec.value)));
+      } catch (err) { ctx.fail(err); return; }
+      if (!res.ok) { ctx.fail(new TypeError(res.error)); return; }
+      const same = !!rec && JSON.stringify(rec.value) === JSON.stringify(res.value);
+      if (!same) s.settings.put({ key, value: res.value, updatedAt: now });
+      ctx.done({ value: res.value, wrote: !same });
+    };
+  });
+  const prev = get(key);
+  cache.set(key, clone(value));
+  if (wrote || JSON.stringify(prev) !== JSON.stringify(get(key))) emit({ key, value: clone(value), prev });
+  if (wrote) broadcast(key);
+  return clone(value);
 }
 
 // ----------------------------------------------------------------- babies
 
-// Baby edits are read-modify-write on one list; queue them so two quick
-// edits (add twin, rename) can't both read the old list and drop each other.
+// Baby edits are read-modify-writes of the STORED list (writeSetting), so an
+// edit from another tab is never overwritten by this tab's cache; the queue
+// also keeps this tab's own edits in the order they were made.
 let babyQueue = Promise.resolve();
 function queueBabyEdit(fn) {
   const run = babyQueue.then(async () => { await load(); return fn(); });
@@ -449,9 +520,10 @@ export function addBaby(fields = {}) {
     const draft = { ...makeBaby({}, Date.now()), ...pickBabyFields(fields) };
     const baby = sanitizeBaby(draft);
     if (!baby) throw new TypeError('Invalid baby details');
-    const list = get('babies');
-    if (list.length >= MAX_BABIES) throw new TypeError(`At most ${MAX_BABIES} babies`);
-    await set('babies', [...list, baby]);
+    await writeSetting('babies', (list) => {
+      if (list.length >= MAX_BABIES) throw new TypeError(`At most ${MAX_BABIES} babies`);
+      return [...list, baby];
+    });
     return clone(baby);
   });
 }
@@ -465,14 +537,16 @@ export function addBaby(fields = {}) {
  */
 export function updateBaby(id, fields) {
   return queueBabyEdit(async () => {
-    const list = get('babies');
-    const i = list.findIndex(b => b.id === id);
-    if (i === -1) throw new TypeError(`No baby with id ${String(id).slice(0, 100)}`);
-    const next = sanitizeBaby({ ...list[i], ...pickBabyFields(fields) });
-    if (!next) throw new TypeError('Invalid baby details');
-    const updated = list.slice();
-    updated[i] = next;
-    await set('babies', updated);
+    let next = null;
+    await writeSetting('babies', (list) => {
+      const i = list.findIndex(b => b.id === id);
+      if (i === -1) throw new TypeError(`No baby with id ${String(id).slice(0, 100)}`);
+      next = sanitizeBaby({ ...list[i], ...pickBabyFields(fields) });
+      if (!next) throw new TypeError('Invalid baby details');
+      const updated = list.slice();
+      updated[i] = next;
+      return updated;
+    });
     return clone(next);
   });
 }

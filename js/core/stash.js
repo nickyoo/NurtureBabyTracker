@@ -12,10 +12,10 @@
 
 import { transaction, getAll, get as dbGet, newId, STORES } from './db.js';
 import { get as getSetting, load as loadSettings, deviceId as getDeviceId, cleanText } from './settings.js';
-import { ID_RE } from './store.js';
+import { ID_RE, FUTURE_SKEW_MS } from './store.js';
 import {
   buildThawUpdate, summarizeStash, filterInventory, pickUseNext, buildInventoryItem,
-  applyInventoryPatch, consumeUpdate, effectiveStatus, LOCATIONS, STATUSES,
+  applyInventoryPatch, consumeUpdate, effectiveStatus, maxExpiresAt, LOCATIONS, STATUSES,
 } from '../domain/inventory.js';
 import { normalizeUnit, toFiniteNumber } from './units.js';
 
@@ -84,11 +84,14 @@ async function mutateAndEmit(id, fn) {
  * Persist status 'expired' on every active pouch past its expiry, in ONE
  * transaction (see header). Emits an update per pouch flipped. Doesn't bump
  * updatedAt: expiry is derived from expiresAt, so it shouldn't win a merge
- * against a real edit from another device.
- * @param {number} [now]
+ * against a real edit from another device. `now` can only be earlier than
+ * the real clock: persisting "expired" ahead of time would throw away milk
+ * that is still good.
+ * @param {number} [at]
  * @returns {Promise<object[]>} the pouches that just expired
  */
-export async function sweepExpired(now = Date.now()) {
+export async function sweepExpired(at = Date.now()) {
+  const now = Math.min(Number.isFinite(at) ? at : Date.now(), Date.now());
   const changed = await transaction(STORES.inventory, 'readwrite', (s, ctx) => {
     const flipped = [];
     ctx.done(flipped);
@@ -109,8 +112,11 @@ export async function sweepExpired(now = Date.now()) {
   return changed.map(c => c.next);
 }
 
-async function readAll(now) {
-  await sweepExpired(now);
+// Reads persist expiry with the REAL clock only. A caller's `now` (a
+// preview, a fast device clock) is used just to filter in memory —
+// effectiveStatus() already hides anything expired as of that time.
+async function readAll() {
+  await sweepExpired(Date.now());
   return getAll(STORES.inventory);
 }
 
@@ -131,7 +137,7 @@ export async function get(id) {
  * @returns {Promise<object[]>}
  */
 export async function list({ filter = 'all', now = Date.now() } = {}) {
-  return filterInventory(await readAll(now), filter, now);
+  return filterInventory(await readAll(), filter, now);
 }
 
 /**
@@ -140,7 +146,7 @@ export async function list({ filter = 'all', now = Date.now() } = {}) {
  * @returns {Promise<{totalOz:number, fridgeOz:number, freezerOz:number, deepFreezerOz:number, totalBags:number, everStored:boolean}>}
  */
 export async function summary({ now = Date.now() } = {}) {
-  const all = await readAll(now);
+  const all = await readAll();
   // everStored lets the UI skip "Low stash" nags for families that never
   // stored milk (AUDIT F12).
   return { ...summarizeStash(filterInventory(all, 'all', now)), everStored: all.length > 0 };
@@ -168,7 +174,7 @@ export function thawed() {
  * @returns {Promise<object|null>}
  */
 export async function useNext({ now = Date.now() } = {}) {
-  return pickUseNext(await readAll(now), now);
+  return pickUseNext(await readAll(), now);
 }
 
 /**
@@ -330,23 +336,38 @@ export async function restore(snapshot) {
 const own = (o, k) => (o !== null && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined);
 
 /**
- * Validate + normalise a pouch record (pure; shared with backup import).
- * Returns a NEW object with known keys only, or null if unusable.
+ * Validate + normalise a pouch record (pure; shared with backup import and
+ * undo). Returns a NEW object with known keys only, or null if unusable.
+ * Trust boundary (AUDIT §6.5): a pouch pumped or thawed more than
+ * FUTURE_SKEW_MS after `now` is rejected; a createdAt that far ahead falls
+ * back to pumpedAt and a usedAt/discardedAt/updatedAt is dropped (merge then
+ * dates it by its own lifecycle stamps, so a far-future updatedAt can't win
+ * every merge); and its expiresAt can never be later than the longest
+ * storage window Settings allows (maxExpiresAt), so spoiled milk can't be
+ * imported as usable.
  * @param {unknown} raw
+ * @param {{ now?: number }} [opts]
  * @returns {object|null}
  */
-export function sanitizeInventoryItem(raw) {
+export function sanitizeInventoryItem(raw, { now = Date.now() } = {}) {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const id = own(raw, 'id');
   if (typeof id !== 'string' || !ID_RE.test(id)) return null;
+  const latest = now + FUTURE_SKEW_MS;
   const time = k => {
     const n = toFiniteNumber(own(raw, k));
     return n !== null && n >= Date.UTC(2000, 0, 1) && n <= Date.UTC(2100, 0, 1) ? n : null;
   };
+  const pastTime = k => {
+    const t = time(k);
+    return t !== null && t <= latest ? t : null;
+  };
   const pumpedAt = time('pumpedAt');
+  const thawedAt = time('thawedAt');
   const quantity = toFiniteNumber(own(raw, 'quantity'));
   const location = own(raw, 'location');
-  if (pumpedAt === null || quantity === null || quantity < 0 || quantity > 10000 || !LOCATIONS.includes(location)) return null;
+  if (pumpedAt === null || pumpedAt > latest || (thawedAt !== null && thawedAt > latest)) return null;
+  if (quantity === null || quantity < 0 || quantity > 10000 || !LOCATIONS.includes(location)) return null;
   const status = STATUSES.includes(own(raw, 'status')) ? own(raw, 'status') : 'active';
   const item = {
     id,
@@ -354,13 +375,14 @@ export function sanitizeInventoryItem(raw) {
     quantity,
     unit: normalizeUnit(own(raw, 'unit')),
     location,
-    expiresAt: time('expiresAt') ?? pumpedAt,
+    expiresAt: Math.min(time('expiresAt') ?? pumpedAt, maxExpiresAt({ pumpedAt, location, thawedAt })),
     status,
     notes: cleanText(own(raw, 'notes'), 2000),
-    createdAt: time('createdAt') ?? pumpedAt,
+    createdAt: pastTime('createdAt') ?? pumpedAt,
   };
-  for (const k of ['thawedAt', 'usedAt', 'discardedAt', 'updatedAt']) {
-    const t = time(k);
+  if (thawedAt !== null) item.thawedAt = thawedAt;
+  for (const k of ['usedAt', 'discardedAt', 'updatedAt']) {
+    const t = pastTime(k);
     if (t !== null) item[k] = t;
   }
   const dev = own(raw, 'deviceId');

@@ -6,8 +6,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   sanitizeEvent, sanitizeEventData, applyEventPatch, matchesBaby, compareNewestFirst,
-  EVENT_TYPES, BABY_TYPES, PARENT_TYPES, LIMITS, RunningActivityError, NotFoundError,
+  EVENT_TYPES, BABY_TYPES, PARENT_TYPES, LIMITS, FUTURE_SKEW_MS, RunningActivityError, NotFoundError,
 } from '../js/core/store.js';
+import { rangeTotals } from '../js/domain/trends.js';
 
 const NOW = new Date('2026-10-15T12:00:00').getTime();
 const BABY = 'baby_11111111-2222-3333-4444-555555555555';
@@ -187,4 +188,64 @@ test('error classes carry context for the UI', () => {
   assert.match(new RunningActivityError({ type: 'pump', babyId: null }).message, /^A pump is already running$/);
   const nf = new NotFoundError('evt_x');
   assert.deepEqual([nf.name, nf.id], ['NotFoundError', 'evt_x']);
+});
+
+// ---------------------------------------------------- regressions (R1) ---
+
+const MIN = 60 * 1000;
+const DAY = 24 * 60 * MIN;
+
+test('regression: a breastfeed finished via update({endTime}) banks its live side (no seconds after the end)', () => {
+  const start = NOW - 20 * MIN;
+  const running = sanitizeEvent({ id: 'evt_b', type: 'feed', startTime: start, endTime: null, babyId: BABY, createdAt: start, updatedAt: start, data: { method: 'breast', activeSide: 'left', activeSince: start } }, { now: NOW, strict: true }).value;
+  assert.equal(running.data.activeSide, 'left', 'a RUNNING breastfeed keeps its live side');
+  const done = applyEventPatch(running, { endTime: start + 15 * MIN }, NOW);
+  assert.deepEqual(done.data, { method: 'breast', left: 15 * 60, right: 0, lastSide: 'left', activeSide: null, activeSince: null });
+  for (const now of [NOW, NOW + DAY, NOW + 30 * DAY]) {
+    assert.equal(rangeTotals([done], start - DAY, start + DAY, { now }).feed.breastSec, 15 * 60, `breastSec stays 900 at now+${(now - NOW) / DAY}d`);
+  }
+});
+
+test('regression: a past breastfeed logged with a live side (add/restore/import) is banked up to endTime', () => {
+  const start = NOW - 2 * 60 * MIN;
+  const raw = { id: 'evt_k', type: 'feed', startTime: start, endTime: start + 10 * MIN, babyId: BABY, data: { method: 'breast', left: 600, activeSide: 'right', activeSince: start + 5 * MIN } };
+  for (const strict of [true, false]) {
+    const e = sanitizeEvent(raw, { now: NOW, strict }).value;
+    assert.deepEqual([e.data.left, e.data.right, e.data.activeSide, e.data.activeSince, e.data.lastSide], [600, 300, null, null, 'right'], `strict=${strict}`);
+  }
+  // A live side that "started" after the end adds nothing; an instant (no endTime) adds nothing.
+  assert.equal(sanitizeEvent({ ...raw, data: { method: 'breast', activeSide: 'left', activeSince: start + 60 * MIN } }, { now: NOW }).value.data.left, 0);
+  const instant = sanitizeEvent({ ...raw, endTime: undefined, data: { method: 'breast', activeSide: 'left', activeSince: start } }, { now: NOW }).value;
+  assert.deepEqual([instant.data.left, instant.data.activeSide], [0, null]);
+  // Banking can't exceed the per-side cap.
+  const huge = sanitizeEvent({ ...raw, startTime: NOW - 3 * DAY, endTime: NOW, data: { method: 'breast', left: LIMITS.sideSec, activeSide: 'left', activeSince: NOW - 3 * DAY } }, { now: NOW }).value;
+  assert.equal(huge.data.left, LIMITS.sideSec);
+});
+
+test('regression: trends never add live seconds to a finished breastfeed that still carries an activeSide', () => {
+  const start = NOW - 60 * MIN;
+  // Stored before the fix: finished, but activeSide/activeSince left behind.
+  const stale = { id: 'evt_s', type: 'feed', startTime: start, endTime: start + 15 * MIN, babyId: BABY, data: { method: 'breast', left: 0, right: 0, lastSide: 'left', activeSide: 'left', activeSince: start } };
+  assert.equal(rangeTotals([stale], start - DAY, start + DAY, { now: NOW + DAY }).feed.breastSec, 15 * 60);
+});
+
+test('regression: imported times far in the future are rejected; far-future createdAt/updatedAt are replaced deterministically', () => {
+  for (const [raw, why] of [
+    [base({ startTime: Date.UTC(2090, 0, 1), endTime: null, type: 'sleep', data: {} }), 'running sleep starting in 2090'],
+    [base({ startTime: NOW + 2 * DAY }), 'startTime two days ahead'],
+    [base({ startTime: NOW - DAY, endTime: NOW + 2 * DAY, type: 'sleep', data: {} }), 'endTime two days ahead'],
+  ]) {
+    assert.equal(sanitizeEvent(raw, { now: NOW }).ok, false, `lenient: ${why}`);
+    assert.equal(sanitizeEvent(raw, { now: NOW, strict: true }).ok, false, `strict: ${why}`);
+  }
+  assert.equal(sanitizeEvent(base({ startTime: NOW + 60 * MIN }), { now: NOW }).ok, true, 'small clock skew is fine');
+  const skewed = sanitizeEvent(base({ updatedAt: NOW + FUTURE_SKEW_MS }), { now: NOW }).value;
+  assert.equal(skewed.updatedAt, NOW + FUTURE_SKEW_MS, 'a stamp within the skew is kept as-is');
+  const raw = { id: 'evt_s', type: 'sleep', startTime: NOW - 2 * 60 * MIN, endTime: NOW - 60 * MIN, babyId: BABY, data: {}, createdAt: Date.UTC(2099, 0, 1), updatedAt: Date.UTC(2099, 0, 1) };
+  const e = sanitizeEvent(raw, { now: NOW }).value;
+  assert.deepEqual([e.createdAt, e.updatedAt], [raw.startTime, raw.endTime], 'derived from the event itself');
+  assert.deepEqual(sanitizeEvent(raw, { now: NOW + 3 * DAY }).value.updatedAt, e.updatedAt, 'same result on every import');
+  // …so a real edit (now or later) is newer than any re-import of that copy.
+  const edited = applyEventPatch(e, { note: 'my real edit' }, NOW);
+  assert.ok(edited.updatedAt > e.updatedAt && edited.updatedAt <= NOW + 1);
 });

@@ -1,12 +1,13 @@
 {
-  "name": "Nurture — Baby Tracker",
+  "name": "Nurture",
   "short_name": "Nurture",
+  "description": "Free. Private. Everything stays on this phone. A calm baby tracker for feeds, sleep, diapers, pumping and your milk stash. Works offline, with no account, no ads and no analytics.",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#fff7f9",
-  "theme_color": "#fff7f9",
   "orientation": "portrait-primary",
-  "description": "Free offline baby feeding and pumping tracker. Daily goals, milk stash manager with FIFO expiry, and bottle safety timers. Your data never leaves your phone.",
+  "background_color": "#F6F1E8",
+  "theme_color": "#F6F1E8",
   "categories": ["medical", "lifestyle", "parenting"],
   "icons": [
     {

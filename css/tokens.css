@@ -338,10 +338,12 @@
 /* =====================================================================
    Reduced motion: no transform motion anywhere. Surfaces keep only an
    opacity cross-fade (<= 150ms). Color cues (new-row tint) survive.
-   [data-motion="reduce"] is the in-app Settings mirror of the query.
+   [data-motion="reduce"] is the in-app Settings mirror of the query;
+   [data-motion="full"] is the in-app "off" choice, which must beat the
+   system query (the setting "follows the system until changed").
    ===================================================================== */
 @media (prefers-reduced-motion: reduce) {
-  :root {
+  :root:not([data-motion="full"]) {
     --move-sm: 0px; --move-md: 0px; --move-lg: 0px; --move-xl: 0px;
     --press-scale: 1; --card-press-scale: 1; --page-behind-scale: 1; --fab-rotate: 0deg;
     --dur-base: 150ms; --dur-morph: 150ms; --dur-sheet: 150ms; --dur-grow: 150ms;

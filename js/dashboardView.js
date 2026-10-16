@@ -7,7 +7,7 @@ import { reminders } from './reminders.js';
 import { TrendsManager } from './trends.js';
 import { inventory, InventoryManager, shouldShowThawTile } from './inventory.js';
 import { escapeHtml, displayQty, sumQty, sessionQty, plural } from './viewHelpers.js';
-import { applySessionEdits } from './app.js';
+import { applySessionEdits } from './app.v1.js'; // v1 orchestrator renamed; js/app.js is now the v2 bootstrap
 
 const ICON_SVG_BOTTLE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9.5" y="2.5" width="5" height="2.6" rx="1"/><path d="M10.5 5.1h3v2.3l2 2.8V21a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V10.2l2-2.8z"/></svg>';
 const ICON_SVG_DROPLET = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 4.4 6 7.6 6 11a6 6 0 1 1-12 0c0-3.4 2.5-6.6 6-11z"/></svg>';

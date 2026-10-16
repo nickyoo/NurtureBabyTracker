@@ -19,7 +19,7 @@ import {
   shouldFlipType,
   feedPresets,
   getBottleTimerStatus,
-} from './app.js';
+} from './app.v1.js'; // v1 orchestrator renamed; js/app.js is now the v2 bootstrap
 
 export class FeedFlowController {
   constructor(app) {

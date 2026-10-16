@@ -960,6 +960,197 @@ SUITES.persist = async () => {
   });
 };
 
+// ------------------------------------------------- regressions (round 1)
+
+// Data-layer invariants that only show up against real IndexedDB.
+SUITES['data-invariants'] = async () => {
+  const { events } = await import('../../../js/core/store.js');
+  const { stash } = await import('../../../js/core/stash.js');
+  const settings = await import('../../../js/core/settings.js');
+  const { rangeTotals } = await import('../../../js/domain/trends.js');
+  await settings.load();
+
+  await test('a breastfeed finished with update({ endTime }) stops counting at its end', async () => {
+    const start = Date.now() - 20 * MIN;
+    const ev = await events.start('feed', { method: 'breast', activeSide: 'left', activeSince: start }, { startTime: start });
+    await events.update(ev.id, { endTime: start + 15 * MIN });
+    const s = await events.get(ev.id);
+    eq([s.data.activeSide, s.data.activeSince, s.data.left, s.data.lastSide], [null, null, 15 * 60, 'left']);
+    eq(rangeTotals([s], start - HOUR, start + HOUR, { now: Date.now() + DAY }).feed.breastSec, 15 * 60, 'a day later: still 15 min');
+  });
+
+  await test('a past breastfeed added (or restored) with a live side is banked at its end', async () => {
+    const start = Date.now() - 2 * HOUR;
+    const ev = await events.add({ type: 'feed', startTime: start, endTime: start + 10 * MIN, data: { method: 'breast', left: 600, activeSide: 'right', activeSince: start + 5 * MIN } });
+    eq([ev.data.activeSide, ev.data.left, ev.data.right], [null, 600, 300]);
+    eq(rangeTotals([await events.get(ev.id)], start - HOUR, start + HOUR, { now: Date.now() }).feed.breastSec, 900);
+    const removed = await events.remove(ev.id);
+    const restored = await events.restore({ ...removed, data: { ...removed.data, activeSide: 'left', activeSince: start } });
+    eq(restored.data.activeSide, null, 'undo of a stale record banks too');
+  });
+
+  await test('stash reads with a future `now` never persist expiry early', async () => {
+    const p = await stash.add({ quantity: 4, unit: 'oz', location: 'fridge', pumpedAt: Date.now() });
+    const later = Date.now() + 10 * DAY;
+    ok(!(await stash.list({ now: later })).some(x => x.id === p.id), 'the preview filters by its own now');
+    await stash.summary({ now: later });
+    eq(await stash.useNext({ now: later }), null);
+    await stash.sweepExpired(later);
+    eq((await stash.get(p.id)).status, 'active', 'nothing written');
+    ok((await stash.list()).some(x => x.id === p.id), 'still usable today');
+  });
+
+  await test('a pouch swept to expired comes back when corrected to where it is still good', async () => {
+    const p = await stash.add({ quantity: 4, unit: 'oz', location: 'room', pumpedAt: Date.now() - 5 * HOUR });
+    await stash.list(); // sweeps it
+    eq((await stash.get(p.id)).status, 'expired');
+    const fixed = await stash.update(p.id, { location: 'freezer' });
+    eq(fixed.status, 'active');
+    ok(fixed.expiresAt > Date.now(), 'freezer expiry ahead');
+    ok((await stash.frozen()).some(x => x.id === p.id), 'listed as frozen');
+    eq((await stash.thaw(p.id)).location, 'thawed', 'and thawable');
+  });
+
+  await test('concurrent settings.patch calls on one key keep every change', async () => {
+    await Promise.all([settings.patch('trackers', { pump: false }), settings.patch('trackers', { sleep: false })]);
+    await Promise.all([settings.patch('storageWindows', { fridgeDays: 3 }), settings.patch('storageWindows', { roomTempHours: 6 })]);
+    const mem = [settings.get('trackers').pump, settings.get('trackers').sleep, settings.get('storageWindows').fridgeDays, settings.get('storageWindows').roomTempHours];
+    await settings.reload();
+    const disk = [settings.get('trackers').pump, settings.get('trackers').sleep, settings.get('storageWindows').fridgeDays, settings.get('storageWindows').roomTempHours];
+    eq([mem, disk], [[false, false, 3, 6], [false, false, 3, 6]]);
+  });
+
+  await test('baby edits and patches build on the STORED value, not this tab\'s cache', async () => {
+    const [baby] = settings.get('babies');
+    // Another tab (whose message never reaches us) renamed the baby and hid diapers.
+    await setRawSetting('babies', [{ ...baby, name: 'Clara Rose', birthDate: '2026-08-01' }]);
+    await setRawSetting('trackers', { ...settings.get('trackers'), diaper: false });
+    eq(settings.get('babies')[0].name, '', 'this tab\'s cache is stale');
+    await settings.addBaby({ name: 'Theo' });
+    await settings.patch('trackers', { memories: false });
+    await settings.updateBaby(baby.id, { photoId: 'pho_1' });
+    await settings.reload();
+    eq(settings.get('babies').map(b => [b.name, b.birthDate, b.photoId]), [['Clara Rose', '2026-08-01', 'pho_1'], ['Theo', null, null]]);
+    eq([settings.get('trackers').diaper, settings.get('trackers').memories, settings.get('trackers').pump], [false, false, false]);
+  });
+};
+
+// Import is a trust boundary (AUDIT §6.5): replace must never destroy data
+// because of a damaged file, and nothing in a file may claim the future.
+SUITES['import-guards'] = async () => {
+  const backup = await import('../../../js/core/backup.js');
+  const { events } = await import('../../../js/core/store.js');
+  const { stash } = await import('../../../js/core/stash.js');
+  const photos = await import('../../../js/core/photos.js');
+  const settings = await import('../../../js/core/settings.js');
+  await settings.load();
+  const file = over => JSON.stringify({ app: 'nurture', schema: 2, ...over });
+  const counts = async () => [(await photos.usage()).count, (await events.query()).length, (await stash.list({ filter: 'everything' })).length];
+
+  await photos.add(await makeImageBlob(40, 30));
+  for (let i = 0; i < 3; i++) await events.add({ type: 'diaper', data: { kind: 'wet' }, startTime: Date.now() - (i + 1) * HOUR });
+  await stash.add({ quantity: 4, unit: 'oz', location: 'freezer' });
+
+  await test('replace refuses a file whose photos / events / stash are damaged — before the safety copy, touching nothing', async () => {
+    const damaged = [
+      { events: [], inventory: [], photos: 5 },
+      { events: [], inventory: [], photos: [{ id: 'pho_x', data: 'not base64!!', width: 1, height: 1 }] },
+      { events: 'oops', inventory: {} },
+      { events: [{ id: 'evt_x', type: 'telemetry', startTime: Date.now() }], inventory: [] },
+    ];
+    for (const bad of damaged) {
+      let safetyCalls = 0;
+      const err = await rejects(backup.importBackup(file(bad), { mode: 'replace', safetyBackup: () => { safetyCalls += 1; } }), e => e.name === 'BackupError', JSON.stringify(bad));
+      ok(/nothing was replaced/.test(err.message), err.message);
+      eq(safetyCalls, 0, 'refused before the safety copy');
+      eq(await counts(), [1, 3, 1], `nothing touched by ${JSON.stringify(bad).slice(0, 60)}`);
+    }
+  });
+
+  await test('replace keeps every store the file carries no list for', async () => {
+    const res = await backup.importBackup(file({ settings: { units: 'mL' } }), { mode: 'replace', safetyBackup: () => {} });
+    eq(await counts(), [1, 3, 1], 'events, stash and photos kept');
+    eq(settings.get('units'), 'mL', 'settings replaced');
+    ok(res.safetyBackup, 'safety copy still taken');
+  });
+
+  await test('imported spoiled milk with a far-future expiry is never offered', async () => {
+    const res = await backup.importBackup(file({ inventory: [{ id: 'inv_evil', pumpedAt: Date.now() - 30 * DAY, quantity: 5, unit: 'oz', location: 'fridge', expiresAt: Date.UTC(2099, 0, 1), status: 'active' }] }), { mode: 'merge' });
+    eq(res.stats.inventory.added, 1);
+    ok(!(await stash.list()).some(x => x.id === 'inv_evil'), 'not in the usable list');
+    const next = await stash.useNext();
+    ok(!next || next.id !== 'inv_evil', 'not the next feed');
+    eq((await stash.get('inv_evil')).status, 'expired', 'swept as expired');
+  });
+
+  await test('imported far-future events are rejected, far-future stamps replaced: timers still start, real edits stay newest', async () => {
+    const babyId = settings.get('activeBabyId');
+    const local = await events.add({ type: 'feed', data: { method: 'bottle', milk: 'formula', amount: 3, unit: 'oz' }, startTime: Date.now() - HOUR });
+    const hostile = file({ events: [
+      { id: 'evt_future', type: 'sleep', startTime: Date.UTC(2090, 0, 1), endTime: null, babyId, updatedAt: Date.UTC(2099, 0, 1) },
+      { ...local, note: 'from the file', updatedAt: Date.UTC(2099, 0, 1) },
+    ] });
+    const res = await backup.importBackup(hostile, { mode: 'merge' });
+    eq(res.stats.rejected.events, 1, 'the 2090 sleep');
+    eq(await events.get('evt_future'), null);
+    const nap = await events.start('sleep');
+    await events.stop(nap.id);
+    eq((await events.last('sleep')).id, nap.id);
+    const imported = await events.get(local.id);
+    eq([imported.note, imported.updatedAt], ['', local.updatedAt], 'the file\'s 2099 stamp doesn\'t beat the local copy');
+    const edited = await events.update(local.id, { note: 'my real edit' });
+    ok(edited.updatedAt > imported.updatedAt && edited.updatedAt <= Date.now(), 'edit stamped with the real clock');
+    await backup.importBackup(hostile, { mode: 'merge' });
+    eq((await events.get(local.id)).note, 'my real edit', 're-importing the file no longer overwrites the edit');
+  });
+
+  await test('replace with only the family\'s settings to lose still saves a safety copy first', async () => {
+    await backup.eraseAll();
+    eq(await counts(), [0, 0, 0]);
+    await settings.updateBaby(settings.get('activeBabyId'), { name: 'Clara', birthDate: '2026-08-01' });
+    await settings.set('parentName', 'Sam');
+    await settings.patch('storageWindows', { fridgeDays: 3 });
+    let saved = null;
+    const res = await backup.importBackup(file({ events: [], inventory: [], settings: { babies: [{ id: 'baby_other1', name: 'Max' }], parentName: 'Eve' } }), { mode: 'replace', safetyBackup: (f) => { saved = f; } });
+    ok(saved && res.safetyBackup === saved.name, 'safety copy saved');
+    const data = JSON.parse(await saved.text());
+    eq(data.settings.babies.map(b => [b.name, b.birthDate]), [['Clara', '2026-08-01']]);
+    eq([data.settings.parentName, data.settings.storageWindows.fridgeDays], ['Sam', 3]);
+    eq([settings.get('babies').map(b => b.name), settings.get('parentName')], [['Max'], 'Eve'], 'then replaced');
+    await backup.eraseAll();
+    let called = false;
+    const fresh = await backup.importBackup(file({ events: [], settings: { parentName: 'Eve' } }), { mode: 'replace', safetyBackup: () => { called = true; } });
+    eq([called, fresh.safetyBackup], [false, null], 'a fresh device has nothing to protect');
+  });
+};
+
+// Helpers for the two-tab scenarios in core.mjs: each page is one "tab" of
+// the same origin (same IndexedDB). Nothing runs on its own here.
+SUITES.tabs = async () => {
+  window.TABS = {
+    async seedV1Settings(pairs) {
+      const db = await rawOpen(1, v1Schema);
+      await rawTx(db, ['settings'], 'readwrite', (tx) => {
+        for (const [key, value] of pairs) tx.objectStore('settings').put({ key, value, updatedAt: NOW - DAY });
+      });
+      db.close();
+    },
+    // broadcast: false = a browser without BroadcastChannel (Safari < 15.4),
+    // so only the transactional writes keep this tab correct.
+    async mods({ broadcast = true } = {}) {
+      if (!broadcast) window.BroadcastChannel = undefined;
+      TABS.migrate = await import('../../../js/core/migrate.js');
+      TABS.settings = await import('../../../js/core/settings.js');
+    },
+    async rawSetting(key) {
+      const { get } = await import('../../../js/core/db.js');
+      const rec = await get('settings', key);
+      return rec ? rec.value : undefined;
+    },
+  };
+  results.push({ name: 'tab helpers ready', ok: true });
+};
+
 // ------------------------------------------------------------------- run
 
 (async () => {

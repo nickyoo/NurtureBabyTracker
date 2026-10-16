@@ -34,6 +34,10 @@ export const LIMITS = Object.freeze({ note: 2000, title: 200, short: 40, key: 60
 /** Plausible timestamp range; anything outside is corrupt or hostile. */
 export const MIN_TIME = Date.UTC(2000, 0, 1);
 export const MAX_TIME = Date.UTC(2100, 0, 1);
+/** How far ahead of `now` a record's times may be (clock skew between two
+ * phones). Nothing starts later than this; a createdAt/updatedAt from a file
+ * beyond it is replaced (see sanitizeEvent) so it can't win every merge. */
+export const FUTURE_SKEW_MS = 24 * 3600 * 1000;
 /** Record ids: short, and only characters that are safe as keys/selectors. */
 export const ID_RE = /^[A-Za-z0-9_.:-]{1,100}$/;
 const DIAPER_KINDS = ['wet', 'dirty', 'both', 'dry'];
@@ -168,6 +172,13 @@ export function sanitizeEventData(type, data, { startTime } = {}) {
  * being dropped — import must never lose data.) `allowNullBaby` lets a
  * strict write keep such an event's null babyId, so it stays editable. Pump
  * events always get babyId: null.
+ * Either mode rejects a startTime/endTime more than FUTURE_SKEW_MS after
+ * `now`. In lenient mode a createdAt/updatedAt that far ahead is replaced by
+ * one derived from the event itself (createdAt → startTime, updatedAt → its
+ * latest own time) — deterministic, so re-importing the same file can't keep
+ * beating real edits in a newest-wins merge.
+ * A FINISHED breastfeed never keeps a live side: activeSide is banked up to
+ * endTime (so its seconds can't keep growing after it ended).
  * @param {unknown} raw
  * @param {{ now?: number, deviceId?: string, strict?: boolean, defaultBabyId?: string, allowNullBaby?: boolean }} [opts]
  * @returns {{ ok: true, value: object } | { ok: false, error: string }}
@@ -179,22 +190,29 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false,
   const id = own(raw, 'id');
   if (typeof id !== 'string' || !ID_RE.test(id)) return { ok: false, error: 'bad event id' };
 
+  const latest = now + FUTURE_SKEW_MS;
   const startTime = toFiniteNumber(own(raw, 'startTime'));
   if (!isTime(startTime)) return { ok: false, error: 'bad startTime' };
+  if (startTime > latest) return { ok: false, error: 'startTime is in the future' };
 
   let endTime = own(raw, 'endTime');
   if (endTime === undefined) endTime = startTime; // an instant (diaper, past log)
   else if (endTime !== null) {
     endTime = toFiniteNumber(endTime);
     if (!isTime(endTime)) return { ok: false, error: 'bad endTime' };
+    if (endTime > latest) return { ok: false, error: 'endTime is in the future' };
     if (endTime < startTime) {
       if (strict) return { ok: false, error: 'endTime is before startTime' };
       endTime = startTime;
     }
   }
 
-  const data = sanitizeEventData(type, own(raw, 'data'), { startTime });
+  let data = sanitizeEventData(type, own(raw, 'data'), { startTime });
   if (!data.ok) return data;
+  if (endTime !== null && data.value.method === 'breast' && data.value.activeSide) {
+    // Bank the live side up to the end (seconds re-capped by the sanitizer).
+    data = sanitizeEventData(type, { ...data.value, ...switchBreastSide(data.value, null, endTime) }, { startTime });
+  }
 
   let babyId = null;
   if (BABY_TYPES.includes(type)) {
@@ -206,6 +224,7 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false,
 
   const createdAt = toFiniteNumber(own(raw, 'createdAt'));
   const updatedAt = toFiniteNumber(own(raw, 'updatedAt'));
+  const fromFuture = t => !strict && isTime(t) && t > latest;
   const event = {
     id,
     type,
@@ -213,12 +232,13 @@ export function sanitizeEvent(raw, { now = Date.now(), deviceId, strict = false,
     endTime,
     note: cleanText(own(raw, 'note'), LIMITS.note),
     data: data.value,
-    createdAt: isTime(createdAt) ? createdAt : now,
+    createdAt: fromFuture(createdAt) ? startTime : (isTime(createdAt) ? createdAt : now),
     updatedAt: 0,
     babyId,
     deviceId: undefined,
   };
-  event.updatedAt = isTime(updatedAt) ? updatedAt : event.createdAt;
+  if (fromFuture(updatedAt)) event.updatedAt = Math.max(event.createdAt, endTime ?? startTime);
+  else event.updatedAt = isTime(updatedAt) ? updatedAt : event.createdAt;
   const dev = own(raw, 'deviceId');
   if (typeof dev === 'string' && /^dev_[A-Za-z0-9_-]{6,80}$/.test(dev)) event.deviceId = dev;
   else if (deviceId) event.deviceId = deviceId;

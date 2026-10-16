@@ -8,6 +8,7 @@ const {
   InventoryManager, buildThawUpdate, summarizeStash, THAWED_LOCATION, FROZEN_LOCATIONS, shouldShowThawTile,
   calculateExpiration, getUrgency, effectiveStatus, isUsable, compareFifo, filterInventory, pickUseNext,
   buildInventoryItem, applyInventoryPatch, consumeUpdate, inventoryUpdatedAt, DEFAULT_STORAGE_WINDOWS, LOCATIONS, STATUSES,
+  MAX_STORAGE_WINDOWS, maxExpiresAt,
 } = await import('../js/domain/inventory.js');
 
 const HOUR = 60 * 60 * 1000;
@@ -247,4 +248,40 @@ test('inventoryUpdatedAt: explicit updatedAt, else newest lifecycle stamp (v1 po
   assert.equal(inventoryUpdatedAt({ createdAt: 1, thawedAt: 7, pumpedAt: 0 }), 7);
   assert.equal(inventoryUpdatedAt({}), 0);
   assert.equal(inventoryUpdatedAt(null), 0);
+});
+
+// ---------------------------------------------------- regressions (R1) ---
+
+test('regression: correcting an expired pouch (wrong place logged) brings it back when its new expiry is ahead', () => {
+  // Logged at room temp 5h ago → the sweep marked it expired; it was really in the freezer.
+  const swept = pouch({ location: 'room', pumpedAt: NOW - 5 * HOUR, expiresAt: NOW - HOUR, status: 'expired' });
+  const fixed = applyInventoryPatch(swept, { location: 'freezer' }, DEFAULT_STORAGE_WINDOWS, NOW);
+  assert.ok(fixed.expiresAt > NOW);
+  assert.equal(fixed.status, 'active');
+  assert.equal(effectiveStatus(fixed, NOW), 'active');
+  assert.equal(buildThawUpdate(fixed, DEFAULT_STORAGE_WINDOWS, NOW).location, THAWED_LOCATION, 'and can be thawed');
+  assert.equal(pickUseNext([fixed], NOW).id, fixed.id);
+  // Still past its expiry after the edit → stays expired; used/discarded never revive.
+  assert.equal(applyInventoryPatch(swept, { notes: 'oops' }, DEFAULT_STORAGE_WINDOWS, NOW).status, 'expired');
+  assert.equal(applyInventoryPatch(swept, { expiresAt: NOW - 1 }, DEFAULT_STORAGE_WINDOWS, NOW).status, 'expired');
+  assert.equal(applyInventoryPatch(pouch({ status: 'used', expiresAt: NOW + DAY }), { notes: 'x' }, DEFAULT_STORAGE_WINDOWS, NOW).status, 'used');
+  assert.equal(applyInventoryPatch(pouch({ status: 'discarded', expiresAt: NOW + DAY }), { location: 'freezer' }, DEFAULT_STORAGE_WINDOWS, NOW).status, 'discarded');
+});
+
+test('maxExpiresAt: the longest window any setting allows, per location', () => {
+  const p = NOW - 30 * DAY;
+  assert.equal(maxExpiresAt({ pumpedAt: p, location: 'room' }), p + 24 * HOUR);
+  assert.equal(maxExpiresAt({ pumpedAt: p, location: 'fridge' }), p + 14 * DAY);
+  const two = new Date(p); two.setMonth(two.getMonth() + 24);
+  assert.equal(maxExpiresAt({ pumpedAt: p, location: 'freezer' }), two.getTime());
+  assert.equal(maxExpiresAt({ pumpedAt: p, location: 'deepFreezer' }), two.getTime());
+  assert.equal(maxExpiresAt({ pumpedAt: p, location: 'thawed', thawedAt: NOW }), NOW + 72 * HOUR);
+  assert.equal(maxExpiresAt({ pumpedAt: p, location: 'thawed' }), two.getTime() + 72 * HOUR, 'no thawedAt: latest possible thaw + window');
+  // Every pouch the app itself can build stays within the bound, even at the max settings.
+  for (const location of ['room', 'fridge', 'freezer', 'deepFreezer']) {
+    const item = buildInventoryItem({ quantity: 1, location, pumpedAt: p }, MAX_STORAGE_WINDOWS, { now: NOW, id: 'i' });
+    assert.ok(item.expiresAt <= maxExpiresAt(item), location);
+  }
+  const thawed = buildThawUpdate({ ...pouch({ location: 'freezer' }) }, MAX_STORAGE_WINDOWS, NOW);
+  assert.ok(thawed.expiresAt <= maxExpiresAt(thawed));
 });

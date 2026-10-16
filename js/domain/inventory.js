@@ -31,6 +31,18 @@ export const DEFAULT_STORAGE_WINDOWS = Object.freeze({
   startedBottleHours: 2,
 });
 
+/** The longest window Settings allows for each storage place (the upper
+ * bounds of settings.storageWindows). Nothing — not even an imported file —
+ * may keep milk longer than this. */
+export const MAX_STORAGE_WINDOWS = Object.freeze({
+  roomTempHours: 24,
+  fridgeDays: 14,
+  freezerMonths: 24,
+  deepFreezerMonths: 24,
+  thawedBottleHours: 72,
+  startedBottleHours: 24,
+});
+
 const HOUR_MS = 60 * 60 * 1000;
 
 /**
@@ -116,6 +128,25 @@ export function calculateExpiration(pumpedAt, location, storageWindows) {
     expiresAt = d.getTime();
   }
   return expiresAt;
+}
+
+/**
+ * The latest expiry any allowed storage window could give this pouch
+ * (MAX_STORAGE_WINDOWS). Thawed milk: thawedAt + the longest thawed window;
+ * without a thawedAt, the latest it could have been thawed (end of the
+ * longest frozen window) + that window. Used to bound an untrusted expiresAt.
+ * @param {{pumpedAt:number, location:string, thawedAt?:number}} item
+ * @returns {number}
+ */
+export function maxExpiresAt(item) {
+  const thawMs = MAX_STORAGE_WINDOWS.thawedBottleHours * HOUR_MS;
+  if (item.location === THAWED_LOCATION) {
+    const thawedAt = Number.isFinite(item.thawedAt)
+      ? item.thawedAt
+      : calculateExpiration(item.pumpedAt, 'deepFreezer', MAX_STORAGE_WINDOWS);
+    return thawedAt + thawMs;
+  }
+  return calculateExpiration(item.pumpedAt, item.location, MAX_STORAGE_WINDOWS);
 }
 
 /**
@@ -321,7 +352,9 @@ export function buildInventoryItem(input, storageWindows, { now = Date.now(), id
  * expiresAt). Expiry is recomputed when pumpedAt/location change unless an
  * explicit expiresAt is given. Thawed milk can't be moved: refreezing thawed
  * milk is unsafe and moving it to "fridge" would silently restart a 4-day
- * clock on milk that has 24h.
+ * clock on milk that has 24h. 'expired' is derived from expiresAt, so a pouch
+ * the sweep marked expired comes back to 'active' when the edit (e.g. "this
+ * was really in the freezer") gives it an expiry that is still ahead.
  * @param {object} item
  * @param {object} patch
  * @param {object} [storageWindows]
@@ -359,6 +392,7 @@ export function applyInventoryPatch(item, patch, storageWindows, now = Date.now(
     next.expiresAt = calculateExpiration(next.pumpedAt, next.location, storageWindows);
   }
   next.quantity = roundForUnit(next.quantity, next.unit);
+  if (next.status === 'expired' && Number.isFinite(next.expiresAt) && next.expiresAt > now) next.status = 'active';
   next.updatedAt = now;
   return next;
 }

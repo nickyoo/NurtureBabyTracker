@@ -7,7 +7,7 @@ import {
   sanitizeSetting, sanitizeBaby, cleanText, isValidDateString, makeBaby, get, all,
   DEFAULTS, EXPORTABLE_KEYS, TRACKER_KEYS, TODAY_CARDS, BABY_ID_RE, MAX_BABIES, NAME_MAX,
 } from '../js/core/settings.js';
-import { DEFAULT_STORAGE_WINDOWS } from '../js/domain/inventory.js';
+import { DEFAULT_STORAGE_WINDOWS, MAX_STORAGE_WINDOWS } from '../js/domain/inventory.js';
 
 const T = new Date('2026-10-15T12:00:00').getTime();
 const ok = (key, value, opts) => {
@@ -184,4 +184,12 @@ test('cleanText / isValidDateString', () => {
   assert.ok(!isValidDateString('1899-12-31'));
   assert.ok(!isValidDateString('2026-1-1'));
   assert.ok(!isValidDateString('2026-01-01T00:00'));
+});
+
+test('storageWindows upper bounds are MAX_STORAGE_WINDOWS (shared with the stash import guard)', () => {
+  assert.deepEqual(Object.keys(MAX_STORAGE_WINDOWS).sort(), Object.keys(DEFAULT_STORAGE_WINDOWS).sort());
+  assert.deepEqual(ok('storageWindows', { ...MAX_STORAGE_WINDOWS }), { ...MAX_STORAGE_WINDOWS });
+  for (const k of Object.keys(MAX_STORAGE_WINDOWS)) {
+    assert.equal(ok('storageWindows', { ...MAX_STORAGE_WINDOWS, [k]: MAX_STORAGE_WINDOWS[k] + 1 })[k], DEFAULT_STORAGE_WINDOWS[k], `${k} above max → default`);
+  }
 });

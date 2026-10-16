@@ -136,7 +136,8 @@ export function rangeTotals(events, from, to, { unit = 'oz', now = Date.now() } 
       feed.count += 1;
       if (d.method === 'breast') {
         feed.breastCount += 1;
-        feed.breastSec += breastSideTotals(d, now).total;
+        // Finished feed: a stale activeSide can't add live seconds past its end.
+        feed.breastSec += breastSideTotals(d, e.endTime).total;
       } else {
         feed.bottleCount += 1;
         const amt = eventAmountIn(e, u) || 0;

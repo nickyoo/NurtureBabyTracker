@@ -327,7 +327,11 @@ export async function runMigration({ storage, now = Date.now() } = {}) {
     };
   });
 
-  if (!report.skipped) await reloadSettings();
+  // Skipped because ANOTHER tab migrated after this tab loaded its settings
+  // (two tabs restored together after the update): this tab's cache still
+  // holds the pre-migration defaults, so re-read it — otherwise this tab
+  // would show onboarding again and later write those defaults back.
+  if (!report.skipped || getSetting('migratedV2') !== true) await reloadSettings();
   const liveTimers = await migrateLiveTimers({ storage, now, deviceId, babyId: getSetting('activeBabyId') });
   if (report.events > 0 || liveTimers > 0) notifyEvents({ op: 'bulk' });
   return { ...report, liveTimers };

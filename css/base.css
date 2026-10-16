@@ -1,0 +1,243 @@
+/* =====================================================================
+   Nurture base: reset, typography, app layout, focus, utilities.
+   Every value comes from css/tokens.css (DESIGN.md). No theme selectors
+   here — dark mode is tokens only. Motion selectors ([data-motion]) are
+   allowed: they mirror the reduced-motion contract (DESIGN §7.3).
+   ===================================================================== */
+
+/* ---------- Reset ---------- */
+*, *::before, *::after { box-sizing: border-box; }
+* { margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; -webkit-tap-highlight-color: transparent; }
+ul, ol { list-style: none; }
+img, picture, video, canvas { display: block; max-width: 100%; }
+svg { flex: none; }
+input, button, textarea, select { font: inherit; color: inherit; }
+button {
+  background: none; border: 0; cursor: pointer; text-align: inherit;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+button:disabled, [aria-disabled="true"] { cursor: default; }
+a { color: inherit; text-decoration: none; }
+fieldset { border: 0; min-width: 0; }
+[hidden] { display: none !important; }
+:where(h1, h2, h3, h4) { font-weight: inherit; font-size: inherit; }
+
+/* ---------- Document ---------- */
+html {
+  height: 100%;
+  background: var(--bg);
+  color-scheme: light dark;
+}
+/* First paint: app.js sets <html data-theme> synchronously from its first
+   line. Until then keep the shell invisible so night users never see a
+   flash of the light theme; the canvas follows the system scheme. The two
+   raw colors are --bg light/dark from tokens.css (tokens can't be read
+   before data-theme exists for the dark case). */
+html:not([data-theme]) #app { visibility: hidden; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) { background: #191512; }
+}
+
+body {
+  height: 100%;
+  overflow: hidden;              /* views scroll inside their own section */
+  overscroll-behavior: none;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--fs-body);
+  line-height: var(--lh-ui);
+  font-weight: var(--fw-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
+  /* Live-pill stack geometry, shared by the pill, the toast and the
+     scroll fade. app/livePill set --pill-count; router sets data-chrome. */
+  --pill-count: 0;
+  --pill-base: var(--pill-bottom);
+  --chrome-bottom: var(--nav-total);
+  --stack-h: calc(var(--pill-count) * (var(--pill-h) + 8px));
+  --fade-bottom: calc(var(--pill-base) + var(--stack-h) - 8px);
+  --app-max-w: 560px;
+}
+body[data-chrome="screen"] { --pill-base: calc(var(--safe-bottom) + 12px); --chrome-bottom: 0px; }
+body[data-chrome="bare"] { --chrome-bottom: 0px; }
+body[data-pills="0"], body:not([data-pills]) { --fade-bottom: var(--chrome-bottom); }
+
+/* Theme cross-fade (DESIGN §7.2 #15): on only while switching. */
+html.is-theme-switching,
+html.is-theme-switching *,
+html.is-theme-switching *::before,
+html.is-theme-switching *::after {
+  transition: background-color var(--dur-theme) var(--ease-std), color var(--dur-theme) var(--ease-std),
+    border-color var(--dur-theme) var(--ease-std), fill var(--dur-theme) var(--ease-std),
+    stroke var(--dur-theme) var(--ease-std), box-shadow var(--dur-theme) var(--ease-std) !important;
+}
+
+/* ---------- Typography helpers ---------- */
+.disp {
+  font-family: var(--font-display);
+  font-weight: var(--fw-title);
+  letter-spacing: var(--tracking-display);
+  font-optical-sizing: auto;
+}
+.it { font-family: var(--font-display); font-style: italic; font-weight: 400; }
+/* The numeral rule (DESIGN §3.2): every measured value is Nunito, tabular. */
+.num, time, .tnum { font-family: var(--font-ui); font-variant-numeric: var(--numeric); }
+.eyebrow {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--text-2);
+  line-height: 1.2;
+}
+.title-l { font-size: var(--fs-title-l); line-height: 1.08; }
+.title-1 { font-size: var(--fs-title-1); line-height: 1.1; }
+.title-2 { font-size: var(--fs-title-2); line-height: 1.1; }
+.text-2 { color: var(--text-2); }
+.text-3 { color: var(--text-3); }
+.strong { font-weight: var(--fw-heavy); }
+.callout { font-size: var(--fs-callout); }
+.subhead { font-size: var(--fs-subhead); line-height: 19px; }
+.footnote { font-size: var(--fs-footnote); }
+.caption { font-size: var(--fs-caption); }
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* Icons: sized by their width/height attributes; color from currentColor. */
+.ic { display: inline-block; flex: none; vertical-align: middle; }
+
+/* ---------- Focus (DESIGN §6: two-layer ring, survives on tints) ---------- */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid transparent; /* shows in forced-colors mode */
+  box-shadow: var(--focus-ring);
+}
+/* Elements that hold focus programmatically (dialogs, view sections,
+   sheet steps) don't draw a ring around the whole surface. */
+[tabindex="-1"]:focus-visible { box-shadow: none; }
+
+/* ---------- App shell layout (ARCHITECTURE §8) ---------- */
+#app {
+  position: fixed;
+  inset: 0;
+  /* Phone-first: on tablets/desktop the app stays a centered phone column
+     instead of stretching cards across 1000px. */
+  max-width: var(--app-max-w);
+  margin: 0 auto;
+  overflow: hidden;
+  background: var(--bg);
+  transform-origin: 50% 0;
+  transition: transform var(--dur-sheet) var(--ease-out);
+}
+/* The page behind an open sheet scales to .985 (DESIGN §6.6). */
+#app.is-behind-sheet { transform: scale(var(--page-behind-scale)); }
+
+/* Status-bar zone: content scrolls under the iOS status bar, which stays
+   on the page color. */
+#appHeader {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: var(--safe-top);
+  background: var(--bg);
+  z-index: var(--z-fade);
+  pointer-events: none;
+}
+
+#viewport { position: absolute; inset: 0; }
+
+/* Every tab / screen is its own scroll container (router.js). */
+.view {
+  position: absolute;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-top: var(--safe-top);
+  padding-bottom: calc(var(--fade-bottom) + 28px);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  background: var(--bg);
+  z-index: var(--z-content);
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+/* Only the overflow edge fades, directly above the pill/nav, and only
+   while there is more below — never over resting content (DESIGN §5). */
+.view.has-more-below {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade-bottom) - 24px), transparent calc(100% - var(--fade-bottom)));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--fade-bottom) - 24px), transparent calc(100% - var(--fade-bottom)));
+}
+
+/* Tab switch (#11): incoming slides --move-lg + fades in; outgoing fades. */
+.view.is-entering-right { transform: translateX(var(--move-lg)); opacity: 0; transition: none; }
+.view.is-entering-left { transform: translateX(calc(-1 * var(--move-lg))); opacity: 0; transition: none; }
+.view.is-fading-out { opacity: 0; transition: opacity 160ms var(--ease-in); pointer-events: none; z-index: 0; }
+
+/* Pushed screens (settings, report) slide in from the right over the nav. */
+.view-screen, .view-root { z-index: 35; }
+.view-screen { box-shadow: var(--shadow-sheet); }
+.view-screen.is-entering-push { transform: translateX(100%); transition: none; }
+.view-screen.is-leaving-right { transform: translateX(100%); transition: transform var(--dur-base) var(--ease-in); pointer-events: none; }
+
+/* Reduced motion: no transform motion; a short cross-fade instead. The
+   token block in tokens.css zeroes --move-*; these cover the non-token
+   100% slides. */
+:root[data-motion="reduce"] .view-screen.is-entering-push { transform: none; opacity: 0; }
+:root[data-motion="reduce"] .view-screen.is-leaving-right { transform: none; opacity: 0; transition: opacity 150ms linear; }
+:root[data-motion="reduce"] #app.is-behind-sheet { transform: none; }
+:root[data-motion="reduce"] { scroll-behavior: auto; }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .view-screen.is-entering-push { transform: none; opacity: 0; }
+  :root:not([data-motion="full"]) .view-screen.is-leaving-right { transform: none; opacity: 0; transition: opacity 150ms linear; }
+  :root:not([data-motion="full"]) #app.is-behind-sheet { transform: none; }
+  :root:not([data-motion="full"]) { scroll-behavior: auto; }
+}
+
+/* While a sheet is open the page behind must not scroll. */
+html.has-sheet .view { overflow-y: hidden; }
+
+/* ---------- Layout primitives ---------- */
+.view-pad { padding-left: var(--gutter); padding-right: var(--gutter); }
+.stack { display: flex; flex-direction: column; }
+.stack-1 { display: flex; flex-direction: column; gap: var(--s-1); }
+.stack-2 { display: flex; flex-direction: column; gap: var(--s-2); }
+.stack-3 { display: flex; flex-direction: column; gap: var(--s-3); }
+.stack-4 { display: flex; flex-direction: column; gap: var(--s-4); }
+.stack-6 { display: flex; flex-direction: column; gap: var(--s-6); }
+.cluster { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; }
+.spread { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.grow { flex: 1 1 auto; min-width: 0; }
+.mt-2 { margin-top: var(--s-2); } .mt-3 { margin-top: var(--s-3); } .mt-4 { margin-top: var(--s-4); } .mt-6 { margin-top: var(--s-6); }
+.mb-2 { margin-bottom: var(--s-2); } .mb-3 { margin-bottom: var(--s-3); } .mb-4 { margin-bottom: var(--s-4); }
+.center { text-align: center; }
+
+/* ---------- Accessibility utilities ---------- */
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+/* Visible only while focused (e.g. a sheet's keyboard "Close"). */
+.sr-only-focusable:not(:focus-visible) {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%);
+  white-space: nowrap; border: 0;
+}
+
+/* Boot / fatal message shown by app.js if storage can't open. */
+.boot-msg {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-8) var(--gutter-onboarding);
+  text-align: center;
+}
+.boot-msg h1 { font-size: var(--fs-title-1); line-height: 1.1; }
+.boot-msg p { color: var(--text-2); font-size: var(--fs-callout); max-width: 32ch; }

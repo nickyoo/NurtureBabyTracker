@@ -19,10 +19,10 @@
 // incoming events onto the local baby.
 
 import { transaction, getAll, STORES } from './db.js';
-import { sanitizeEvent, notifyEvents, EVENT_TYPES, ID_RE, matchesBaby } from './store.js';
+import { sanitizeEvent, notifyEvents, EVENT_TYPES, ID_RE, matchesBaby, FUTURE_SKEW_MS } from './store.js';
 import { sanitizeInventoryItem, notifyStash } from './stash.js';
 import {
-  sanitizeSetting, EXPORTABLE_KEYS, MAX_BABIES, get as getSetting, load as loadSettings,
+  sanitizeSetting, EXPORTABLE_KEYS, MAX_BABIES, DEFAULTS, get as getSetting, load as loadSettings,
   reload as reloadSettings, deviceId as getDeviceId,
 } from './settings.js';
 import { sessionToEvent, mapV1Settings } from './migrate.js';
@@ -88,7 +88,7 @@ export function base64ToBytes(b64) {
 
 // ------------------------------------------------------- validation (pure)
 
-function sanitizePhotoEntry(raw) {
+function sanitizePhotoEntry(raw, now = Date.now()) {
   if (!isPlainObject(raw)) return null;
   const id = own(raw, 'id');
   const data = own(raw, 'data');
@@ -109,20 +109,23 @@ function sanitizePhotoEntry(raw) {
     type: PHOTO_TYPES.includes(type) ? type : 'image/jpeg',
     width,
     height,
-    createdAt: createdAt !== null && createdAt >= Date.UTC(2000, 0, 1) && createdAt <= Date.UTC(2100, 0, 1) ? createdAt : Date.UTC(2000, 0, 1),
+    createdAt: createdAt !== null && createdAt >= Date.UTC(2000, 0, 1) && createdAt <= Date.UTC(2100, 0, 1)
+      ? Math.min(createdAt, now + FUTURE_SKEW_MS) : Date.UTC(2000, 0, 1),
     data,
   };
 }
 
 // Duplicate ids inside one file keep the newest version; `stampOf` says what
 // "newest" means for the record kind (v1 pouches have no updatedAt).
+// `present`: the file carries a list for this collection; `malformed`: it
+// carries something that isn't a list.
 function collect(list, cap, sanitize, label, warnings, stampOf = r => r.updatedAt || 0) {
   const out = new Map();
   let rejected = 0;
-  if (list === undefined || list === null) return { items: [], rejected };
+  if (list === undefined || list === null) return { items: [], rejected, present: false, malformed: false };
   if (!Array.isArray(list)) {
     warnings.push(`${label} was not a list and was skipped`);
-    return { items: [], rejected };
+    return { items: [], rejected, present: false, malformed: true };
   }
   if (list.length > cap) {
     warnings.push(`Only the first ${cap} ${label} were read`);
@@ -135,7 +138,7 @@ function collect(list, cap, sanitize, label, warnings, stampOf = r => r.updatedA
     const prev = out.get(rec.id);
     if (!prev || stampOf(rec) > stampOf(prev)) out.set(rec.id, rec);
   }
-  return { items: [...out.values()], rejected };
+  return { items: [...out.values()], rejected, present: true, malformed: false };
 }
 
 /**
@@ -166,12 +169,21 @@ export function detectFormat(obj) {
  * `defaultBabyId`. A v1 file's feeds go to `defaultBabyId` (or
  * V1_IMPORT_BABY_ID), and `settings.babies` names that baby from the v1
  * babyName.
+ *
+ * `collections` says, per collection, whether the file carries a list for
+ * it (`present`) and whether it carries something that isn't a list
+ * (`malformed`); `damaged` lists the collections that are malformed or had
+ * entries of which none survived — replace-mode import refuses those files.
+ * `photos` is null ("this file has no photos") unless the file carries a
+ * photo list with at least one usable photo (or an empty list).
  * @param {unknown} input parsed JSON
  * @param {{ now?: number, deviceId?: string, defaultBabyId?: string }} [opts]
  * @returns {{ ok: false, error: string } | {
  *   ok: true, format: 'v1'|'v2',
  *   data: { events: object[], inventory: object[], settings: object, photos: object[]|null },
  *   stats: { events: {accepted:number, rejected:number}, inventory: {accepted:number, rejected:number}, photos: {accepted:number, rejected:number}, settings: {accepted:string[], rejected:string[]} },
+ *   collections: { events: {present:boolean, malformed:boolean}, inventory: {present:boolean, malformed:boolean}, photos: {present:boolean, malformed:boolean} },
+ *   damaged: Array<'events'|'inventory'|'photos'>,
  *   warnings: string[]
  * }}
  */
@@ -218,23 +230,36 @@ export function validateBackup(input, { now = Date.now(), deviceId, defaultBabyI
     const bottles = own(input, 'bottles');
     if (Array.isArray(bottles) && bottles.length) warnings.push('Old prepared-bottle records aren’t used any more and were skipped');
   }
-  const inv = collect(own(input, 'inventory'), MAX_RECORDS.inventory, sanitizeInventoryItem, 'stash items', warnings, inventoryUpdatedAt);
+  const inv = collect(own(input, 'inventory'), MAX_RECORDS.inventory, raw => sanitizeInventoryItem(raw, { now }), 'stash items', warnings, inventoryUpdatedAt);
 
-  const rawPhotos = own(input, 'photos');
-  const ph = format === 'v2' && rawPhotos !== undefined && rawPhotos !== null
-    ? collect(rawPhotos, MAX_RECORDS.photos, sanitizePhotoEntry, 'photos', warnings)
-    : null;
+  const ph = format === 'v2'
+    ? collect(own(input, 'photos'), MAX_RECORDS.photos, raw => sanitizePhotoEntry(raw, now), 'photos', warnings)
+    : { items: [], rejected: 0, present: false, malformed: false };
+  // A photo list where nothing survived is "no photos", not "zero photos":
+  // otherwise a damaged file would wipe the journal on replace.
+  const photosUsable = ph.present && !(ph.items.length === 0 && ph.rejected > 0);
+
+  const damaged = [];
+  for (const [name, c] of [['events', ev], ['inventory', inv], ['photos', ph]]) {
+    if (c.malformed || (c.items.length === 0 && c.rejected > 0)) damaged.push(name);
+  }
 
   return {
     ok: true,
     format,
-    data: { events: ev.items, inventory: inv.items, settings, photos: ph ? ph.items : null },
+    data: { events: ev.items, inventory: inv.items, settings, photos: photosUsable ? ph.items : null },
     stats: {
       events: { accepted: ev.items.length, rejected: ev.rejected },
       inventory: { accepted: inv.items.length, rejected: inv.rejected },
-      photos: { accepted: ph ? ph.items.length : 0, rejected: ph ? ph.rejected : 0 },
+      photos: { accepted: ph.items.length, rejected: ph.rejected },
       settings: settingsStats,
     },
+    collections: {
+      events: { present: ev.present, malformed: ev.malformed },
+      inventory: { present: inv.present, malformed: inv.malformed },
+      photos: { present: ph.present, malformed: ph.malformed },
+    },
+    damaged,
     warnings,
   };
 }
@@ -601,7 +626,15 @@ function photoRecord(p) {
   return { id: p.id, blob, width: p.width, height: p.height, createdAt: p.createdAt, type: p.type, bytes: blob.size };
 }
 
+// Is there anything on this device a replace-import would destroy? Events,
+// pouches and photos — and the family's own settings: a named baby (or one
+// with a birth date / photo), a parent name, or any exported preference
+// changed from its default (§10b covers those too). Settings must be loaded.
 async function hasAnyData() {
+  const profile = getSetting('babies').some(b => b.name || b.birthDate || b.photoId)
+    || EXPORTABLE_KEYS.some(k => k !== 'babies' && k !== 'activeBabyId'
+      && JSON.stringify(getSetting(k)) !== JSON.stringify(DEFAULTS[k]));
+  if (profile) return true;
   return transaction([STORES.events, STORES.inventory, STORES.photos], 'readonly', (s, ctx) => {
     let total = 0;
     ctx.done(false);
@@ -618,9 +651,13 @@ async function hasAnyData() {
  * empty local details are filled in; other settings are left alone.
  * 'replace' (behind a confirm sheet) first saves a safety backup of this
  * device's data (§10b: downloaded by default; `safetyBackup` overrides how),
- * then swaps events, stash and settings for the file's — photos are replaced
- * only when the file carries photos, so a photo-less backup can't wipe the
- * photo journal. If the safety backup can't be saved, nothing is replaced.
+ * then swaps events, stash and settings for the file's. A store is replaced
+ * only when the file carries a list for it, so a photo-less backup can't
+ * wipe the photo journal (and when the file has no event list, our events
+ * stay — and so do their babies, which the file's are merged into). A file
+ * whose events/stash/photos are not a list, or whose entries were ALL
+ * rejected, is refused before anything is touched. If the safety backup
+ * can't be saved, nothing is replaced.
  * Throws BackupError with a user-facing message.
  * @param {File|Blob|string|object} file
  * @param {{ mode?: 'merge'|'replace', safetyBackup?: (file: File) => (void|Promise<void>) }} [opts]
@@ -643,19 +680,25 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
   }
 
   const replace = mode === 'replace';
+  if (replace && v.damaged.length) {
+    const what = { events: 'log', inventory: 'stash', photos: 'photos' };
+    throw new BackupError(`This backup’s ${v.damaged.map(k => what[k]).join(' and ')} couldn’t be read, so nothing was replaced. Try another backup file.`);
+  }
+  // replace: clear a store only when the file carries a list for it.
+  const replaceEvents = replace && v.collections.events.present;
+  const replaceInventory = replace && v.collections.inventory.present;
   const replacePhotos = replace && v.data.photos !== null;
   const incomingBabies = v.data.settings.babies || [];
-  // replace: the file's babies replace ours — unless it lists none, in which
-  // case ours stay (and its events land on them).
-  const existingBabies = replace && incomingBabies.length ? [] : localBabies;
-  const existing = replace
-    ? { events: [], inventory: [], babies: existingBabies, photoIds: replacePhotos ? [] : (await getAll(STORES.photos)).map(p => p.id) }
-    : {
-      events: await getAll(STORES.events),
-      inventory: await getAll(STORES.inventory),
-      babies: existingBabies,
-      photoIds: (await getAll(STORES.photos)).map(p => p.id),
-    };
+  // replace: the file's babies replace ours — unless it lists none (ours
+  // stay and its events land on them), or it has no event list (our events
+  // stay, so their babies must too: the file's are merged in instead).
+  const existingBabies = replaceEvents && incomingBabies.length ? [] : localBabies;
+  const existing = {
+    events: replaceEvents ? [] : await getAll(STORES.events),
+    inventory: replaceInventory ? [] : await getAll(STORES.inventory),
+    babies: existingBabies,
+    photoIds: replacePhotos ? [] : (await getAll(STORES.photos)).map(p => p.id),
+  };
   const { toPut, stats } = mergeBackup(existing, { ...v.data, photos: v.data.photos || [], babies: incomingBabies });
   const finalBabies = toPut.babies || existingBabies;
   if (finalBabies.length > MAX_BABIES) throw new BackupError(`This backup has more than ${MAX_BABIES} babies.`);
@@ -689,11 +732,9 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
 
   const now = Date.now();
   await transaction([STORES.events, STORES.inventory, STORES.photos, STORES.settings], 'readwrite', (s) => {
-    if (replace) {
-      s.events.clear();
-      s.inventory.clear();
-      if (replacePhotos) s.photos.clear();
-    }
+    if (replaceEvents) s.events.clear();
+    if (replaceInventory) s.inventory.clear();
+    if (replacePhotos) s.photos.clear();
     for (const e of toPut.events) s.events.put(e);
     for (const i of toPut.inventory) s.inventory.put(i);
     for (const p of toPut.photos) {

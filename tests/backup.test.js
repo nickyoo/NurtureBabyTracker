@@ -41,7 +41,10 @@ test('validateBackup: friendly errors, never throws on hostile input', () => {
   }
   const weird = validateBackup({ app: 'nurture', schema: 2, events: 'lots', inventory: { length: 1e9 }, photos: 5 });
   assert.equal(weird.ok, true, 'non-list collections are skipped, not fatal');
-  assert.deepEqual([weird.data.events, weird.data.inventory, weird.data.photos], [[], [], []]);
+  // A non-list photos field is "no photos" (null), never "zero photos" (a
+  // replace import would wipe the journal) — and all three are damaged.
+  assert.deepEqual([weird.data.events, weird.data.inventory, weird.data.photos], [[], [], null]);
+  assert.deepEqual(weird.damaged, ['events', 'inventory', 'photos']);
   assert.ok(weird.warnings.length >= 2);
 });
 
@@ -379,4 +382,78 @@ test('BackupError is a friendly, named error', () => {
   const e = new BackupError('nope');
   assert.ok(e instanceof Error);
   assert.deepEqual([e.name, e.message], ['BackupError', 'nope']);
+});
+
+// ---------------------------------------------------- regressions (R1) ---
+
+const DAY = 24 * HOUR;
+const goodPhoto = (over = {}) => ({ id: 'pho_1', type: 'image/jpeg', width: 4, height: 3, createdAt: NOW, data: bytesToBase64(new Uint8Array([255, 216, 255, 224])), ...over });
+
+test('regression: a malformed or fully-rejected collection is "damaged"; such photos are null (replace keeps the journal)', () => {
+  const malformed = validateBackup(v2({ photos: 5 }), { now: NOW });
+  assert.equal(malformed.data.photos, null, 'photos: 5');
+  assert.deepEqual(malformed.collections.photos, { present: false, malformed: true });
+  assert.deepEqual(malformed.damaged, ['photos']);
+  const allBad = validateBackup(v2({ photos: [goodPhoto({ data: '!!' }), goodPhoto({ id: XSS })] }), { now: NOW });
+  assert.equal(allBad.data.photos, null, 'every photo rejected');
+  assert.deepEqual(allBad.damaged, ['photos']);
+  const events = validateBackup(v2({ events: 'oops', inventory: {} }), { now: NOW });
+  assert.deepEqual(events.damaged, ['events', 'inventory']);
+  assert.deepEqual([events.collections.events, events.collections.inventory], [{ present: false, malformed: true }, { present: false, malformed: true }]);
+  const rejected = validateBackup(v2({ events: [{ id: 'evt_x', type: 'telemetry', startTime: NOW }], inventory: [pouch({ location: 'garage' })] }), { now: NOW });
+  assert.deepEqual(rejected.damaged, ['events', 'inventory'], 'entries present, none usable');
+  // Healthy files: nothing damaged; an explicit empty list is a real (empty) list.
+  const clean = validateBackup(v2({ photos: [goodPhoto()] }), { now: NOW });
+  assert.deepEqual([clean.damaged, clean.data.photos.length], [[], 1]);
+  const empty = validateBackup(v2({ events: [], inventory: [], photos: [] }), { now: NOW });
+  assert.deepEqual([empty.damaged, empty.data.photos, empty.collections.events.present], [[], [], true]);
+  const absent = validateBackup({ app: BACKUP_APP, schema: BACKUP_SCHEMA, settings: { babies } }, { now: NOW });
+  assert.deepEqual([absent.damaged, absent.data.photos, absent.collections.events.present, absent.collections.inventory.present], [[], null, false, false]);
+  const partial = validateBackup(v2({ events: [feed(), { id: 'evt_x', type: 'telemetry', startTime: NOW }] }), { now: NOW });
+  assert.deepEqual(partial.damaged, [], 'some entries usable → not damaged (just warned)');
+});
+
+test('regression: an imported pouch can never expire later than the longest allowed storage window', () => {
+  const spoiled = pouch({ id: 'inv_evil', pumpedAt: NOW - 30 * DAY, location: 'fridge', expiresAt: Date.UTC(2099, 0, 1), status: 'active' });
+  const v = validateBackup(v2({ inventory: [spoiled] }), { now: NOW });
+  const p = v.data.inventory[0];
+  assert.equal(p.expiresAt, spoiled.pumpedAt + 14 * DAY, 'capped at fridge max (14 d)');
+  assert.ok(p.expiresAt < NOW, '30-day-old fridge milk reads expired');
+  const room = validateBackup(v2({ inventory: [pouch({ location: 'room', pumpedAt: NOW - HOUR, expiresAt: NOW + 30 * DAY })] }), { now: NOW }).data.inventory[0];
+  assert.equal(room.expiresAt, NOW - HOUR + 24 * HOUR, 'room max 24 h');
+  const thawed = validateBackup(v2({ inventory: [pouch({ location: 'thawed', pumpedAt: NOW - 90 * DAY, thawedAt: NOW - HOUR, expiresAt: NOW + 30 * DAY })] }), { now: NOW }).data.inventory[0];
+  assert.equal(thawed.expiresAt, NOW - HOUR + 72 * HOUR, 'thawed max = thawedAt + 72 h');
+  // A legit freezer pouch (6-month window) is untouched.
+  const ok = validateBackup(v2(), { now: NOW }).data.inventory[0];
+  assert.equal(ok.expiresAt, pouch().expiresAt);
+});
+
+test('regression: future timestamps in a file are rejected (start) or replaced (stamps) for events, pouches and photos', () => {
+  const latest = NOW + 24 * HOUR;
+  const v = validateBackup(v2({
+    events: [
+      { id: 'evt_future', type: 'sleep', startTime: Date.UTC(2090, 0, 1), endTime: null, babyId: CLARA, updatedAt: Date.UTC(2099, 0, 1) },
+      feed({ id: 'evt_copy', note: 'overwritten', updatedAt: Date.UTC(2099, 0, 1), createdAt: Date.UTC(2099, 0, 1) }),
+    ],
+    inventory: [
+      pouch({ id: 'inv_future', pumpedAt: Date.UTC(2090, 0, 1), expiresAt: Date.UTC(2091, 0, 1) }),
+      pouch({ id: 'inv_thawfuture', location: 'thawed', thawedAt: Date.UTC(2099, 0, 1), expiresAt: Date.UTC(2099, 0, 1) }),
+      pouch({ id: 'inv_stamp', status: 'used', updatedAt: Date.UTC(2099, 0, 1), createdAt: Date.UTC(2099, 0, 1), usedAt: Date.UTC(2099, 0, 1) }),
+    ],
+    photos: [goodPhoto({ createdAt: Date.UTC(2099, 0, 1) })],
+  }), { now: NOW });
+  assert.deepEqual(v.data.events.map(e => e.id), ['evt_copy'], 'running sleep in 2090 rejected');
+  const copy = v.data.events[0];
+  assert.deepEqual([copy.createdAt, copy.updatedAt], [copy.startTime, copy.endTime], 'far-future stamps replaced by the event\'s own times');
+  assert.deepEqual(v.data.inventory.map(i => i.id), ['inv_stamp'], 'pouches pumped / thawed in the future rejected');
+  const st = v.data.inventory[0];
+  assert.deepEqual([st.createdAt, 'updatedAt' in st, 'usedAt' in st], [st.pumpedAt, false, false], 'far-future stamps fall back / dropped');
+  assert.equal(v.data.photos[0].createdAt, latest);
+  // Deterministic: re-validating the same file days later gives the same stamps,
+  // so the copy can't keep winning newest-wins merges against real edits.
+  const again = validateBackup(v2({ events: [feed({ id: 'evt_copy', updatedAt: Date.UTC(2099, 0, 1), createdAt: Date.UTC(2099, 0, 1) })] }), { now: NOW + 5 * DAY });
+  assert.equal(again.data.events[0].updatedAt, copy.updatedAt);
+  const edited = { ...feed({ id: 'evt_copy' }), note: 'my real edit', updatedAt: NOW };
+  const { stats } = mergeBackup({ events: [edited], babies }, { events: again.data.events, babies });
+  assert.deepEqual([stats.events.updated, stats.events.unchanged], [0, 1], 'the real edit wins');
 });

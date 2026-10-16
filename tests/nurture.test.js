@@ -21,7 +21,7 @@ const { InventoryManager, buildThawUpdate, summarizeStash, THAWED_LOCATION, FROZ
 const { BottleManager } = await import('../js/bottles.js');
 const { TrendsManager } = await import('../js/trends.js');
 const { newId } = await import('../js/db.js');
-const { App, applySessionEdits } = await import('../js/app.js');
+const { App, applySessionEdits } = await import('../js/app.v1.js');
 const { buildPumpSession, normalizePumpDuration } = await import('../js/timer.js');
 
 const HOUR = 60 * 60 * 1000;
@@ -304,7 +304,7 @@ const {
   getBottleTimerStatus,
   buildFeedFlowPrefill,
   resolveFeedTimerStart,
-} = await import('../js/app.js');
+} = await import('../js/app.v1.js');
 
 test('safetyWindowSec: formula 1h, breast milk 2h (CDC)', () => {
   assert.equal(safetyWindowSec('formula'), 3600);

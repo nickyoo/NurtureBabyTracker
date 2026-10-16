@@ -27,6 +27,8 @@ const SUITES = [
   ['settings', 'settings-reload'],
   ['backup'],
   ['persist'],
+  ['data-invariants'],
+  ['import-guards'],
 ];
 
 // Files each suite must have actually downloaded (checked from disk, not
@@ -61,6 +63,117 @@ async function checkDownloads(suite, downloads, pageState) {
     }
   }
   return problems;
+}
+
+// ------------------------------------------------------------- two tabs
+// Two pages in ONE context = two tabs of the app sharing IndexedDB (e.g. the
+// installed PWA window and a browser tab on Android). Each scenario gets a
+// fresh context. Pages load the fixture with ?suite=tabs, which only exposes
+// window.TABS helpers; the steps are driven from here.
+
+function check(cond, msg) { if (!cond) throw new Error(msg); }
+function same(actual, expected, msg) {
+  const a = JSON.stringify(actual);
+  const e = JSON.stringify(expected);
+  if (a !== e) throw new Error(`${msg}\n  actual:   ${a}\n  expected: ${e}`);
+}
+
+async function tabScenario(name, fn) {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const problems = [];
+  const open = async () => {
+    const page = await context.newPage();
+    page.on('console', msg => { if (msg.type() === 'error') problems.push(`console: ${msg.text()}`); });
+    page.on('pageerror', err => problems.push(`pageerror: ${err}`));
+    page.on('request', req => {
+      const url = req.url();
+      if (!url.startsWith('data:') && !url.startsWith('blob:') && new URL(url).origin !== ORIGIN) problems.push(`foreign request: ${url}`);
+    });
+    await page.goto(`${FIXTURE}?suite=tabs`);
+    await page.waitForFunction(() => window.__done === true, null, { timeout: 60000 });
+    return page;
+  };
+  try {
+    await fn(open);
+    if (problems.length) throw new Error(problems.join('\n'));
+    passed += 1;
+    console.log(`  ok   tabs › ${name}`);
+  } catch (err) {
+    failed += 1;
+    console.log(`  FAIL tabs › ${name}\n${String((err && err.stack) || err).split('\n').map(l => `       ${l}`).join('\n')}`);
+  } finally {
+    await context.close();
+  }
+}
+
+const V1_PROFILE = [['babyName', 'Clara'], ['themeMode', 'dark'], ['dailyGoalOz', 30], ['onboarding_completed', true], ['parentName', 'Nick']];
+const MIGRATED_VIEW = { names: ['Clara'], theme: 'dark', onboarded: true, goal: 30, parent: 'Nick', migratedV2: true };
+const view = page => page.evaluate(() => {
+  const s = TABS.settings;
+  return { names: s.get('babies').map(b => b.name), theme: s.get('theme'), onboarded: s.get('onboarded'), goal: s.get('pumpGoalOz'), parent: s.get('parentName'), migratedV2: s.get('migratedV2') };
+});
+const storedBabies = page => page.evaluate(() => TABS.rawSetting('babies').then(l => l.map(b => [b.name, b.birthDate])));
+
+async function runTabScenarios() {
+  // Tab B has no BroadcastChannel here (Safari < 15.4), so only the
+  // migration re-read + transactional writes can keep it correct.
+  await tabScenario('v1 database, two tabs: the tab that loses the migration race re-reads settings and never drops Clara', async (open) => {
+    const A = await open();
+    const B = await open();
+    await A.evaluate(p => TABS.seedV1Settings(p), V1_PROFILE);
+    await A.evaluate(() => TABS.mods());
+    await B.evaluate(() => TABS.mods({ broadcast: false }));
+    await B.evaluate(() => TABS.settings.load()); // B loads pre-migration settings…
+    const a = await A.evaluate(() => TABS.migrate.runMigration().then(r => r.skipped)); // …A migrates…
+    const b = await B.evaluate(() => TABS.migrate.runMigration().then(r => r.skipped)); // …B finds it done.
+    same([a, b], [false, true], 'A migrated, B skipped');
+    same(await view(B), MIGRATED_VIEW, 'tab B sees the migrated settings (no second onboarding)');
+    await B.evaluate(() => TABS.settings.addBaby({ name: 'Theo' }));
+    same(await storedBabies(A), [['Clara', null], ['Theo', null]], 'stored babies after tab B adds a twin');
+  });
+
+  for (let run = 1; run <= 3; run += 1) {
+    await tabScenario(`v1 database, two tabs boot at the same moment: both end up with the migrated settings (run ${run}/3)`, async (open) => {
+      const A = await open();
+      const B = await open();
+      await A.evaluate(p => TABS.seedV1Settings(p), V1_PROFILE);
+      await Promise.all([A.evaluate(() => TABS.mods({ broadcast: false })), B.evaluate(() => TABS.mods({ broadcast: false }))]);
+      await Promise.all([A, B].map(p => p.evaluate(() => { window.__boot = TABS.migrate.runMigration(); })));
+      const reports = await Promise.all([A, B].map(p => p.evaluate(() => window.__boot.then(r => r.skipped))));
+      same(reports.sort(), [false, true], 'exactly one tab migrated');
+      same([await view(A), await view(B)], [MIGRATED_VIEW, MIGRATED_VIEW], 'both tabs');
+    });
+  }
+
+  await tabScenario('two open tabs: a baby edit in one survives a later baby/settings write from the other (stale cache)', async (open) => {
+    const A = await open();
+    const B = await open();
+    await A.evaluate(() => TABS.mods());
+    await B.evaluate(() => TABS.mods({ broadcast: false }));
+    await A.evaluate(() => TABS.migrate.runMigration());
+    await B.evaluate(() => TABS.migrate.runMigration());
+    await A.evaluate(() => TABS.settings.updateBaby(TABS.settings.get('activeBabyId'), { name: 'Clara Rose', birthDate: '2026-08-01' }));
+    await A.evaluate(() => TABS.settings.patch('trackers', { pump: false }));
+    await B.evaluate(() => TABS.settings.addBaby({ name: 'Theo' }));
+    await B.evaluate(() => TABS.settings.patch('trackers', { sleep: false }));
+    same(await storedBabies(A), [['Clara Rose', '2026-08-01'], ['Theo', null]], 'tab A\'s edit kept');
+    same(await A.evaluate(() => TABS.rawSetting('trackers').then(t => [t.pump, t.sleep])), [false, false], 'both trackers patches kept');
+    same(await B.evaluate(() => TABS.settings.get('babies').map(b => b.name)), ['Clara Rose', 'Theo'], 'tab B\'s cache caught up on its own write');
+  });
+
+  await tabScenario('two open tabs: a settings write in one refreshes the other tab\'s cache and notifies its subscribers', async (open) => {
+    const A = await open();
+    const B = await open();
+    await A.evaluate(() => TABS.mods());
+    await B.evaluate(() => TABS.mods());
+    await A.evaluate(() => TABS.settings.load());
+    await B.evaluate(() => TABS.settings.load().then(() => { window.__seen = []; TABS.settings.subscribe(c => window.__seen.push(c.key)); }));
+    await A.evaluate(() => TABS.settings.set('theme', 'dark'));
+    await B.waitForFunction(() => TABS.settings.get('theme') === 'dark', null, { timeout: 5000 });
+    await A.evaluate(() => TABS.settings.updateBaby(TABS.settings.get('activeBabyId'), { name: 'Clara' }));
+    await B.waitForFunction(() => TABS.settings.get('babies')[0].name === 'Clara', null, { timeout: 5000 });
+    check(await B.evaluate(() => window.__seen.includes('*')), 'tab B subscribers were told to re-read');
+  });
 }
 
 const browser = await chromium.launch();
@@ -115,6 +228,7 @@ try {
     }
     await context.close();
   }
+  await runTabScenarios();
 } finally {
   await browser.close();
 }
