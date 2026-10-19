@@ -114,6 +114,7 @@ try {
   // Tile → its (stub) sheet through ctx.sheets.
   await page.click('#fab');
   await page.waitForSelector('.sheet-layer[data-state="open"] [data-key="pump"]');
+  await settle(450); // past ENTER_GUARD_MS: taps in the opening gesture's tail are swallowed (R2-02)
   await page.click('[data-key="pump"]');
   await page.waitForFunction(() => [...document.querySelectorAll('.sheet-layer:not([data-state="closing"]) .sheet-title')].some((t) => t.textContent === 'Pump'));
   await settle(500);
@@ -231,7 +232,7 @@ try {
     toast({ message: 'Diaper logged', action: { label: 'Undo', run() { window.__undone = true; } } });
   }, mod('/js/ui/toast.js'));
   await page.waitForSelector('.toast[data-state="in"] .toast-action');
-  await settle(300);
+  await settle(450); // past ENTER_GUARD_MS: earlier pointer taps on the toast are swallowed (R2-01)
   check('toast lives in the polite status region', await page.evaluate(() => { const r = document.getElementById('toastRoot'); return r.getAttribute('role') === 'status' && r.getAttribute('aria-live') === 'polite' && !!r.querySelector('.toast'); }));
   check('toast rises above the nav (not from the top)', await page.evaluate(() => document.querySelector('.toast').getBoundingClientRect().bottom < document.getElementById('tabBar').getBoundingClientRect().top));
   await page.click('.toast-action');
@@ -251,7 +252,7 @@ try {
       confirmSheet({ title: 'Erase everything on this phone?', body: 'This can’t be undone.', confirmLabel: 'Erase', destructive: true }).then((v) => { window.__res = v; });
     }, mod('/js/ui/confirm.js'));
     await page.waitForSelector('.sheet-layer[data-state="open"] [data-confirm]');
-    await settle(300);
+    await settle(450); // past ENTER_GUARD_MS (R2-02)
     if (how === 'confirm') await page.click('[data-confirm]');
     else if (how === 'cancel') await page.click('[data-cancel]');
     else await page.keyboard.press('Escape');
