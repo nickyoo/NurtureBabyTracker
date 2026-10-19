@@ -18,6 +18,13 @@
 // #viewport; each section is its own scroll container, so per-tab scroll is
 // saved on leave and restored on return.
 //
+// Focus (DESIGN accessibility contract): a pushed screen takes focus (its
+// section is focusable and labelled, so it is announced), and popping it
+// returns focus to the control that opened it — or, if that is gone, to the
+// section now on top. Any navigation that removes or inerts the element
+// holding focus (a tab's button that switches tab, "Get started", a dropped
+// screen) hands focus to the new view instead of dropping it to <body>.
+//
 // The pure helpers (visibleTabs, resolveTab, tabDirection, backAction) carry
 // the logic and are unit-tested; createRouter() is the DOM glue.
 
@@ -176,6 +183,8 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
     section.className = `view view-${kind}`;
     section.setAttribute('data-view', id);
     section.setAttribute('aria-label', (mod && mod.title) || id);
+    // Focusable (not tabbable) so navigation can move focus to it.
+    section.tabIndex = -1;
     viewport.appendChild(section);
     let handle = null;
     if (!mod || typeof mod.mount !== 'function') {
@@ -223,6 +232,35 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
   }
 
   const motionReducedNow = () => motionReduced();
+
+  // ----------------------------------------------------------- focus
+
+  function focusable(el) {
+    return !!(el && el !== document.body && el.isConnected && typeof el.focus === 'function'
+      && !el.closest('[inert]') && !el.closest('.is-covered') && !el.closest('[hidden]')
+      && el.getClientRects().length > 0);
+  }
+
+  // Did the last navigation take focus away (removed, inerted, covered)?
+  // <body> before the navigation (boot, a pointer tap on nothing) is left
+  // alone: we never steal focus that nobody had.
+  function focusLost(prev) {
+    if (!prev || prev === document.body) return false;
+    const a = document.activeElement;
+    return !focusable(a);
+  }
+
+  function focusEl(el) {
+    // An open sheet owns focus (its trap would pull it straight back); it
+    // restores focus itself when it closes.
+    if (!el || openSheetCount() > 0) return false;
+    try { el.focus({ preventScroll: true }); } catch { return false; }
+    return document.activeElement === el;
+  }
+
+  function settleFocus(prev, section) {
+    if (focusLost(prev)) focusEl(section);
+  }
 
   function enter(section, cls) {
     section.classList.add(cls);
@@ -335,10 +373,17 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
   function popScreen({ animate = true } = {}) {
     const top = screens.pop();
     if (!top) return;
+    const prev = document.activeElement;
     const below = screens[screens.length - 1] || tabView;
     uncover(below);
     unmountView(top, { animateOut: animate ? 'is-leaving-right' : null });
     setChrome();
+    // Back to the control that pushed the screen (the avatar, a settings
+    // row), else the screen now on top. Only when focus was in the popped
+    // screen (or nowhere): a pill the parent focused before pressing Back
+    // keeps it.
+    const hadFocus = !prev || prev === document.body || top.section.contains(prev) || !focusable(prev);
+    if (hadFocus && !(focusable(top.returnFocus) && focusEl(top.returnFocus)) && below) focusEl(below.section);
     emit();
     syncHistory();
   }
@@ -350,6 +395,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
      * @param {{ animate?: boolean }} [opts]
      */
     go(id, { animate = true } = {}) {
+      const prevFocus = document.activeElement;
       const next = resolveTab(id, trackers());
       if (rootView) { unmountView(rootView); rootView = null; renderNav(); }
       while (screens.length) unmountView(screens.pop());
@@ -359,6 +405,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
         tabView.section.scrollTo({ top: 0, behavior: motionReduced() ? 'auto' : 'smooth' });
         setChrome();
         updateNavCurrent();
+        settleFocus(prevFocus, tabView.section);
         emit();
         syncHistory();
         return;
@@ -379,6 +426,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
       restoreScroll(tabView.section, scrollMemory.get(next) || 0);
       setChrome();
       updateNavCurrent();
+      settleFocus(prevFocus, tabView.section);
       emit();
       syncHistory();
     },
@@ -394,11 +442,17 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
       if (roots.includes(id)) { api.showRoot(id, params); return; }
       if (TAB_ORDER.includes(id)) { api.go(id); return; }
       const below = screens[screens.length - 1] || tabView;
+      const opener = document.activeElement;
       const v = mountView(id, params, 'screen');
+      // Remember who opened it, so popping returns focus there.
+      v.returnFocus = opener && opener !== document.body ? opener : null;
       screens.push(v);
       if (animate) enter(v.section, 'is-entering-push');
       coverBelow(v, below, animate);
       setChrome();
+      // The new screen takes focus (announced by its aria-label) unless the
+      // view already focused something inside itself.
+      if (!v.section.contains(document.activeElement)) focusEl(v.section);
       emit();
       syncHistory();
     },
@@ -419,6 +473,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
      * @param {object} [params]
      */
     showRoot(id, params = {}) {
+      const prevFocus = document.activeElement;
       while (screens.length) unmountView(screens.pop());
       if (tabView) { scrollMemory.set(tabView.id, tabView.section.scrollTop); unmountView(tabView); tabView = null; }
       if (rootView) unmountView(rootView);
@@ -426,6 +481,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
       tab = null;
       renderNav();
       setChrome();
+      settleFocus(prevFocus, rootView.section);
       emit();
       syncHistory();
     },
@@ -435,6 +491,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
      * @param {string} [id]
      */
     reset(id = 'today') {
+      const prevFocus = document.activeElement;
       const hadRoot = !!rootView;
       if (rootView) { unmountView(rootView, { animateOut: 'is-fading-out' }); rootView = null; }
       while (screens.length) unmountView(screens.pop());
@@ -443,6 +500,8 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
         renderNav();
       }
       api.go(id, { animate: false });
+      // go() only saw the focus left after the teardown above (often <body>)
+      settleFocus(prevFocus, tabView && tabView.section);
     },
 
     /** @returns {{ tab: string|null, screen: string|null, params: object, root: string|null, screens: string[] }} */
