@@ -15,9 +15,14 @@
 //  - The timer pauses while the toast is touched, hovered or focused, so a
 //    parent reaching for Undo never loses it mid-tap.
 //  - Undo runs the action, shows "Restored" for 1.2 s, then leaves.
+//  - Taps that land within ENTER_GUARD_MS of the toast appearing are ignored
+//    (guardEnterTaps). Finishing a live pill drops --pill-count, so the toast
+//    rises into the slot the pill's Finish just left: the second tap of a
+//    double-tap on Finish would otherwise hit Undo and restart the activity.
+//    Keyboard activation is never delayed.
 
 import { html, element } from './html.js';
-import { afterTransition } from './sheet.js';
+import { afterTransition, guardEnterTaps } from './sheet.js';
 
 const EXIT_MS = 160;
 const RESTORED_MS = 1200;
@@ -63,6 +68,7 @@ export function toast({ message, action, duration = 5000, tone = 'default' } = {
       ${action ? html`<button type="button" class="toast-action">${action.label}</button>` : ''}
     </div>`);
   root.appendChild(el);
+  guardEnterTaps(el);
 
   let resolveDone;
   const done = new Promise((r) => { resolveDone = r; });

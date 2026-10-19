@@ -319,10 +319,15 @@ export function mount(root, ctx) {
         const p = pills.get(e.id);
         if (p) p.event = e; else addPill(e, !initial);
       }
-      // keep DOM order = start order (oldest closest to the nav)
-      for (const e of running) {
-        const p = pills.get(e.id);
-        if (p) root.insertBefore(p.el, live);
+      // keep DOM order = start order (oldest closest to the nav). Only move
+      // nodes when the order is actually wrong: re-inserting a node blurs
+      // it, which would drop a keyboard user's focus on a pill to <body>.
+      const want = running.map((e) => pills.get(e.id)).filter(Boolean).map((p) => p.el);
+      const have = [...root.children].filter((n) => want.includes(n));
+      if (want.some((n, i) => have[i] !== n)) {
+        const active = document.activeElement;
+        for (const n of want) root.insertBefore(n, live);
+        if (active && active !== document.activeElement && active.isConnected) active.focus({ preventScroll: true });
       }
       initial = false;
       setCount();

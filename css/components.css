@@ -368,6 +368,10 @@ button.row:active, a.row:active { background: var(--surface-2); }
   transition: transform 240ms var(--ease-in), clip-path 240ms var(--ease-in);
 }
 
+/* While sheet.js measures and sets the start geometry, nothing transitions
+   (otherwise the geometry change itself would animate from unset values). */
+.sheet-layer.is-measuring .sheet, .sheet-layer.is-measuring .fab-x, .sheet-layer.is-measuring .sheet-scrim { transition: none !important; }
+
 /* Reduced motion: appear in place with an opacity cross-fade ≤150 ms. */
 .sheet-layer.is-reduced .sheet { transform: none; clip-path: none; opacity: 0; transition: opacity 150ms linear; }
 .sheet-layer.is-reduced[data-state="open"] .sheet { opacity: 1; transform: translateY(var(--drag-y, 0px)); }

@@ -25,8 +25,16 @@
 //  - Reduced motion (system or in-app [data-motion="reduce"]): opacity only.
 //    The + still turns into the × (instantly, no rotation): only the motion
 //    is dropped, never the control.
-//  - The scrim and the × ignore taps for ENTER_GUARD_MS after opening, so the
-//    second tap of a double-tap can't close the sheet it just opened.
+//  - The whole layer ignores pointer taps that land within ENTER_GUARD_MS of
+//    opening (guardEnterTaps): the second tap of a double-tap can neither
+//    close the sheet it just opened (scrim, ×) nor hit whatever control has
+//    grown in under the finger (a "Log wake-up" footer where the live pill
+//    was). Keyboard activation is never delayed.
+//  - The + twin is placed at the +'s RESTING geometry, measured with the
+//    scale of the page behind (.985, possibly mid-transition when one sheet
+//    opens another) divided out — so it lands exactly where the + reappears.
+//    The origin's .is-sheet-origin / .is-under-sheet are reference-counted:
+//    a closing sheet never un-hides a + that another open sheet still covers.
 //  - Focus moves into the sheet, is trapped, and returns to the origin — or,
 //    when the origin is gone (a finished live pill), to the next sensible
 //    place (another pill, the +, the current view): never to <body>.
@@ -54,6 +62,7 @@ const FALLBACK_SLACK_MS = 160;
 export const ENTER_GUARD_MS = 350;
 
 const stack = [];          // open sheets, bottom → top (closing ones are removed)
+const classHolds = new WeakMap(); // element → Map(className → holders)
 let closingCount = 0;      // sheets still animating out
 let seq = 0;
 let globalsBound = false;
@@ -145,6 +154,102 @@ export function focusFallback(opts) {
   if (!t) return false;
   t.focus({ preventScroll: true });
   return true;
+}
+
+/**
+ * Make `el` ignore pointer taps that belong to the gesture which made it
+ * appear: a click whose pointerdown landed inside `el` less than `ms` after
+ * `shownAt` (or before it — the press started on whatever was there before)
+ * is swallowed in the capture phase, before any handler inside `el` sees it.
+ * Keyboard and programmatic activation (click.detail === 0) always pass.
+ * Used for every sheet layer and every toast: a double-tap on a live pill
+ * must not land its second tap on the sheet / Undo toast the first one put
+ * under the finger.
+ * @param {EventTarget} el
+ * @param {{ shownAt?: number, ms?: number }} [opts] shownAt in performance.now() time
+ * @returns {() => void} remove the guard
+ */
+export function guardEnterTaps(el, { shownAt = now(), ms = ENTER_GUARD_MS } = {}) {
+  let downAt = -Infinity;
+  let active = true; // (some EventTarget implementations can't remove capture listeners)
+  const onDown = () => { downAt = now(); };
+  const onClick = (e) => {
+    if (!active || !e.detail) return; // Enter / Space / el.click(): deliberate
+    if (downAt - shownAt >= ms) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  el.addEventListener('pointerdown', onDown, true);
+  el.addEventListener('click', onClick, true);
+  return () => {
+    active = false;
+    el.removeEventListener('pointerdown', onDown, true);
+    el.removeEventListener('click', onClick, true);
+  };
+}
+
+/**
+ * Map a rect measured on screen back through an ancestor's 2D transform, i.e.
+ * where it would be with the transform removed. Pure (unit-tested).
+ * @param {{ left: number, top: number, width: number, height: number }} rect
+ * @param {{ a: number, b: number, c: number, d: number, e: number, f: number }} m the ancestor's transform matrix
+ * @param {{ x: number, y: number }} origin the ancestor's transform origin, in viewport coordinates
+ * @returns {{ left: number, top: number, width: number, height: number, right: number, bottom: number }}
+ */
+export function untransformRect(rect, m, origin) {
+  const det = m.a * m.d - m.b * m.c;
+  const out = (l, t, r, b) => ({ left: l, top: t, width: r - l, height: b - t, right: r, bottom: b });
+  if (!det || !Number.isFinite(det)) return out(rect.left, rect.top, rect.left + rect.width, rect.top + rect.height);
+  // screen = origin + L·(p − origin) + (e, f)  ⇒  p = origin + L⁻¹·(screen − origin − (e, f))
+  const inv = (x, y) => {
+    const px = x - origin.x - m.e;
+    const py = y - origin.y - m.f;
+    return [origin.x + (m.d * px - m.c * py) / det, origin.y + (-m.b * px + m.a * py) / det];
+  };
+  const r = rect.left + rect.width;
+  const b = rect.top + rect.height;
+  const pts = [inv(rect.left, rect.top), inv(r, rect.top), inv(rect.left, b), inv(r, b)];
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  return out(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys));
+}
+
+/**
+ * `el`'s rect as it is when the page behind sheets is NOT scaled: #app's
+ * current (possibly mid-transition) transform divided out. The + lives in
+ * #app; its twin lives in #sheetRoot, which is never scaled.
+ * @param {Element} el
+ */
+function restingRect(el) {
+  const rect = el.getBoundingClientRect();
+  const app = appRoot();
+  if (!app || !app.contains(el) || typeof DOMMatrixReadOnly !== 'function') return rect;
+  const cs = getComputedStyle(app);
+  if (!cs.transform || cs.transform === 'none') return rect;
+  let m;
+  try { m = new DOMMatrixReadOnly(cs.transform); } catch { return rect; }
+  if (m.isIdentity) return rect;
+  const [ox = 0, oy = 0] = String(cs.transformOrigin).split(' ').map(parseFloat);
+  // offsetLeft/Top of the fixed #app: its untransformed box in the viewport.
+  return untransformRect(rect, m, { x: app.offsetLeft + ox, y: app.offsetTop + oy });
+}
+
+/** Add a class that several sheets may want at once (reference-counted). */
+function holdClass(el, cls) {
+  let m = classHolds.get(el);
+  if (!m) { m = new Map(); classHolds.set(el, m); }
+  const n = (m.get(cls) || 0) + 1;
+  m.set(cls, n);
+  if (n === 1) el.classList.add(cls);
+}
+
+/** Release a holdClass(); the class goes once the last holder lets go. */
+function releaseClass(el, cls) {
+  const m = classHolds.get(el);
+  const n = (m && m.get(cls)) || 0;
+  if (n > 1) { m.set(cls, n - 1); return; }
+  if (m) m.delete(cls);
+  el.classList.remove(cls);
 }
 
 /** Force a style flush so the next class change transitions from here. */
@@ -301,6 +406,7 @@ export function openSheet(opts = {}) {
   const entry = {
     id, layer, sheet, dismissible, close: null, origin: originEl, fabX: null, openedAt: now(),
   };
+  layer.classList.add('is-measuring');
   if (fabOrigin) layer.classList.add('is-fab');
   if (grow) layer.classList.add('is-grow');
   if (rectGrow) layer.classList.add('is-rect');
@@ -318,7 +424,7 @@ export function openSheet(opts = {}) {
   layer.style.setProperty('--sheet-depth', String(stack.length));
   stack.push(entry);
 
-  if (originEl) originEl.classList.add('is-sheet-origin');
+  if (originEl) holdClass(originEl, 'is-sheet-origin');
 
   /** @type {SheetApi} */
   const api = {
@@ -348,21 +454,27 @@ export function openSheet(opts = {}) {
 
   // ---- the + becomes the × (DESIGN §7.2 #3, §7.3) ----
   if (fabOrigin) {
-    const o = originEl.getBoundingClientRect();
+    // The +'s resting geometry: centre with #app's scale divided out (a
+    // sheet opened from a quick-log tile measures while the page behind is
+    // still at / easing to .985), size from layout (ignores a press scale).
+    const o = restingRect(originEl);
+    const size = originEl.offsetWidth || o.width;
+    const cx = o.left + o.width / 2;
+    const cy = o.top + o.height / 2;
     if (grow) {
       const s = sheet.getBoundingClientRect();
-      sheet.style.setProperty('--grow-x', `${o.left + o.width / 2 - s.left}px`);
-      sheet.style.setProperty('--grow-y', `${o.top + o.height / 2 - s.top}px`);
-      sheet.style.setProperty('--grow-r', `${o.width / 2}px`);
+      sheet.style.setProperty('--grow-x', `${cx - s.left}px`);
+      sheet.style.setProperty('--grow-y', `${cy - s.top}px`);
+      sheet.style.setProperty('--grow-r', `${size / 2}px`);
     }
     const fabX = element(html`<button type="button" class="fab-x" aria-label="Close">${rawIcon('plus-bold', 30)}</button>`);
-    fabX.style.setProperty('--fab-left', `${o.left}px`);
-    fabX.style.setProperty('--fab-top', `${o.top}px`);
-    fabX.style.setProperty('--fab-size-px', `${o.width}px`);
+    fabX.style.setProperty('--fab-left', `${cx - size / 2}px`);
+    fabX.style.setProperty('--fab-top', `${cy - size / 2}px`);
+    fabX.style.setProperty('--fab-size-px', `${size}px`);
     fabX.addEventListener('click', () => { if (entered()) api.close(undefined); });
     layer.appendChild(fabX);
     entry.fabX = fabX;
-    originEl.classList.add('is-under-sheet');
+    holdClass(originEl, 'is-under-sheet');
     if (grow) {
       // Tiles rise in, staggered 20 ms from 120 ms (motion contract #3).
       [...currentStep.querySelectorAll('[data-stagger]')].forEach((el, i) => el.style.setProperty('--stagger-i', String(i)));
@@ -385,6 +497,13 @@ export function openSheet(opts = {}) {
   }
 
   // ---- enter ----
+  // Commit the pre state WITH the --grow-* / --rg-* geometry while
+  // transitions are still off (.is-measuring): the measuring pass above
+  // already computed a style with the geometry unset, so setting it with
+  // transitions on would start a transition from the unset values — and the
+  // enter would then begin there (at rest) instead of on the + / the pill.
+  reflow(layer);
+  layer.classList.remove('is-measuring');
   reflow(layer);
   layer.setAttribute('data-state', 'open');
   if (grow || rectGrow) {
@@ -397,6 +516,9 @@ export function openSheet(opts = {}) {
   }
   focusInitial();
   notifyChange();
+
+  // ---- the tail of the opening tap hits nothing in the layer ----
+  guardEnterTaps(layer, { shownAt: entry.openedAt });
 
   // ---- dismiss gestures ----
   scrim.addEventListener('click', () => { if (entry.dismissible && isTop() && entered()) close(undefined); });
@@ -521,7 +643,7 @@ export function openSheet(opts = {}) {
       if (typeof fn === 'function') { try { fn(); } catch (err) { console.error('sheet cleanup failed', err); } }
     }
     stepCleanup = null;
-    if (originEl) originEl.classList.remove('is-sheet-origin');
+    if (originEl) releaseClass(originEl, 'is-sheet-origin');
 
     const top = stack[stack.length - 1];
     if (top) top.layer.inert = false;
@@ -549,7 +671,7 @@ export function openSheet(opts = {}) {
       const finish = () => {
         layer.remove();
         closingCount -= 1;
-        if (originEl) originEl.classList.remove('is-under-sheet');
+        if (originEl && entry.fabX) releaseClass(originEl, 'is-under-sheet');
         if (!stack.length && !closingCount) {
           const app = appRoot();
           if (app) app.inert = false;
