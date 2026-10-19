@@ -22,7 +22,7 @@
 
 import { html, element, raw, render } from './html.js';
 import { icon } from './icons.js';
-import { openSheet, motionReduced, afterTransition } from './sheet.js';
+import { openSheet, motionReduced, afterTransition, focusFallback } from './sheet.js';
 import { timerClock } from '../core/time.js';
 import { bottleSafety, breastSideTotals, switchBreastSide } from '../domain/safety.js';
 import { clock, spanSpoken, babyName } from './format.js';
@@ -123,8 +123,8 @@ export function pillModel(event, now, { storageWindows, babies = [] } = {}) {
 
 function pillTemplate(event, m) {
   return html`
-    <div class="lpill lp-${m.cat}" role="group" aria-label="${m.spoken}" data-event-id="${event.id}" data-kind="${m.kind}" data-level="${m.level}" data-state="pre">
-      <button type="button" class="lpill-open" aria-label="${m.openLabel}">
+    <div class="lpill lp-${m.cat}" role="group" aria-label="${m.spoken}" data-event-id="${event.id}" data-kind="${m.kind}" data-level="${m.level}" data-state="pre" data-sheet-grow-rect>
+      <button type="button" class="lpill-open" aria-label="${m.openLabel}" data-sheet-grow="rect">
         <span class="lpill-well">
           <svg class="lpill-ring" viewBox="0 0 44 44" aria-hidden="true" focusable="false">
             <circle class="lpill-ring-track" cx="22" cy="22" r="20"></circle>
@@ -233,7 +233,9 @@ export function mount(root, ctx) {
     const el = element(pillTemplate(event, m));
     paint(el, m, true);
     // Origins are the buttons themselves, so focus returns to them when the
-    // sheet they open closes.
+    // sheet they open closes. The open button carries data-sheet-grow="rect"
+    // (and the pill data-sheet-grow-rect), so ANY sheet opened from it —
+    // registered handler or fallback — grows out of the pill's rect (#6).
     const openBtn = el.querySelector('.lpill-open');
     const finishBtn = el.querySelector('.lpill-finish');
     openBtn.addEventListener('click', () => onOpen(event.id, openBtn));
@@ -255,6 +257,12 @@ export function mount(root, ctx) {
     if (!p) return;
     pills.delete(id);
     const { el } = p;
+    // Inerting a focused pill would drop focus to <body>: hand it to the
+    // next pill first, else the + / current view (sheet.js fallback chain).
+    if (el.contains(document.activeElement)) {
+      const next = [...root.querySelectorAll('.lpill:not([inert]) .lpill-open')].find((b) => !el.contains(b));
+      if (next) next.focus({ preventScroll: true }); else focusFallback();
+    }
     el.inert = true;
     const wasFinished = finished.delete(id);
     // Finish shrinks the pill into its new timeline row when that row is on
@@ -286,7 +294,7 @@ export function mount(root, ctx) {
       setTimeout(() => el.remove(), 700);
     } else {
       el.setAttribute('data-state', 'out');
-      afterTransition(el, 450, () => el.remove());
+      afterTransition(el, 450, () => el.remove(), { property: 'opacity' });
     }
   }
 

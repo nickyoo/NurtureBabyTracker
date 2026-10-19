@@ -137,3 +137,30 @@ test('escapeHTML / safeUrl / cls helpers', () => {
   assert.equal(cls('row', false, null, 'is-live', { 'is-new': true, gone: 0 }), 'row is-live is-new');
   assert.equal(cls(), '');
 });
+
+// R1-07: the attribute name is recorded when its quote opens, so a value that
+// contains the OTHER quote character can't hide an on*/style hole or a URL.
+test('on*/style holes are refused even when the value contains the other quote', () => {
+  const payload = "');alert(1);//";
+  assert.throws(() => html`<button onclick="go('${payload}')"></button>`, TypeError);
+  assert.throws(() => html`<button onclick='go("${payload}")'></button>`, TypeError);
+  assert.throws(() => html`<div style="background:url('${'x.png'}')"></div>`, TypeError);
+  assert.throws(() => html`<div title="a" style="font-family:'A', ${'b'}"></div>`, TypeError);
+  assert.throws(() => html`<button ONCLICK="f('${'x'}')"></button>`, TypeError);
+  // ...and a second hole in the same forbidden value is refused too
+  assert.throws(() => html`<button title="${'ok'}" onclick="f('a', '${'x'}')"></button>`, TypeError);
+});
+
+test('URL holes are sanitised whatever quotes surround them', () => {
+  const bad = 'javascript:alert(1)';
+  assert.match(s(html`<a title="it's" href="${bad}">x</a>`), /href="about:invalid#nurture-unsafe-url"/);
+  assert.match(s(html`<a title='say "hi"' href='${bad}'>x</a>`), /href='about:invalid#nurture-unsafe-url'/);
+  // browsers strip leading whitespace before reading the scheme
+  assert.match(s(html`<a href=" ${bad}">x</a>`), /href=" about:invalid#nurture-unsafe-url"/);
+  assert.match(s(html`<a href="\n\t${bad}">x</a>`), /about:invalid#nurture-unsafe-url/);
+  // a static prefix that already fixes a relative URL stays as-is (escaped)
+  assert.equal(s(html`<a href="a'b${bad}">x</a>`), '<a href="a\'bjavascript:alert(1)">x</a>');
+  // other attributes containing the other quote still escape normally
+  assert.equal(s(html`<p title="it's ${"<b>"}">x</p>`), '<p title="it\'s &lt;b&gt;">x</p>');
+  assert.equal(s(html`<p data-a='say "${'"'}"'>x</p>`), '<p data-a=\'say "&quot;"\'>x</p>');
+});

@@ -97,7 +97,7 @@ export function toast({ message, action, duration = 5000, tone = 'default' } = {
     if (current && current.el === el) current = null;
     el.setAttribute('data-state', 'leaving');
     const remove = () => { el.remove(); resolveDone(reason); };
-    if (fast) remove(); else afterTransition(el, EXIT_MS + 160, remove);
+    if (fast) remove(); else afterTransition(el, EXIT_MS + 160, remove, { property: 'opacity' });
   }
 
   el.addEventListener('pointerenter', pause);

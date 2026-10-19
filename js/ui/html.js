@@ -101,9 +101,15 @@ const COMMENT = 4;
 
 /**
  * Walk one static chunk, updating the scanner state.
- * @param {{ state: number, tag: string }} st `tag` accumulates the source of
- *   the current tag (static text + hole placeholders) so attribute names can
- *   be recovered when a hole is reached.
+ * @param {{ state: number, tag: string, attr: string, val: string, holes: number }} st
+ *   `tag` accumulates the source of the current tag (static text + hole
+ *   placeholders) so attribute names can be recovered for UNQUOTED holes.
+ *   For a quoted value, the attribute's name is recorded the moment its
+ *   opening quote is seen (`attr`), together with the value's static text so
+ *   far (`val`) and how many holes it already holds (`holes`). Recovering the
+ *   name later by re-parsing `tag` breaks as soon as the value contains the
+ *   other quote character (onclick="go('${x}')"), which silently skipped the
+ *   on* / style refusal and URL sanitising.
  * @param {string} chunk
  */
 function scan(st, chunk) {
@@ -116,18 +122,21 @@ function scan(st, chunk) {
         }
         break;
       case TAG:
+        if (ch === '"' || ch === "'") {
+          st.attr = attrBeforeEquals(st.tag) || '';
+          st.val = '';
+          st.holes = 0;
+          st.state = ch === '"' ? DQ : SQ;
+        } else if (ch === '>') {
+          st.state = TEXT;
+        }
         st.tag += ch;
-        if (ch === '"') st.state = DQ;
-        else if (ch === "'") st.state = SQ;
-        else if (ch === '>') st.state = TEXT;
         break;
       case DQ:
-        st.tag += ch;
-        if (ch === '"') st.state = TAG;
-        break;
       case SQ:
         st.tag += ch;
-        if (ch === "'") st.state = TAG;
+        if (ch === (st.state === DQ ? '"' : "'")) st.state = TAG;
+        else st.val += ch;
         break;
       case COMMENT:
         if (ch === '-' && chunk.startsWith('-->', i)) { st.state = TEXT; i += 2; }
@@ -138,16 +147,10 @@ function scan(st, chunk) {
   }
 }
 
-// Name of the attribute whose (quoted) value we're inside, plus whether the
-// hole is at the very start of that value.
-function quotedAttr(tagSrc) {
-  const m = /([^\s"'<>/=]+)\s*=\s*(["'])([^"']*)$/.exec(tagSrc);
-  return m ? { name: m[1].toLowerCase(), atStart: m[3] === '' } : { name: '', atStart: false };
-}
-
-// Name of the attribute for an UNQUOTED hole (`name=${x}`), or null when
-// the hole sits in attribute-name position (`<button ${x}>`).
-function unquotedAttr(tagSrc) {
+// Name of the attribute when `tagSrc` ends in `name=` (optional spaces), or
+// null — for an unquoted hole, null means the hole sits in attribute-name
+// position (`<button ${x}>`).
+function attrBeforeEquals(tagSrc) {
   const m = /([^\s"'<>/=]+)\s*=\s*$/.exec(tagSrc);
   return m ? m[1].toLowerCase() : null;
 }
@@ -205,7 +208,7 @@ function attrValue(value) {
  * @returns {SafeHTML}
  */
 export function html(strings, ...values) {
-  const st = { state: TEXT, tag: '' };
+  const st = { state: TEXT, tag: '', attr: '', val: '', holes: 0 };
   let out = '';
   for (let i = 0; i < strings.length; i += 1) {
     const chunk = strings[i];
@@ -220,18 +223,23 @@ export function html(strings, ...values) {
     }
 
     if (st.state === DQ || st.state === SQ) {
-      const { name, atStart } = quotedAttr(st.tag);
+      const name = st.attr;
       if (isForbiddenAttr(name)) throw new TypeError(`html: interpolation in ${name}="" is not allowed`);
       let v = attrValue(value);
+      // "At the start" = only whitespace/control chars before the hole:
+      // browsers strip those before parsing the scheme, so href=" ${u}"
+      // must be checked exactly like href="${u}".
+      // eslint-disable-next-line no-control-regex
+      const atStart = st.holes === 0 && /^[\u0000- ]*$/.test(st.val);
       if (atStart && URL_ATTRS.has(name)) v = safeUrl(v);
-      const escaped = escapeHTML(v);
-      out += escaped;
+      out += escapeHTML(v);
+      st.holes += 1;
       st.tag += 'x'; // placeholder so later regexes see a non-empty value
       continue;
     }
 
     // TAG state: either `name=${x}` (unquoted value) or `<el ${x}>`.
-    const name = unquotedAttr(st.tag);
+    const name = attrBeforeEquals(st.tag);
     if (name !== null) {
       if (isForbiddenAttr(name)) throw new TypeError(`html: interpolation in ${name}= is not allowed`);
       let v = attrValue(value);

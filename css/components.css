@@ -350,6 +350,24 @@ button.row:active, a.row:active { background: var(--surface-2); }
 }
 @keyframes tile-rise { from { opacity: 0; transform: translateY(var(--move-sm)); } to { opacity: 1; transform: none; } }
 
+/* Grow out of a rect: the live pill (#6). The sheet starts as its own header
+   strip, the pill's size, sitting on the pill (translateY --rg-y + inset
+   clip), and FLIPs/unclips to rest over --dur-morph on the spring. The exit
+   is the ordinary slide (#1). sheet.js sets the --rg-* geometry. */
+.sheet-layer.is-rect .sheet {
+  transform: translateY(var(--rg-y, 0px));
+  clip-path: inset(0 var(--rg-r, 0px) var(--rg-b, 0px) var(--rg-l, 0px) round var(--rg-rad, 30px));
+  transition: transform var(--dur-morph) var(--ease-spring), clip-path var(--dur-morph) var(--ease-spring);
+  will-change: transform, clip-path;
+}
+.sheet-layer.is-rect[data-state="open"] .sheet { transform: translateY(var(--drag-y, 0px)); clip-path: inset(0 0 0 0 round var(--r-sheet) var(--r-sheet) 0 0); }
+.sheet-layer.is-rect.is-settled .sheet { clip-path: none; will-change: auto; }
+.sheet-layer.is-rect.is-dragging .sheet { transition: none; }
+.sheet-layer.is-rect[data-state="closing"] .sheet {
+  transform: translateY(100%); clip-path: inset(0 0 0 0 round var(--r-sheet) var(--r-sheet) 0 0);
+  transition: transform 240ms var(--ease-in), clip-path 240ms var(--ease-in);
+}
+
 /* Reduced motion: appear in place with an opacity cross-fade ≤150 ms. */
 .sheet-layer.is-reduced .sheet { transform: none; clip-path: none; opacity: 0; transition: opacity 150ms linear; }
 .sheet-layer.is-reduced[data-state="open"] .sheet { opacity: 1; transform: translateY(var(--drag-y, 0px)); }
@@ -379,7 +397,7 @@ button.row:active, a.row:active { background: var(--surface-2); }
 }
 /* A sheet grown from the + keeps the × in place over its bottom edge, so
    its content ends above the × (frame 3). */
-.sheet-layer.is-grow .sheet-viewport { padding-bottom: calc(var(--nav-total) + var(--fab-raise) + var(--s-4)); }
+.sheet-layer.is-fab .sheet-viewport { padding-bottom: calc(var(--nav-total) + var(--fab-raise) + var(--s-4)); }
 .sheet-viewport.is-resizing { overflow: hidden; transition: height var(--dur-base) var(--ease-std); }
 .sheet-step { outline: none; transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out); }
 .sheet-step.is-entering { transition: none; }
@@ -493,6 +511,9 @@ body[data-chrome="bare"] #toastRoot { bottom: calc(var(--safe-bottom) + var(--s-
 .sheet-layer[data-state="open"] .fab-x,
 .sheet-layer[data-state="closing"]:not(.is-unrotating) .fab-x { transform: rotate(var(--fab-rotate)); }
 .sheet-layer.is-unrotating .fab-x { transform: rotate(0deg); transition: transform var(--dur-fast) var(--ease-in); }
+/* Reduced motion (§7.3): the + ↔ × swap is instant — the twin shows the ×
+   glyph from its first frame (a static orientation, not a rotation). */
+.sheet-layer.is-reduced .fab-x .ic { transform: rotate(45deg); }
 .fab-x:focus-visible { box-shadow: var(--shadow-fab), 0 0 0 4px var(--sheet-bg), 0 0 0 6px var(--accent-ink); }
 
 /* ===================== 11. Live pill (§6.5) ===================== */

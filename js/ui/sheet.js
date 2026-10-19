@@ -15,11 +15,21 @@
 //    A sheet whose origin carries [data-sheet-grow] (the center +) instead
 //    GROWS out of the + with a clip-path circle (--dur-grow), and a twin of
 //    the + rotates into × and stays above the sheet as its close button.
+//    An origin with [data-sheet-grow="rect"] (the live pill, #6) grows the
+//    sheet out of its rect instead: the sheet header starts clipped to the
+//    origin's box — or that of its closest [data-sheet-grow-rect] ancestor —
+//    and FLIPs/unclips to its resting place over --dur-morph --ease-spring.
 //  - Exit: reverse (240 ms ease-in / circle collapse), then the node is
 //    removed on transitionend — with a timeout fallback, because a
 //    transitionend can be skipped (tab hidden, display change, zero-duration).
 //  - Reduced motion (system or in-app [data-motion="reduce"]): opacity only.
-//  - Focus moves into the sheet, is trapped, and returns to the origin.
+//    The + still turns into the × (instantly, no rotation): only the motion
+//    is dropped, never the control.
+//  - The scrim and the × ignore taps for ENTER_GUARD_MS after opening, so the
+//    second tap of a double-tap can't close the sheet it just opened.
+//  - Focus moves into the sheet, is trapped, and returns to the origin — or,
+//    when the origin is gone (a finished live pill), to the next sensible
+//    place (another pill, the +, the current view): never to <body>.
 //    The app root is inert and its scrolling locked while any sheet is open.
 //  - Esc, scrim tap and dragging the grabber/header down dismiss it when
 //    `dismissible`. Sheets stack: only the top one is interactive.
@@ -38,6 +48,10 @@ const EXIT_MS = 240;
 // Fallback slack on top of the expected duration before we stop waiting for
 // transitionend and finish anyway.
 const FALLBACK_SLACK_MS = 160;
+// Taps on the scrim / × this soon after opening are the tail of the tap (or
+// double-tap) that opened the sheet, not a request to close it. Esc and
+// Back stay immediate.
+export const ENTER_GUARD_MS = 350;
 
 const stack = [];          // open sheets, bottom → top (closing ones are removed)
 let closingCount = 0;      // sheets still animating out
@@ -62,27 +76,75 @@ export function motionReduced() {
 /**
  * Run `fn` once `el` finishes a transition (its own, not a child's), or
  * after `ms` if transitionend never arrives.
+ *
+ * Only `transitionend` counts. A `transitioncancel` is NOT completion: when an
+ * exit state is applied while the enter transition is still running (Esc
+ * 150 ms after opening), the browser cancels the enter transition at that
+ * moment — treating that as "done" removed surfaces 4 ms into their exit.
+ * A cancelled exit simply falls through to the timeout.
  * @param {Element} el
  * @param {number} ms
  * @param {() => void} fn
+ * @param {{ property?: string|string[] }} [opts] only a transitionend of this
+ *   property (or one of these) counts — e.g. 'transform' for a slide-out, so
+ *   a late end of some other property can't finish the exit early
  * @returns {() => void} cancel
  */
-export function afterTransition(el, ms, fn) {
+export function afterTransition(el, ms, fn, { property } = {}) {
   let done = false;
   let timer = 0;
-  const onEnd = (e) => { if (e.target === el) finish(); };
+  const props = property ? [].concat(property) : null;
+  const onEnd = (e) => {
+    if (e.target !== el) return;
+    if (props && !props.includes(e.propertyName)) return;
+    finish();
+  };
   function finish() {
     if (done) return;
     done = true;
     el.removeEventListener('transitionend', onEnd);
-    el.removeEventListener('transitioncancel', onEnd);
     clearTimeout(timer);
     fn();
   }
   el.addEventListener('transitionend', onEnd);
-  el.addEventListener('transitioncancel', onEnd);
   timer = setTimeout(finish, ms);
-  return () => { done = true; clearTimeout(timer); el.removeEventListener('transitionend', onEnd); el.removeEventListener('transitioncancel', onEnd); };
+  return () => { done = true; clearTimeout(timer); el.removeEventListener('transitionend', onEnd); };
+}
+
+function usable(el) {
+  return !!(el && el.isConnected && typeof el.focus === 'function' && !el.closest('[inert]') && !el.closest('[hidden]') && el.getClientRects().length > 0);
+}
+
+/**
+ * Where focus should go when the element that had it (or should get it back)
+ * no longer exists: another live pill, then the +, then the view on top.
+ * Never <body>, which drops keyboard and screen-reader users at the top of
+ * the document with nothing announced.
+ * @param {{ preferPills?: boolean }} [opts]
+ * @returns {HTMLElement|null}
+ */
+export function focusFallbackTarget({ preferPills = false } = {}) {
+  if (typeof document === 'undefined') return null;
+  const candidates = [];
+  if (preferPills) candidates.push(...document.querySelectorAll('#livePills .lpill:not([inert]) .lpill-open'));
+  candidates.push(document.getElementById('fab'));
+  candidates.push(...document.querySelectorAll('#tabBar [aria-current="page"]'));
+  const views = [...document.querySelectorAll('#viewport > .view')]
+    .filter((v) => !v.inert && !v.classList.contains('is-covered') && !v.classList.contains('is-fading-out') && !v.classList.contains('is-leaving-right'));
+  if (views.length) candidates.push(views[views.length - 1]);
+  return candidates.find(usable) || null;
+}
+
+/**
+ * Focus the fallback target (see focusFallbackTarget) without scrolling.
+ * @param {{ preferPills?: boolean }} [opts]
+ * @returns {boolean} whether something took focus
+ */
+export function focusFallback(opts) {
+  const t = focusFallbackTarget(opts);
+  if (!t) return false;
+  t.focus({ preventScroll: true });
+  return true;
 }
 
 /** Force a style flush so the next class change transitions from here. */
@@ -182,7 +244,7 @@ function bindGlobals() {
  * @param {object} opts
  * @param {string} [opts.title] header title (Fraunces 26); also the dialog's accessible name
  * @param {string} [opts.label] accessible name when there is no visible title
- * @param {Element|null} [opts.origin] the trigger: gets a pressed state, focus returns to it; an origin with [data-sheet-grow] makes the sheet grow out of it (the +)
+ * @param {Element|null} [opts.origin] the trigger: gets a pressed state, focus returns to it; an origin with [data-sheet-grow] makes the sheet grow out of it with a × twin (the +); [data-sheet-grow="rect"] grows it out of the origin's rect, or its closest [data-sheet-grow-rect] ancestor's (the live pill)
  * @param {(body: HTMLElement, api: SheetApi) => (void|(() => void))} opts.render builds the first step; may return a cleanup fn
  * @param {'auto'|'full'} [opts.size] auto = sizes to content up to the max; full = always max height
  * @param {boolean} [opts.dismissible=true] Esc / scrim / drag / back close it
@@ -202,7 +264,13 @@ export function openSheet(opts = {}) {
   const id = `sheet-${(seq += 1)}`;
   const reduced = motionReduced();
   const originEl = origin && origin.nodeType === 1 ? origin : null;
-  const grow = !!(originEl && originEl.hasAttribute('data-sheet-grow') && !reduced);
+  const growMode = originEl ? originEl.getAttribute('data-sheet-grow') : null;
+  // A + origin keeps its × twin under reduced motion (DESIGN §7.3: swap the
+  // icon instantly); only the clip-path growth and the rotation are dropped.
+  const fabOrigin = growMode !== null && growMode !== 'rect';
+  const grow = fabOrigin && !reduced;
+  const rectGrow = growMode === 'rect' && !reduced;
+  const originInPills = !!(originEl && originEl.closest('#livePills'));
   const safeClass = /^[\w -]*$/.test(className) ? className : '';
 
   const layer = element(html`
@@ -231,9 +299,11 @@ export function openSheet(opts = {}) {
   const closed = new Promise((r) => { resolveClosed = r; });
 
   const entry = {
-    id, layer, sheet, dismissible, close: null, origin: originEl, fabX: null,
+    id, layer, sheet, dismissible, close: null, origin: originEl, fabX: null, openedAt: now(),
   };
+  if (fabOrigin) layer.classList.add('is-fab');
   if (grow) layer.classList.add('is-grow');
+  if (rectGrow) layer.classList.add('is-rect');
   if (reduced) layer.classList.add('is-reduced');
   if (!dismissible) closeBtn.hidden = true;
 
@@ -276,45 +346,66 @@ export function openSheet(opts = {}) {
     console.error('sheet render failed', err);
   }
 
-  // ---- grow-from-+ geometry (DESIGN §7.2 #3) ----
-  if (grow) {
+  // ---- the + becomes the × (DESIGN §7.2 #3, §7.3) ----
+  if (fabOrigin) {
     const o = originEl.getBoundingClientRect();
-    const s = sheet.getBoundingClientRect();
-    sheet.style.setProperty('--grow-x', `${o.left + o.width / 2 - s.left}px`);
-    sheet.style.setProperty('--grow-y', `${o.top + o.height / 2 - s.top}px`);
-    sheet.style.setProperty('--grow-r', `${o.width / 2}px`);
+    if (grow) {
+      const s = sheet.getBoundingClientRect();
+      sheet.style.setProperty('--grow-x', `${o.left + o.width / 2 - s.left}px`);
+      sheet.style.setProperty('--grow-y', `${o.top + o.height / 2 - s.top}px`);
+      sheet.style.setProperty('--grow-r', `${o.width / 2}px`);
+    }
     const fabX = element(html`<button type="button" class="fab-x" aria-label="Close">${rawIcon('plus-bold', 30)}</button>`);
     fabX.style.setProperty('--fab-left', `${o.left}px`);
     fabX.style.setProperty('--fab-top', `${o.top}px`);
     fabX.style.setProperty('--fab-size-px', `${o.width}px`);
-    fabX.addEventListener('click', () => api.close(undefined));
+    fabX.addEventListener('click', () => { if (entered()) api.close(undefined); });
     layer.appendChild(fabX);
     entry.fabX = fabX;
     originEl.classList.add('is-under-sheet');
-    // Tiles rise in, staggered 20 ms from 120 ms (motion contract #3).
-    [...currentStep.querySelectorAll('[data-stagger]')].forEach((el, i) => el.style.setProperty('--stagger-i', String(i)));
-    layer.classList.add('is-staggered');
+    if (grow) {
+      // Tiles rise in, staggered 20 ms from 120 ms (motion contract #3).
+      [...currentStep.querySelectorAll('[data-stagger]')].forEach((el, i) => el.style.setProperty('--stagger-i', String(i)));
+      layer.classList.add('is-staggered');
+    }
+  }
+
+  // ---- grow out of a rect: the live pill (DESIGN §7.2 #6) ----
+  if (rectGrow) {
+    const box = (originEl.closest('[data-sheet-grow-rect]') || originEl).getBoundingClientRect();
+    const s = sheet.getBoundingClientRect(); // .is-rect rests at transform:none in the pre state
+    const dy = Math.max(0, box.top - s.top);
+    const radius = Math.min(box.height / 2, parseFloat(getComputedStyle(originEl.closest('[data-sheet-grow-rect]') || originEl).borderTopLeftRadius) || box.height / 2);
+    // Start: the sheet's HEADER strip, the pill's size, sitting on the pill.
+    sheet.style.setProperty('--rg-y', `${dy}px`);
+    sheet.style.setProperty('--rg-l', `${Math.max(0, box.left - s.left)}px`);
+    sheet.style.setProperty('--rg-r', `${Math.max(0, s.right - box.right)}px`);
+    sheet.style.setProperty('--rg-b', `${Math.max(0, s.height - box.height)}px`);
+    sheet.style.setProperty('--rg-rad', `${radius}px`);
   }
 
   // ---- enter ----
   reflow(layer);
   layer.setAttribute('data-state', 'open');
-  if (grow) {
-    afterTransition(sheet, cssMs('--dur-grow', 420) + FALLBACK_SLACK_MS, () => {
+  if (grow || rectGrow) {
+    const dur = grow ? cssMs('--dur-grow', 420) : cssMs('--dur-morph', 320);
+    afterTransition(sheet, dur + FALLBACK_SLACK_MS, () => {
       // Drop the clip once grown: a clip-path costs compositing every frame
       // and would clip the sheet's own shadow.
       if (layer.getAttribute('data-state') === 'open') layer.classList.add('is-settled');
-    });
+    }, { property: 'clip-path' });
   }
   focusInitial();
   notifyChange();
 
   // ---- dismiss gestures ----
-  scrim.addEventListener('click', () => { if (entry.dismissible && isTop()) close(undefined); });
+  scrim.addEventListener('click', () => { if (entry.dismissible && isTop() && entered()) close(undefined); });
   closeBtn.addEventListener('click', () => close(undefined));
   bindDrag();
 
   function isTop() { return stack[stack.length - 1] === entry; }
+  // Past the enter guard: a tap now is a deliberate one (see ENTER_GUARD_MS).
+  function entered() { return now() - entry.openedAt >= ENTER_GUARD_MS; }
 
   function focusInitial(container = currentStep) {
     let target = null;
@@ -406,7 +497,7 @@ export function openSheet(opts = {}) {
       if (shouldClose) {
         // Continue the slide from where the finger let go (even for the
         // grown quick-log sheet, which then exits like any other sheet).
-        layer.classList.remove('is-grow', 'is-settled');
+        layer.classList.remove('is-grow', 'is-rect', 'is-settled');
         layer.classList.add('is-drag-close');
         close(undefined);
       } else {
@@ -441,7 +532,7 @@ export function openSheet(opts = {}) {
 
     // Grown sheets collapse back into the ×: restore the full circle first
     // (it was dropped once settled) so the collapse has a start value.
-    if (layer.classList.contains('is-grow') && layer.classList.contains('is-settled')) {
+    if ((layer.classList.contains('is-grow') || layer.classList.contains('is-rect')) && layer.classList.contains('is-settled')) {
       layer.classList.remove('is-settled');
       reflow(sheet);
     }
@@ -451,6 +542,9 @@ export function openSheet(opts = {}) {
 
     const growing = layer.classList.contains('is-grow');
     const ms = (reduced ? 150 : growing ? cssMs('--dur-base', 280) : EXIT_MS) + FALLBACK_SLACK_MS;
+    // Wait for the EXIT property only (see afterTransition): the circle
+    // collapse, the opacity fade, or the slide.
+    const exitProp = reduced ? 'opacity' : growing ? 'clip-path' : 'transform';
     afterTransition(sheet, ms, () => {
       const finish = () => {
         layer.remove();
@@ -467,28 +561,40 @@ export function openSheet(opts = {}) {
         checkIdle();
       };
       // The × rotates back into + after the circle has collapsed (#3).
-      if (entry.fabX) {
+      // Reduced motion: no rotation to wait for — the + simply reappears.
+      if (entry.fabX && !reduced) {
         layer.classList.add('is-unrotating');
-        afterTransition(entry.fabX, cssMs('--dur-fast', 200) + FALLBACK_SLACK_MS, finish);
+        afterTransition(entry.fabX, cssMs('--dur-fast', 200) + FALLBACK_SLACK_MS, finish, { property: 'transform' });
       } else {
         finish();
       }
-    });
+    }, { property: exitProp });
     return closed;
   }
 
   function restoreFocus() {
-    const target = originEl;
-    if (!target || !target.isConnected) return;
     const top = stack[stack.length - 1];
-    // Only when the origin is reachable again: either no sheet is open, or the
-    // origin lives in the sheet that is now on top (nested sheets).
-    if (top && !top.layer.contains(target)) return;
-    if (target.closest('[inert]')) return;
-    target.focus({ preventScroll: true });
+    const active = document.activeElement;
+    if (top) {
+      // A sheet is still open (nested, or opened by this one's action).
+      // Return to the origin only if it lives in that sheet; otherwise
+      // make sure focus is inside the top sheet (the trap) and leave it.
+      if (originEl && top.layer.contains(originEl) && usable(originEl)) { originEl.focus({ preventScroll: true }); return; }
+      if (!top.layer.contains(active)) top.sheet.focus({ preventScroll: true });
+      return;
+    }
+    if (usable(originEl)) { originEl.focus({ preventScroll: true }); return; }
+    // The origin is gone (a finished live pill, a re-rendered row). Don't
+    // drop focus to <body> — unless something else already took it.
+    if (active && active !== document.body && active.isConnected && !active.closest('[inert]')) return;
+    focusFallback({ preferPills: originInPills });
   }
 
   return api;
+}
+
+function now() {
+  return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
 }
 
 function rawIcon(name, size) {
