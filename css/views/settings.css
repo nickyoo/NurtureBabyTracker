@@ -1,1 +1,202 @@
-/* View: settings (js/views/settings.js). Owned by the settings screen team. Build from tokens + components.css. */
+/* View: settings (js/views/settings.js) — DESIGN §13 Frame 7 and the rest of
+   Settings. Built from tokens + components.css (set-list / set-row / toggle /
+   segmented / field / btn). No theme selectors: night comes from tokens. */
+
+/* ---------- page frame ---------- */
+.st { padding-bottom: var(--s-6); }
+/* Long titles (a baby's name) ellipsize instead of colliding with Back. */
+.st .navbar { grid-template-columns: 1fr minmax(0, max-content) 1fr; column-gap: var(--s-2); }
+.st .navbar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st .back { white-space: nowrap; }
+.st .intro { margin-top: var(--s-1); margin-bottom: var(--s-2); }
+.st .set-list + .grp-lbl,
+.st .st-actions + .grp-lbl,
+.st .st-card + .grp-lbl,
+.st .st-guide + .st-guide .grp-lbl,
+.st .st-gap + .st-actions { margin-top: var(--s-5); }
+.st .grp-lbl { margin-top: var(--s-4); }
+.st .st-gap { margin-bottom: var(--s-3); }
+.st .set-text small { line-height: 1.35; }
+.st .set-text b { overflow-wrap: anywhere; }
+.st .set-row .badge { margin-left: auto; }
+.st a.set-row { text-decoration: none; }
+a.set-row:active { background: var(--surface-2); }
+.st .set-row .set-value { font-variant-numeric: var(--numeric); padding-right: var(--s-2); }
+.st .note { margin-top: var(--s-2); }
+.st-note { padding: 0 var(--s-1); }
+.st-help { font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-body); line-height: 1.4; margin: 2px var(--s-1) var(--s-2); }
+.st-foot { text-align: center; font-family: var(--font-display); font-style: italic; font-weight: 400; font-size: var(--fs-callout); color: var(--text-2); margin-top: var(--s-6); }
+.st-actions { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); }
+.st-actions-row { flex-direction: row; justify-content: center; }
+.st-actions:empty { display: none; }
+.st-actions .btn-ghost, .st-actions .btn-outline { align-self: flex-start; }
+.st-actions-row .btn-ghost { align-self: center; }
+
+/* ---------- avatar (baby rows + big photo) ---------- */
+.st-av { display: block; flex: none; border-radius: 50%; object-fit: cover; filter: var(--avatar-filter); background: var(--accent-soft); color: var(--accent-ink); }
+.st-av-sm { width: 36px; height: 36px; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--accent-soft); }
+.st-av-lg { width: 104px; height: 104px; }
+.st-av-empty {
+  display: grid; place-items: center;
+  font-family: var(--font-display); font-weight: var(--fw-title); font-size: 18px; line-height: 1;
+}
+.st-av-lg.st-av-empty { font-size: 40px; }
+
+/* ---------- segmented rows (Appearance, Sound, Units) ---------- */
+.set-row.st-stack { flex-wrap: wrap; row-gap: var(--s-2); padding-bottom: var(--s-3); }
+.set-row.st-stack .st-seg { flex: 0 0 auto; width: calc(100% - 46px - var(--s-1)); margin-left: 46px; }
+.st-seg > button { padding: 0 var(--s-2); white-space: nowrap; }
+/* The 38 px segment's hit area fills the 44 px track (DESIGN §5 targets). */
+.st-seg > button::after { content: ""; position: absolute; left: 0; right: 0; top: -3px; bottom: -3px; }
+.st-seg-sound { grid-auto-columns: auto; grid-template-columns: .8fr 1.7fr .8fr; }
+.st-seg-inline { flex: none; width: 124px; margin-right: var(--s-1); }
+@media (max-width: 359px) {
+  .set-row.st-stack .st-seg { margin-left: 0; width: calc(100% - var(--s-1)); }
+  .st-seg > button { font-size: var(--fs-footnote); }
+}
+
+/* ---------- stepper rows (goal, interval, storage windows) ----------
+   Words first, the − value + control on its own line under them, at the
+   thumb side, so neither the label nor the value is ever squeezed. */
+.set-row.st-step-row { flex-wrap: wrap; row-gap: 0; padding-bottom: var(--s-2); }
+.set-row.st-step-row .set-text { flex: 1 1 0; }
+.st-stepper { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-1); flex: 0 0 auto; width: calc(100% - 46px - var(--s-1)); margin-left: 46px; }
+.st-step {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; background: var(--surface-2); color: var(--text);
+  transition: transform var(--dur-press) var(--ease-std), opacity var(--dur-press) var(--ease-std);
+}
+.st-step:active { transform: scale(var(--press-scale)); }
+.st-step[aria-disabled="true"] { opacity: .38; }
+.st-step-val {
+  min-width: 6.2em; min-height: 44px; padding: 0 4px; border-radius: var(--r-sm);
+  display: inline-grid; place-items: center; text-align: center;
+  font-weight: var(--fw-heavy); font-size: var(--fs-headline); font-variant-numeric: var(--numeric); white-space: nowrap;
+}
+
+/* ---------- cards inside pages ---------- */
+.st-card { margin-top: var(--s-3); padding: var(--s-4); border-radius: var(--r-lg); background: var(--c-card); display: flex; flex-direction: column; gap: var(--s-3); }
+.st-card .note { margin: 0; color: var(--text-2); }
+.st-card .note .ic { color: var(--c-ink); }
+.st-card .st-help { margin: 0; }
+.st-card-title { display: flex; align-items: center; gap: var(--s-2); font-weight: var(--fw-heavy); font-size: var(--fs-body); color: var(--text); }
+.st-card-title .ic { color: var(--c-ink); }
+.st-card.is-ok { background: var(--ok-tint); }
+.st-card.is-ok .st-card-title, .st-card.is-ok .st-card-title .ic { color: var(--ok-ink); }
+.st-card.is-ok .st-help { color: var(--text); }
+
+/* ---------- import button (label around a file input) ---------- */
+.st-file { cursor: pointer; }
+.st-file:focus-within { box-shadow: var(--focus-ring); }
+.st-file input:focus-visible { box-shadow: none; }
+
+/* ---------- baby page ---------- */
+.st-baby { display: grid; grid-template-columns: 104px 1fr; gap: var(--s-4); align-items: start; margin-top: var(--s-3); }
+.st-photo {
+  position: relative; width: 104px; display: flex; flex-direction: column; align-items: center; gap: var(--s-1);
+  cursor: pointer; border-radius: var(--r-lg); padding-bottom: 2px;
+}
+.st-photo:focus-within { box-shadow: var(--focus-ring); }
+.st-photo input:focus-visible { box-shadow: none; }
+.st-photo-empty {
+  width: 104px; height: 104px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-ink);
+  box-shadow: inset 0 0 0 2px var(--accent-ink);
+  outline: 2px dashed var(--accent-ink); outline-offset: -2px;
+}
+.st-photo-label { font-size: var(--fs-footnote); font-weight: var(--fw-heavy); color: var(--accent-ink); min-height: 22px; display: grid; place-items: center; }
+.st-photo-badge {
+  position: absolute; top: 76px; right: 2px; width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--primary-bg); color: var(--on-primary);
+  box-shadow: 0 0 0 3px var(--bg);
+}
+.st-photo[aria-busy="true"] { opacity: .6; pointer-events: none; }
+.st-photo:active .st-av, .st-photo:active .st-photo-empty { transform: scale(var(--press-scale)); }
+.st-fields { display: flex; flex-direction: column; gap: var(--s-2); min-width: 0; }
+.st-fields .field-input[type="date"] { min-height: 32px; font-family: inherit; }
+.st-fields .field-error { margin: -2px var(--s-1) 0; }
+.st-age { font-family: var(--font-display); font-style: italic; font-weight: 400; font-size: var(--fs-age); color: var(--text-2); padding: 0 var(--s-1); }
+.st-on-today { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); padding: 0 var(--s-1); }
+@media (max-width: 340px) {
+  .st-baby { grid-template-columns: 1fr; justify-items: center; }
+  .st-fields { width: 100%; }
+}
+
+/* ---------- Customize: grip spacer, reorder, move buttons ---------- */
+.st-grip-space { width: 36px; height: 44px; margin: 0 -10px 0 -12px; padding: 0 4px; flex: none; box-sizing: content-box; }
+.st-trackers > li {
+  position: relative;
+  transform: translateY(var(--shift, 0px));
+  transition: transform var(--dur-base) var(--ease-std);
+}
+.st-trackers > li.st-rt-dragging { z-index: 3; transform: translateY(var(--dy, 0px)); transition: none; }
+.st-trackers > li.st-rt-flip { transform: translateY(var(--dy, 0px)); transition: none; }
+.st-trackers > li.st-rt-settle { transition: transform var(--dur-base) var(--ease-out); }
+.st-trackers > li.st-rt-noanim-self,
+.st-trackers.st-rt-noanim > li { transition: none !important; }
+.st-trackers.st-rt-reordering { user-select: none; -webkit-user-select: none; }
+.st-trackers .set-row.st-rt-lifted { border-radius: var(--r-sm); }
+.st-trackers .set-text { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.st-move-li { border-top: 0 !important; }
+.st-move {
+  display: flex; align-items: center; justify-content: flex-end; gap: var(--s-2); flex-wrap: wrap;
+  padding: 0 var(--s-2) var(--s-2) var(--s-3);
+}
+.st-move .btn-sm { padding: 0 var(--s-4) 0 var(--s-3); gap: 4px; }
+.st-move .btn-sm .ic { width: 20px; height: 20px; }
+
+/* ---------- rows arriving / leaving (motion #9) ---------- */
+.st-rt-enter { animation: st-enter var(--dur-base) var(--ease-out) both; }
+.st-rt-enter > .set-row { animation: row-wash var(--dur-highlight) var(--ease-std) both; --c-tint: var(--accent-soft); }
+.st-rt-wash > .set-row { animation: row-wash var(--dur-highlight) var(--ease-std) both; --c-tint: var(--accent-soft); }
+@keyframes st-enter {
+  from { max-height: 0; opacity: 0; transform: translateX(calc(-1 * var(--move-md))); overflow: hidden; }
+  to { max-height: 160px; opacity: 1; transform: none; }
+}
+.st-rt-leave { max-height: var(--st-h, 80px); overflow: hidden; transition: max-height var(--dur-fast) var(--ease-in), opacity var(--dur-fast) var(--ease-in); }
+.st-rt-leave.st-rt-leave-go { max-height: 0; opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .st-rt-enter { animation: none; }
+}
+:root[data-motion="reduce"] .st-rt-enter { animation: none; }
+
+/* ---------- privacy page ---------- */
+.st-prose { padding: 0 var(--s-1); }
+.st-prose h3 { font-size: var(--fs-body); font-weight: var(--fw-heavy); margin: var(--s-5) 0 var(--s-1); }
+.st-prose p { font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-body); line-height: var(--lh-body, 1.45); }
+.st-prose .btn { margin-top: var(--s-3); }
+.st-hero {
+  font-family: var(--font-display); font-weight: var(--fw-title); letter-spacing: var(--tracking-display);
+  font-size: var(--fs-title-1); line-height: 1.1; margin-top: var(--s-3); color: var(--text);
+}
+.st-proof-line { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; margin-top: var(--s-2); }
+.st-proof-line .st-proof-size { font-size: var(--fs-footnote); font-weight: var(--fw-strong); color: var(--text-2); font-variant-numeric: var(--numeric); }
+
+/* ---------- install guide ---------- */
+.st-steps { background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow-1); padding: var(--s-1) var(--s-4) var(--s-1) var(--s-3); }
+.st-steps > li { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-3) 0; font-size: var(--fs-callout); color: var(--text); font-weight: var(--fw-body); line-height: 1.4; }
+.st-steps > li + li { border-top: 1px solid var(--line); }
+.st-steps b { font-weight: var(--fw-heavy); }
+.st-steps .ic { width: 18px; height: 18px; vertical-align: -3px; color: var(--accent-ink); }
+.st-num {
+  width: 28px; height: 28px; border-radius: 50%; flex: none; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-ink); font-weight: var(--fw-heavy); font-size: var(--fs-footnote);
+  font-variant-numeric: var(--numeric);
+}
+.st-guide .note { margin: var(--s-2) var(--s-1) 0; }
+
+/* ---------- about ---------- */
+.st-about { text-align: center; padding: var(--s-6) 0 var(--s-2); }
+.st-about .wordmark { font-size: var(--fs-title-l); }
+.st-version { font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-strong); font-variant-numeric: var(--numeric); margin-top: var(--s-1); }
+.st-tagline { font-family: var(--font-display); font-style: italic; font-weight: 400; font-size: var(--fs-age); color: var(--text-2); margin-top: var(--s-3); }
+
+/* ---------- import sheet ---------- */
+.sheet-st-import .st-file-name { display: flex; align-items: center; gap: var(--s-2); font-weight: var(--fw-heavy); font-size: var(--fs-callout); color: var(--text); min-width: 0; }
+.sheet-st-import .st-file-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sheet-st-import .st-file-name small { color: var(--text-2); font-weight: var(--fw-strong); white-space: nowrap; font-variant-numeric: var(--numeric); }
+.sheet-st-import .st-file-name .ic { color: var(--text-2); flex: none; }
+.sheet-st-import .st-choice { display: flex; flex-direction: column; gap: var(--s-2); margin-top: var(--s-3); }
+.sheet-st-import .st-choice p { font-size: var(--fs-callout); color: var(--text-2); line-height: 1.45; }
+.sheet-st-import .st-choice b { color: var(--text); font-weight: var(--fw-heavy); }
+.sheet-st-import .field-error { margin-top: var(--s-3); }

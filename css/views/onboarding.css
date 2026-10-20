@@ -1,1 +1,181 @@
-/* View: onboarding (js/views/onboarding.js). Owned by the onboarding screen team. Build from tokens + components.css. */
+/* View: Onboarding (js/views/onboarding.js) — DESIGN §13 Frame 8, §12, §7.2 #7.
+   A full-screen root: no nav, no live pill (body[data-chrome="bare"]).
+   Built from tokens + components.css (.wordmark, .steps, .field, .note,
+   .btn, .segmented, .stepper, .quick-chip, .chip-ic). Category colour comes
+   from .cat-* → --c-*, never a theme selector, so night is automatic. */
+
+/* The column fills the screen so the footer rests at the bottom (thumb
+   zone) when a step is short, and simply follows the content when tall. */
+.ob {
+  display: flex; flex-direction: column;
+  min-height: 100%;
+  padding: 0 var(--gutter-onboarding);
+  max-width: 520px; margin: 0 auto;
+}
+
+/* ---- top: wordmark / Back · step dots · Skip ---- */
+.ob-top { display: flex; justify-content: space-between; align-items: center; gap: var(--s-2); min-height: 60px; }
+.ob-top-start { display: flex; align-items: center; min-width: 0; }
+.ob-top-start.is-swapping { animation: ob-fade var(--dur-fast) var(--ease-out) both; }
+.ob-top-end { display: flex; align-items: center; gap: var(--s-1); }
+.ob-dots { padding: 0 2px; }
+.ob-back { margin-left: calc(-1 * var(--s-3)); padding-left: var(--s-1); gap: 2px; }
+.ob-back .ic { width: 22px; height: 22px; }
+.ob-skip { margin-right: calc(-1 * var(--s-3)); color: var(--text-2); }
+@keyframes ob-fade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- steps: one grid cell, so the outgoing and incoming steps overlap
+   while they slide (DESIGN §7.2 #7: forward = out to −xl, in from +xl). ---- */
+.ob-stage { flex: 1 0 auto; display: grid; }
+.ob-step {
+  grid-area: 1 / 1; min-width: 0;
+  display: flex; flex-direction: column;
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.ob-step:focus { outline: none; }
+.ob-step.is-entering { transition: none; }
+.ob-step.is-entering.is-fwd { transform: translateX(var(--move-xl)); opacity: 0; }
+.ob-step.is-entering.is-back { transform: translateX(calc(-1 * var(--move-xl))); opacity: 0; }
+.ob-step.is-leaving {
+  pointer-events: none;
+  transition: transform var(--dur-fast) var(--ease-in), opacity var(--dur-fast) var(--ease-in);
+}
+.ob-step.is-leaving.is-fwd { transform: translateX(calc(-1 * var(--move-xl))); opacity: 0; }
+.ob-step.is-leaving.is-back { transform: translateX(var(--move-xl)); opacity: 0; }
+.ob-body { flex: 1 0 auto; }
+.ob [data-focus]:focus-visible { box-shadow: none; } /* programmatic focus for screen readers only */
+
+/* ---- step 1: the promise ---- */
+.ob-hero { font-size: var(--fs-hero); line-height: 1.08; margin-top: 14px; }
+.ob-hero-it { display: block; color: var(--accent-ink); }
+.ob-promises { margin-top: 18px; border-top: 1px solid var(--line); }
+.ob-promises li {
+  display: flex; align-items: center; gap: 14px; min-height: 52px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-body); line-height: 1.3;
+}
+.ob-promises li > .ic { width: 22px; height: 22px; color: var(--accent-ink); }
+.ob-promises b { color: var(--text); font-weight: var(--fw-heavy); }
+.ob-h2 { font-size: var(--fs-title-2); line-height: 1.1; margin: 22px 0 12px; }
+
+/* ---- step 1: "Who are we caring for?" ---- */
+.ob-who { display: flex; gap: var(--s-4); align-items: center; }
+.ob-photo {
+  position: relative; flex: none; width: 104px; height: 104px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-ink);
+  transition: transform var(--dur-press) var(--ease-std), opacity var(--dur-press) var(--ease-std);
+}
+.ob-photo::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 1.5px dashed var(--accent); opacity: .9; pointer-events: none;
+}
+.ob-photo:active { transform: scale(var(--press-scale)); }
+.ob-photo[aria-busy="true"] { opacity: .6; pointer-events: none; }
+.ob-photo-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding-bottom: 12px;
+  font-weight: var(--fw-heavy); font-size: var(--fs-footnote); line-height: 1.2;
+}
+.ob-photo-empty .ic { width: 26px; height: 26px; }
+.ob-photo-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; border-radius: 50%; object-fit: cover;
+  filter: var(--avatar-filter);
+}
+.ob-photo.has-photo::before { border-style: solid; border-width: 2px; border-color: var(--accent-soft); inset: -4px; }
+.ob-photo.has-photo .ob-photo-empty { visibility: hidden; }
+.ob-photo-badge {
+  position: absolute; right: -6px; bottom: -2px; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--primary-bg); color: var(--on-primary); box-shadow: 0 0 0 3px var(--bg);
+}
+.ob-photo-badge .ic { width: 18px; height: 18px; }
+
+.ob-fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.ob-field { cursor: text; }
+/* Born: the formatted date ("Wed, Sep 2, 2026 ▾") shows over the native
+   date input, which stays the real control; it shows itself while focused
+   so keyboard editing is never blind. */
+.ob-date { position: relative; cursor: pointer; }
+.ob-date-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
+  min-height: 28px; font-size: var(--fs-headline); font-weight: var(--fw-heavy); color: var(--text);
+}
+.ob-date-row .ic { width: 20px; height: 20px; color: var(--text); }
+.ob-date-val { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ob-date-input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  padding: 24px 14px 6px; border: 0; border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--text); color-scheme: inherit;
+  font-size: var(--fs-headline); font-weight: var(--fw-heavy);
+  opacity: 0; cursor: pointer;
+}
+.ob-date-input:focus-visible { box-shadow: none; }
+.ob-date:focus-within .ob-date-input { opacity: 1; }
+.ob-date:focus-within .field-label { position: relative; z-index: 1; }
+.ob-error { margin-top: var(--s-2); }
+.ob-note { margin-top: var(--s-3); }
+
+/* ---- footer: one primary + an optional ghost, in the thumb zone ---- */
+.ob-foot {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding-top: var(--s-6);
+  padding-bottom: var(--safe-bottom);
+}
+.ob-foot .btn-ghost { min-width: 44px; }
+.ob .btn-ghost[aria-busy="true"]::after { color: var(--accent-ink); }
+.ob-later { font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-body); text-align: center; min-height: 44px; display: grid; place-items: center; }
+
+/* ---- steps 2–4 ---- */
+.ob-disc {
+  width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--c-tint); color: var(--c-ink); margin-top: var(--s-4);
+}
+.ob-disc .ic { width: 30px; height: 30px; }
+.ob-title { font-size: var(--fs-title-l); line-height: 1.08; margin-top: var(--s-4); }
+.ob-lede { font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-body); line-height: var(--lh-body); margin-top: var(--s-2); max-width: 38ch; }
+
+/* Each segment is a full 44 px target (components.css segments are 38 inside a 44 track). */
+.ob-units { margin-top: var(--s-6); }
+.ob-units > button { min-height: 44px; }
+.ob-example { margin-top: var(--s-3); font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); min-height: 19px; }
+.ob-example b { color: var(--text); font-weight: var(--fw-heavy); }
+
+.ob-trackers { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-4); }
+.ob-trackers .badge { height: 32px; padding: 0 12px; font-size: var(--fs-footnote); }
+.ob-trackers .badge .ic { width: 16px; height: 16px; }
+
+.ob-goal { margin-top: var(--s-8); text-align: center; }
+.ob-goal .stepper-value { min-width: 4.5ch; }
+.ob-goal-sub { margin-top: 2px; font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-strong); }
+.ob-goal .stepper-value:focus-visible { box-shadow: var(--focus-ring); }
+/* (feed.css styles .quick-chip[aria-pressed] globally in feed colours; keep the goal pump-coloured) */
+.ob-goal .quick-chip[aria-pressed="true"] { background: var(--c-tint); color: var(--c-ink); box-shadow: inset 0 0 0 1.5px var(--c-mid); }
+
+.ob-steps { margin-top: var(--s-6); display: flex; flex-direction: column; gap: var(--s-3); }
+.ob-steps li { display: flex; align-items: flex-start; gap: var(--s-3); font-size: var(--fs-callout); color: var(--text); font-weight: var(--fw-body); line-height: 1.4; }
+.ob-steps li .ic { width: 18px; height: 18px; vertical-align: -3px; color: var(--accent-ink); }
+.ob-steps b { font-weight: var(--fw-heavy); }
+.ob-num {
+  flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent-soft); color: var(--accent-ink); font-size: var(--fs-footnote); font-weight: var(--fw-heavy);
+}
+
+/* A Home Screen preview of the photo icon (iPhone only). */
+.ob-icon-preview {
+  display: flex; align-items: center; gap: var(--s-4); margin-top: var(--s-5);
+  padding: var(--s-3) var(--s-4); border-radius: var(--r-lg); background: var(--surface-2);
+}
+.ob-icon-preview p { font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); line-height: 19px; }
+.ob-icon-tile { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; font-size: var(--fs-caption); font-weight: var(--fw-strong); color: var(--text); }
+.ob-icon-tile img { width: 60px; height: 60px; border-radius: 14px; object-fit: cover; box-shadow: var(--shadow-1); filter: var(--avatar-filter); }
+
+/* Small phones / 200% text: the photo sits above the fields. */
+@media (max-width: 340px) {
+  .ob-who { flex-direction: column; align-items: stretch; }
+  .ob-photo { align-self: center; }
+}
+
+:root[data-motion="reduce"] .ob-top-start.is-swapping { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .ob-top-start.is-swapping { animation: none; }
+}

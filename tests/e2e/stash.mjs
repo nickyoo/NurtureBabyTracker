@@ -249,6 +249,16 @@ try {
       check('legend "Fridge 9 oz · 2" / "Freezer 37 oz · 8"', (await texts(page, '.stx-legend span')).join('|') === 'Fridge 9 oz · 2|Freezer 37 oz · 8');
       check('hero amount 4 oz + "frozen 6 weeks" + "Best by … · N months left"', /^4\s*oz$/.test(await text(page, '.stx-hero [data-hero-amt]'))
         && /Pumped .* · frozen 6 weeks ?Best by .* · 4½ months left/.test(await text(page, '.stx-hero [data-hero-meta]')), await text(page, '.stx-hero [data-hero-meta]'));
+      check('eyebrow "MILK STASH" is the 12 px caps eyebrow (not display type)', await page.evaluate(() => {
+        const e = document.querySelector('.stx-hd h1.eyebrow');
+        const cs = getComputedStyle(e);
+        return parseFloat(cs.fontSize) <= 13 && cs.textTransform === 'uppercase' && !/fraunces/i.test(cs.fontFamily);
+      }));
+      check('"Best by" six months out has no year and fits on two lines', await page.evaluate(() => {
+        const m = document.querySelector('.stx-hero [data-hero-meta]');
+        const lh = parseFloat(getComputedStyle(m).lineHeight) || 20;
+        return !/\b20\d\d\b/.test(m.textContent) && m.getBoundingClientRect().height < lh * 2.6;
+      }), await text(page, '.stx-hero [data-hero-meta]'));
       check('Fridge section: "9 oz", "Keeps 4 days"', await text(page, '.stx-sec[data-sec="fridge"] .stx-sec-amt') === '9 oz' && await text(page, '.stx-sec[data-sec="fridge"] .sec-meta') === 'Keeps 4 days');
       const fr = await rowsIn(page, 'fridge');
       // Days left round to the nearest day (frame 5 at 9:50 AM: 3 and 4).
@@ -290,6 +300,8 @@ try {
     check('hero (thawed): Feed / Discard + "use within 23h"', (await texts(page, '.stx-hero [data-hero-act]')).join('|') === 'Feed|Discard' && /use within 2[34]h/.test(await text(page, '.stx-hero [data-hero-meta]')));
     check('the row moved: Thawed has 1, Freezer 7', (await rowsIn(page, 'thawed')).length === 1 && (await rowsIn(page, 'freezer')).length === 7);
     check('double-tap made exactly one toast', await page.evaluate(() => document.querySelectorAll('#toastRoot .toast').length === 1));
+    check('thawed row meta reads "Thawed just now"', /^4 oz ?Thawed just now/.test((await rowsIn(page, 'thawed'))[0] || ''), (await rowsIn(page, 'thawed'))[0]);
+    await page.evaluate(() => window.getSelection().removeAllRanges()); // dblclick word-selection (desktop only)
     await page.screenshot({ path: `${SHOTS}stash-thawed-light.png` });
     await page.click('#toastRoot .toast-action');
     await page.waitForFunction(() => { const h = document.querySelector('.stx-hero'); return h && h.dataset.state === 'frozen'; }, null, { timeout: 3000 });
@@ -391,6 +403,7 @@ try {
     await page.waitForSelector('.sheet-stash .sx-archive');
     await settle(page, 450);
     check('archive sheet "Used & discarded" lists the discarded pouch', await title(page) === 'Used & discarded' && (await texts(page, '.sheet-stash .sx-archive .row')).length === 1);
+    check('archive row: badge "Discarded today", meta "Pumped …"', /Discarded today/.test(await text(page, '.sheet-stash .sx-archive .row .badge')) && /^Pumped /.test(await text(page, '.sheet-stash .sx-archive .row .row-meta')), await text(page, '.sheet-stash .sx-archive .row'));
     await auditTargets(page, 'archive');
     await page.screenshot({ path: `${SHOTS}stash-archive-light.png` });
     await page.click('.sheet-stash .sx-archive .row');

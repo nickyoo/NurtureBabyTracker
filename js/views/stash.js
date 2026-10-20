@@ -80,7 +80,9 @@ function withinWords(ms) {
 function shortDate(ts, now = Date.now()) {
   const d = new Date(ts);
   const opts = { month: 'short', day: 'numeric' };
-  if (d.getFullYear() !== new Date(now).getFullYear()) opts.year = 'numeric';
+  // The year only when the month and day alone could mislead ("Best by Mar 2"
+  // six months out is clear; a date ~a year away or older is not).
+  if (Math.abs(ts - now) > 300 * DAY) opts.year = 'numeric';
   return d.toLocaleDateString(undefined, opts);
 }
 
@@ -403,7 +405,8 @@ export default {
       const badge = expiryBadge(item, now);
       let meta;
       if (sec === 'expired') meta = `${SEC_WORD[item.location] || 'Stash'} · pumped ${shortDate(item.pumpedAt, now)}`;
-      else if (sec === 'thawed') meta = Number.isFinite(item.thawedAt) ? `Thawed ${F.since(item.thawedAt, now).replace('Just now', 'just now')} · pumped ${shortDate(item.pumpedAt, now)}` : `Pumped ${shortDate(item.pumpedAt, now)}`;
+      // Thawed: the thaw clock is what matters (the badge says what's left).
+      else if (sec === 'thawed') meta = Number.isFinite(item.thawedAt) ? `Thawed ${F.since(item.thawedAt, now).replace('Just now', 'just now')}` : `Pumped ${shortDate(item.pumpedAt, now)}`;
       else if (isFrozen(item)) meta = ctx.time.isSameDay(item.pumpedAt, now) ? `Today, ${F.clock(item.pumpedAt)}` : F.dayLabel(item.pumpedAt, now);
       else meta = `${F.dayLabel(item.pumpedAt, now)}, ${F.clock(item.pumpedAt)}`;
       const note = (item.notes || '').split('\n')[0].trim();

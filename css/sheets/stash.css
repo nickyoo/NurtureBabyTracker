@@ -103,7 +103,7 @@
 .sx-loading { min-height: 160px; justify-content: center; align-items: center; }
 
 /* ---------------------------------------------------------- archive */
-.sx-archive .list .badge { max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.sx-archive .list .badge { max-width: 56%; flex: none; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---------------------------------------------------------- keypad */
 .sx-kp-display {

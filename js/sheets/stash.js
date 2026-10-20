@@ -146,13 +146,24 @@ function leftWords(ms) {
 function shortDate(ts, now = Date.now()) {
   const d = new Date(ts);
   const opts = { month: 'short', day: 'numeric' };
-  if (d.getFullYear() !== new Date(now).getFullYear()) opts.year = 'numeric';
+  // The year only when the month and day alone could mislead ("Best by Mar 2"
+  // six months out is clear; a date ~a year away or older is not).
+  if (Math.abs(ts - now) > 300 * DAY) opts.year = 'numeric';
   return d.toLocaleDateString(undefined, opts);
 }
 
 /** "Yesterday, 8:20 PM" / "Wed, Sep 2, 7:10 AM". */
 function dayTime(ctx, ts, now = Date.now()) {
   return `${ctx.format.dayLabel(ts, now)}, ${ctx.format.clock(ts)}`;
+}
+
+/** Mid-sentence day: "today", "yesterday", else "Oct 12". */
+function relDay(ts, now = Date.now()) {
+  const d0 = new Date(now); d0.setHours(0, 0, 0, 0);
+  const start = d0.getTime();
+  if (ts >= start && ts < start + DAY) return 'today';
+  if (ts >= start - DAY && ts < start) return 'yesterday';
+  return shortDate(ts, now);
 }
 
 /** "Fri" within the week, else "Oct 30". */
@@ -1039,14 +1050,18 @@ export function openStashSheet(ctx, { origin = null, preset = null, pouchId = nu
       const s = effectiveStatus(item, now);
       const a = F.amountSplit(item.quantity, item.unit, unit);
       const badge = expiryBadge(ctx, item, now);
-      const when = s === 'used' && item.usedAt ? `Used ${F.dayLabel(item.usedAt, now)}`
-        : s === 'discarded' && item.discardedAt ? `Discarded ${F.dayLabel(item.discardedAt, now)}`
-          : `Expired ${F.dayLabel(item.expiresAt, now)}`;
-      const meta = `${when} · pumped ${shortDate(item.pumpedAt, now)}`;
-      return html`<li><button type="button" class="row cat-pump" data-pouch="${item.id}" aria-label="${`${a.value} ${a.unit}, ${badge.text.replace(' · discard', '')}. ${meta}. Open pouch.`}">
+      // The badge says what happened and when ("Used today", "Discarded Oct 12",
+      // "Expired yesterday"); the meta line says when it was pumped.
+      const word = s === 'used' ? 'Used' : s === 'discarded' ? 'Discarded' : 'Expired';
+      const at = s === 'used' && Number.isFinite(item.usedAt) ? item.usedAt
+        : s === 'discarded' && Number.isFinite(item.discardedAt) ? item.discardedAt : item.expiresAt;
+      const badgeText = Number.isFinite(at) ? `${word} ${relDay(at, now)}` : word;
+      const note = (item.notes || '').split('\n')[0].trim().slice(0, 60);
+      const meta = `Pumped ${shortDate(item.pumpedAt, now)}${note ? ` · ${note}` : ''}`;
+      return html`<li><button type="button" class="row cat-pump" data-pouch="${item.id}" aria-label="${`${spokenAmount(a.value, a.unit)}, ${badgeText}. ${meta}. Open pouch.`}">
           <span class="chip-ic">${I('pouch', 22)}</span>
           <span class="row-main"><b class="row-title num">${a.value} ${a.unit}</b><small class="row-meta">${meta}</small></span>
-          <span class="badge badge-${badge.tone === 'danger' ? 'danger' : 'neutral'}">${I(badge.icon, 14)}${badge.tone === 'danger' ? 'Expired' : badge.text}</span>
+          <span class="badge badge-${badge.tone === 'danger' ? 'danger' : 'neutral'}">${I(badge.icon, 14)}${badgeText}</span>
         </button></li>`;
     }
     function paint() {

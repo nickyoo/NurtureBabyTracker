@@ -57,3 +57,10 @@
   .stx-hd .btn-outline { padding: 0 var(--s-3) 0 var(--s-2); }
   .stx-legend { font-size: var(--fs-footnote); }
 }
+
+/* The page's h1 is the "MILK STASH" eyebrow (the big number is the title);
+   undo .page-hd h1's display type so it reads as Frame 5's 12 px caps. */
+.page-hd.stx-hd h1.eyebrow {
+  font-family: var(--font-ui); font-size: var(--fs-caption); font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-caps); line-height: 1.2; margin: 0;
+}
