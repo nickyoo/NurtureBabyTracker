@@ -412,7 +412,7 @@ export function openSleepSheet(ctx, { origin = null, preset = null, resume = nul
   function showError(body, msg = 'That didn’t save. Try again.') {
     const el = body.querySelector('[data-error]');
     if (!el) return;
-    if (!msg) { el.hidden = true; return; }
+    if (!msg) { el.hidden = true; el.textContent = ''; return; }
     render(el, html`${I('info', 16)}${msg}`);
     el.hidden = false;
   }

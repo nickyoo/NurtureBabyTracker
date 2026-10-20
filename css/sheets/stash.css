@@ -1,1 +1,129 @@
-/* Sheet family: stash. Owned by the stash sheet team. Build from tokens + components.css. */
+/* =====================================================================
+   Stash sheet (js/sheets/stash.js): Add pouch, pouch detail, edit,
+   used & discarded, plus its own keypad and "When was it pumped?" picker.
+   Tokens + components.css only; category color via .cat-* → --c-*.
+   No theme selectors (night is tokens only).
+   ===================================================================== */
+
+.sheet-stash .sx { display: flex; flex-direction: column; gap: var(--s-4); }
+.sx > .sheet-footer { margin-top: 0; }
+/* A step that ends in its footer sits flush on the sheet's bottom edge.
+   The + keeps its room for the × (components .is-fab). */
+.sheet-layer.sheet-stash:not(.is-fab) .sheet-viewport { padding-bottom: 0; }
+.sheet-layer.sheet-stash:not(.is-fab) .sx > .sheet-footer { bottom: 0; }
+.sheet-layer.sheet-stash:not(.is-fab) .sheet-step > .empty-state { padding-bottom: calc(var(--safe-bottom) + var(--s-8)); }
+
+.sx-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-callout); font-weight: var(--fw-heavy); color: var(--text); line-height: 1.3;
+}
+.sx-label-c { justify-content: center; text-align: center; }
+.sx-block { display: flex; flex-direction: column; gap: var(--s-2); }
+.sx .field-error:not([hidden]) { justify-content: center; text-align: center; }
+.sx .field-error .ic { flex: none; }
+.sx-back { align-self: flex-start; margin: calc(-1 * var(--s-2)) 0 calc(-1 * var(--s-2)) calc(-1 * var(--s-2)); padding-left: var(--s-1); }
+
+/* Quiet actions under the primary pair: Edit · Mark used · Discard. */
+.sx-more { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--s-1); }
+.sx-quiet { color: var(--text-2); gap: 6px; padding: 0 var(--s-2); }
+.sx-quiet .ic { width: 20px; height: 20px; }
+.sx-quiet:active { background: var(--surface-2); }
+.sx-danger { color: var(--danger-ink); }
+.sx-danger:active { background: var(--danger-tint); }
+.sheet-footer > .sx-quiet { align-self: center; }
+
+/* ---------------------------------------------------------- amount */
+.sx-amount { display: flex; flex-direction: column; gap: var(--s-2); }
+.sx-stepper .quick-chips { margin-top: var(--s-2); gap: 6px; }
+.sx-stepper .quick-chip { padding: 0 var(--s-3); }
+.sheet-stash .quick-chip[aria-pressed="true"] { background: var(--pump-tint); color: var(--pump-ink); box-shadow: inset 0 0 0 1.5px var(--pump-mid); }
+/* The value is a read-only spinbutton in a FIXED box, so − / + never move. */
+.sx-value {
+  display: inline-flex; align-items: baseline; justify-content: center; gap: 4px;
+  width: 3.3em; flex: none; min-height: 64px; padding: 4px 6px; border-radius: var(--r-md);
+  font-size: var(--fs-amount); line-height: 1; cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-std);
+}
+.sx-value:active { background: var(--surface-2); }
+.sx-value:has(.sx-value-input:focus-visible) { box-shadow: var(--focus-ring); }
+.sx-value-input {
+  width: var(--w, 0.7em); min-width: 0.66em;
+  padding: 0; border: 0; background: transparent; color: var(--text);
+  font-size: 1em; line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); text-align: center;
+  caret-color: transparent; cursor: pointer; user-select: none; -webkit-user-select: none;
+}
+.sx-value-input:focus-visible { box-shadow: none; }
+.sx-value-unit { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); }
+
+/* ---------------------------------------------------------- where */
+.sx-places { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.sx-place {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  min-height: 64px; padding: 8px 10px 8px 8px; border-radius: var(--r-lg);
+  background: var(--surface-2); color: var(--text); text-align: left;
+  transition: background-color var(--dur-press) var(--ease-std), box-shadow var(--dur-press) var(--ease-std), transform var(--dur-press) var(--ease-std);
+}
+.sx-place:active { transform: scale(var(--press-scale)); }
+.sx-place[aria-checked="true"] { background: var(--c-tint); box-shadow: inset 0 0 0 1.5px var(--c-mid); }
+.sx-place-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--c-well); color: var(--c-ink); }
+.sx-place[aria-checked="true"] .sx-place-ic { background: var(--surface); }
+.sx-place-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.sx-place-text b { font-size: var(--fs-callout); font-weight: var(--fw-heavy); }
+.sx-place-text small { font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-body); }
+.sx-thawed-note { padding: 10px 12px; border-radius: var(--r-md); background: var(--surface-2); }
+
+/* ---------------------------------------------------------- note + keeps */
+.sx-note-field textarea.field-input { min-height: 52px; font-size: var(--fs-body); font-weight: var(--fw-strong); }
+.sx-optional { color: var(--text-3); font-weight: var(--fw-body); }
+.sx-keeps { justify-content: center; text-align: left; font-size: var(--fs-subhead); font-variant-numeric: var(--numeric); }
+.sx-keeps b { color: var(--text); font-weight: var(--fw-heavy); }
+.sx-keeps.is-warn { color: var(--warn-ink); }
+
+/* ---------------------------------------------------------- detail */
+.sx-sum {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: 14px 14px 14px 16px; border-radius: var(--r-xl); background: var(--c-card);
+}
+.sx-sum-ic { width: 48px; height: 48px; border-radius: var(--r-md); display: grid; place-items: center; flex: none; background: var(--c-well); color: var(--c-ink); }
+.sx-sum-main { flex: 1; min-width: 0; }
+.sx-sum-amt {
+  font-size: var(--fs-numeral); line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); color: var(--text);
+}
+.sx-sum-amt small { font-size: var(--fs-unit); color: var(--text-2); font-weight: var(--fw-strong); letter-spacing: 0; }
+.sx-sum-loc { margin-top: 4px; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-strong); }
+.sx-sum .badge { align-self: flex-start; }
+.sx-facts { display: flex; flex-direction: column; background: var(--surface-2); border-radius: var(--r-lg); padding: 2px 14px; }
+.sx-fact { display: flex; gap: var(--s-3); align-items: baseline; min-height: 44px; padding: 11px 0; }
+.sx-fact + .sx-fact { box-shadow: 0 -1px 0 var(--line); }
+.sx-fact dt { flex: none; width: 76px; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-strong); }
+.sx-fact dd { flex: 1; min-width: 0; font-size: var(--fs-callout); color: var(--text); font-weight: var(--fw-heavy); line-height: 1.35; }
+.sx-fact dd.sx-fact-note { font-weight: var(--fw-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sx-loading { min-height: 160px; justify-content: center; align-items: center; }
+
+/* ---------------------------------------------------------- archive */
+.sx-archive .list .badge { max-width: 40%; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------------------------------------------------------- keypad */
+.sx-kp-display {
+  display: flex; align-items: baseline; justify-content: center; gap: 6px;
+  min-height: 64px; font-size: var(--fs-amount); line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); color: var(--text);
+}
+.sx-kp-display small { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); letter-spacing: 0; }
+.sx-kp-help { min-height: 18px; text-align: center; font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-strong); margin-top: calc(-1 * var(--s-3)); }
+.sx-kp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.sx-key {
+  min-height: 56px; border-radius: var(--r-md); background: var(--surface-2); color: var(--text);
+  display: grid; place-items: center; font-size: 24px; font-weight: var(--fw-heavy);
+  transition: transform var(--dur-press) var(--ease-std), background-color var(--dur-press) var(--ease-std);
+}
+.sx-key:active { transform: scale(var(--press-scale)); background: var(--line); }
+.sx-key-del { color: var(--text-2); }
+
+/* ---------------------------------------------------------- when */
+.sx-when-quick { justify-content: center; }
+.sx-when-fields { display: grid; grid-template-columns: 1.3fr 1fr; gap: var(--s-2); }
+.sx-when-fields .field-input { min-height: 32px; }
+.sx-when-note { min-height: 19px; margin-top: calc(-1 * var(--s-2)); text-align: center; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); font-variant-numeric: var(--numeric); }

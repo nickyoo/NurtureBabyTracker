@@ -680,8 +680,12 @@ export default {
 
     // ------------------------------------------------------------ painting
     function paintDay(d, { animate = false } = {}) {
-      paintStats(d);
-      paintStrip(d);
+      // A day with nothing in it gets one warm empty state right under the
+      // pager — not a row of zeros over an empty chart.
+      const empty = !d.events.length && !filter;
+      dayEl.classList.toggle('is-empty-day', empty);
+      if (empty) { render(statsEl, null); render(stripEl, null); lastMarks = []; } else { paintStats(d); paintStrip(d); }
+      secEl.hidden = empty;
       paintList(d, { animate });
     }
 
@@ -777,11 +781,7 @@ export default {
       }
       paintHeader();
       paintDays();
-      if (data && !document.documentElement.classList.contains('has-sheet')) {
-        paintStats(data);
-        paintStrip(data);
-        paintList(data);
-      }
+      if (data && !document.documentElement.classList.contains('has-sheet')) paintDay(data);
       scheduleTick();
     }
     const onVisibility = () => {
@@ -823,7 +823,7 @@ export default {
         if (m) id = m.id;
       }
       if (!id) return;
-      if (filter) { filter = null; paintStats(data); paintList(data); }
+      if (filter) { filter = null; paintDay(data); }
       const slot = rowEls.get(id);
       if (!slot) return;
       const row = slot.li.firstElementChild;
@@ -876,7 +876,7 @@ export default {
       const stat = e.target.closest('[data-stat]');
       if (stat && statsEl.contains(stat)) {
         filter = filter === stat.dataset.stat ? null : stat.dataset.stat;
-        if (data) { paintStats(data); paintList(data); }
+        if (data) paintDay(data);
         return;
       }
       if (stripEl.contains(e.target)) { onStripClick(e); return; }
@@ -890,7 +890,7 @@ export default {
         case 'today': select(todayStart()); break;
         case 'clear-filter':
           filter = null;
-          if (data) { paintStats(data); paintList(data); }
+          if (data) paintDay(data);
           break;
         case 'log': ctx.sheets.quickLog({ origin: b }); break;
         case 'customize': ctx.router.push('settings', { page: 'customize' }); break;

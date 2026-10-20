@@ -62,7 +62,7 @@
   transition: background-color var(--dur-press) var(--ease-std);
 }
 .nb-value:active { background: var(--surface-2); }
-.nb-value:focus-within { box-shadow: var(--focus-ring); }
+.nb-value:has(.nb-value-input:focus-visible) { box-shadow: var(--focus-ring); }
 .nb-value-input {
   width: var(--w, 0.7em); min-width: 0.66em;
   padding: 0; border: 0; background: transparent; color: var(--text);

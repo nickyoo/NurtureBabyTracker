@@ -5,10 +5,9 @@
    pieces live here; category colour comes from .cat-* → --c-*, never a theme
    selector. */
 
-.tl .tl-hd { padding-top: 10px; padding-bottom: 12px; }
+.tl .tl-hd { padding-top: 10px; }
 .tl .tl-hd-text { min-width: 0; }
 .tl .tl-hd .page-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tl .tl-hd .hd-actions { gap: var(--s-4); }
 
 /* Week row: weekday + date; the ring moves between cells (--dur-fast). */
 .tl .day { color: var(--text); }
