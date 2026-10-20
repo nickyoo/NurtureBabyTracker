@@ -23,13 +23,19 @@
 // finishes from any step with whatever has been entered so far (every e2e
 // suite uses it to get past onboarding in one tap).
 
-import { importBackup } from '../core/backup.js';
+import { importBackup, validateBackup, BackupError, MAX_IMPORT_BYTES } from '../core/backup.js';
+import { DEFAULTS as SETTING_DEFAULTS } from '../core/settings.js';
 
 const STEP_KEY = 'nurture.onboardingStep';
 const NAME_SAVE_MS = 350;
 const GOAL_SAVE_MS = 300;
 const LEAVE_MS = 320; // > --dur-fast exit, fallback when transitionend never comes
 const ML_PER_OZ = 29.5735;
+/** Preferences a restore on this (fresh) phone adopts from the backup, when
+ * they are still at their defaults here: a merge import keeps local settings,
+ * but a parent restoring onto a new phone expects their mL, hidden trackers
+ * and goal to come back with the log. */
+const RESTORE_PREFS = Object.freeze(['units', 'theme', 'trackers', 'todayOrder', 'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound']);
 
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, v) { try { localStorage.setItem(key, v); } catch { /* private mode */ } }
@@ -653,6 +659,18 @@ export default {
       return parts.length ? `Welcome back · ${parts.join(', ')} restored` : 'Welcome back · that file had nothing new';
     }
 
+    async function adoptPrefs(parsed) {
+      let v;
+      try { v = validateBackup(parsed, { defaultBabyId: babyId() || undefined }); } catch { return; }
+      if (!v || !v.ok) return;
+      const prefs = v.data.settings || {};
+      for (const key of RESTORE_PREFS) {
+        if (!(key in prefs)) continue;
+        if (JSON.stringify(S.get(key)) !== JSON.stringify(SETTING_DEFAULTS[key])) continue; // chosen here: keep
+        try { await S.set(key, prefs[key]); } catch (err) { console.warn(`onboarding: ${key} not restored`, err); }
+      }
+    }
+
     async function restore(file) {
       if (!file || restoreBusy || finishing) return;
       restoreBusy = true;
@@ -663,7 +681,13 @@ export default {
       if (btn) btn.setAttribute('aria-busy', 'true');
       try {
         await flushName();
-        const res = await importBackup(file, { mode: 'merge' });
+        // Parse once here, so the file's preferences can be read after the
+        // merge (importBackup accepts an already-parsed backup).
+        if (file.size > MAX_IMPORT_BYTES) throw new BackupError('That file is too large to be a Nurture backup.');
+        let parsed;
+        try { parsed = JSON.parse(await file.text()); } catch { throw new BackupError('This file isn’t a Nurture backup (it isn’t valid JSON).'); }
+        const res = await importBackup(parsed, { mode: 'merge' });
+        await adoptPrefs(parsed);
         // The restored baby's photo becomes the iPhone icon, as if picked here.
         const b = S.activeBaby();
         if (b && b.photoId && !S.get('iconDataUrl')) {
