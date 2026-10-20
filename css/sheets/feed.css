@@ -1,1 +1,229 @@
-/* Sheet family: feed. Owned by the feed sheet team. Build from tokens + components.css. */
+/* =====================================================================
+   Feed sheet (js/sheets/feed.js): bottle form, live bottle, breastfeeding,
+   keypad + time picker sheets, and the express pad that grows from the +.
+   Tokens + components.css only; category color via .cat-* → --c-*.
+   No theme selectors (night is tokens only).
+   ===================================================================== */
+
+/* ---------- layout ---------- */
+.sheet-feed .fd { display: flex; flex-direction: column; gap: var(--s-4); }
+.sheet-feed .fd > .sheet-footer { margin-top: 0; }
+/* Every feed step ends in its footer, which carries its own safe-area
+   padding: no extra viewport padding under it, so the primary sits where
+   the live pill was (a pill tap grows this sheet out of the pill, #6). The
+   + sheet keeps its room for the × (components.css .is-fab). */
+.sheet-layer.sheet-feed:not(.is-fab) .sheet-viewport { padding-bottom: 0; }
+.sheet-layer.sheet-feed:not(.is-fab) .fd > .sheet-footer { bottom: 0; }
+.sheet-layer.sheet-feed:not(.is-fab) .sheet-step > .empty-state { padding-bottom: calc(var(--safe-bottom) + var(--s-8)); }
+.fd-label {
+  font-size: var(--fs-callout); font-weight: var(--fw-heavy); color: var(--text);
+  line-height: 1.3; text-align: center;
+}
+.fd-hint { font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-body); text-align: center; }
+.fd-hint b { color: var(--text); font-weight: var(--fw-heavy); }
+.fd-note { justify-content: center; text-align: left; }
+.fd-note .ic { color: var(--text-2); }
+.fd-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.fd-row .fd-label { text-align: left; }
+.fd-row .segmented { flex: 0 1 220px; }
+.fd-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+/* The track is 44 tall; extend each segment's hit area over its 3px padding. */
+.fd-seg > button::after { content: ""; position: absolute; inset: -3px 0; }
+.fd-seg > button .ic { color: var(--c-ink, var(--text-2)); }
+.fd-back { align-self: flex-start; margin: calc(-1 * var(--s-2)) 0 calc(-1 * var(--s-2)) calc(-1 * var(--s-2)); padding-left: var(--s-1); }
+.sheet-feed .field-error:not([hidden]) { justify-content: center; }
+
+/* ---------- amount stepper (value is a read-only spinbutton input) ---------- */
+.fd-amount { display: flex; flex-direction: column; gap: var(--s-2); }
+.fd-stepper .quick-chips { margin-top: var(--s-2); gap: 6px; }
+.fd-stepper .quick-chip { padding: 0 var(--s-3); }
+.fd-value {
+  /* A FIXED box: the digits change width, the − / + never move under a
+     thumb that is holding one of them. */
+  display: inline-flex; align-items: baseline; justify-content: center; gap: 4px;
+  width: 3.3em; flex: none; min-height: 64px; padding: 4px 6px; border-radius: var(--r-md);
+  font-size: var(--fs-amount); line-height: 1;
+  cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-std);
+}
+.fd-value:active { background: var(--surface-2); }
+.fd-value:focus-within { box-shadow: var(--focus-ring); }
+.fd-value-input {
+  /* Same size as the stepper numeral; width follows the digits (--len). */
+  width: var(--w, 0.7em); min-width: 0.66em;
+  padding: 0; border: 0; background: transparent; color: var(--text);
+  font-size: 1em; line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); text-align: center;
+  caret-color: transparent; cursor: pointer; user-select: none; -webkit-user-select: none;
+}
+.fd-value-input:focus-visible { box-shadow: none; }
+.fd-value-unit { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); }
+.quick-chip[aria-pressed="true"] { background: var(--feed-tint); color: var(--feed-ink); box-shadow: inset 0 0 0 1.5px var(--feed-mid); }
+.fd-amount-sm .fd-value { min-height: 56px; font-size: var(--fs-numeral); }
+
+/* ---------- stash sources ---------- */
+.fd-sources[hidden] { display: none; }
+.fd-sources, .fd-src-list { display: flex; flex-direction: column; gap: var(--s-2); }
+.fd-src {
+  display: flex; align-items: center; gap: var(--s-3); width: 100%;
+  min-height: 64px; padding: 10px var(--s-3); border-radius: var(--r-lg);
+  background: var(--surface-2); color: var(--text); text-align: left;
+  transition: background-color var(--dur-press) var(--ease-std), box-shadow var(--dur-press) var(--ease-std), transform var(--dur-press) var(--ease-std);
+}
+button.fd-src:active { transform: scale(var(--press-scale)); }
+.fd-src[aria-checked="true"] { background: var(--c-tint); box-shadow: inset 0 0 0 1.5px var(--c-mid); }
+.fd-src .chip-ic { background: var(--c-well); }
+.fd-src-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fd-src-main b { font-size: var(--fs-headline); font-weight: var(--fw-heavy); line-height: 1.2; }
+.fd-src-main b small { font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-strong); }
+.fd-src-main > small { font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fd-src-check { display: none; color: var(--c-ink); flex: none; }
+.fd-src[aria-checked="true"] .fd-src-check { display: inline-grid; }
+.fd-src[aria-checked="true"] .badge { display: none; }
+.fd-src.is-expired { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.fd-src.is-expired .chip-ic { background: var(--surface-2); color: var(--text-3); }
+.fd-src.is-expired .fd-src-main b { color: var(--text-2); }
+.fd-expired-word { display: inline-flex; align-items: center; gap: 4px; color: var(--danger-ink); font-weight: var(--fw-heavy); }
+.fd-src-empty {
+  display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-3);
+  border-radius: var(--r-lg); background: var(--surface-2);
+}
+.fd-src-empty-ic { width: 40px; height: 40px; border-radius: var(--r-sm); display: grid; place-items: center; flex: none; background: var(--c-tint); color: var(--c-ink); }
+.fd-src-empty-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.fd-src-empty-text b { font-weight: var(--fw-heavy); font-size: var(--fs-body); }
+.fd-src-empty-text small { font-size: var(--fs-subhead); color: var(--text-2); }
+.fd-go-stash { align-self: flex-start; margin: 2px 0 -8px calc(-1 * var(--s-3)); gap: 2px; }
+.fd-go-stash .ic { width: 18px; height: 18px; }
+
+/* ---------- "already running" banner ---------- */
+.fd-banner {
+  display: flex; align-items: center; gap: var(--s-2);
+  min-height: 52px; padding: 4px 4px 4px 14px; border-radius: var(--r-lg);
+  background: var(--c-tint); box-shadow: inset 0 0 0 1.5px var(--c-mid);
+}
+.fd-banner .dot { color: var(--c-mid); }
+.fd-banner-text { flex: 1; min-width: 0; font-size: var(--fs-subhead); font-weight: var(--fw-strong); }
+
+/* ---------- live timer hero ---------- */
+.fd-hero { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: var(--s-1); }
+.fd-timer {
+  display: inline-block; transform-origin: 50% 50%;
+  font-size: var(--fs-display); line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); color: var(--text);
+}
+.fd-hero-sub { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-strong); }
+.fd-hero-sub b { color: var(--text); font-weight: var(--fw-heavy); }
+.fd-hero-sub .dot { color: var(--c-mid); }
+.fd-safety { margin-top: 2px; }
+.fd-safety-bar { width: min(220px, 70%); flex: none; margin-top: 4px; background: var(--surface-2); }
+.fd-safety-bar > i { background: var(--c-mid); }
+.fd-live[data-level="expired"] .fd-safety-bar > i { background: var(--danger-ink); }
+.fd-callout {
+  display: flex; align-items: center; justify-content: center; gap: var(--s-2);
+  min-height: 48px; padding: var(--s-2) var(--s-4); border-radius: var(--r-lg);
+  background: var(--danger-tint); color: var(--danger-ink);
+  font-size: var(--fs-callout); font-weight: var(--fw-heavy); text-align: center;
+}
+.fd-callout[hidden] { display: none; }
+.fd-pace { min-height: 20px; text-align: center; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); }
+.fd-pace b { color: var(--text); font-weight: var(--fw-heavy); }
+
+/* ---------- breastfeeding sides ---------- */
+.fd-sides .fd-side { min-height: 112px; }
+.fd-letter { font-weight: var(--fw-heavy); font-size: var(--fs-headline); font-variant-numeric: var(--numeric); }
+.fd-side.is-suggested { box-shadow: inset 0 0 0 1.5px var(--c-mid); }
+.fd-side.is-suggested .tile-ctx { color: var(--c-ink); font-weight: var(--fw-heavy); }
+.fd-side[disabled] { opacity: .38; }
+.fd-side-time { color: var(--text-2); font-weight: var(--fw-strong); margin-left: 4px; }
+.fd-side.is-live .fd-side-time { color: var(--text); font-weight: var(--fw-heavy); }
+.fd-mistake { align-self: center; color: var(--text-2); }
+
+/* ---------- keypad sheet ---------- */
+.fd-kp-display {
+  display: flex; align-items: baseline; justify-content: center; gap: 6px;
+  min-height: 64px; font-size: var(--fs-amount); line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); color: var(--text);
+}
+.fd-kp-display small { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); letter-spacing: 0; }
+.fd-kp-help { min-height: 18px; text-align: center; font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-strong); margin-top: calc(-1 * var(--s-3)); }
+.fd-kp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.fd-key {
+  min-height: 56px; border-radius: var(--r-md); background: var(--surface-2); color: var(--text);
+  display: grid; place-items: center;
+  font-size: 24px; font-weight: var(--fw-heavy);
+  transition: transform var(--dur-press) var(--ease-std), background-color var(--dur-press) var(--ease-std);
+}
+.fd-key:active { transform: scale(var(--press-scale)); background: var(--line); }
+.fd-key-del { color: var(--text-2); }
+
+/* ---------- time picker sheet ---------- */
+.fd-when-quick { justify-content: center; }
+.fd-when-custom { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); align-items: center; }
+.fd-when-custom .segmented { grid-column: 1 / -1; }
+.fd-when-field { grid-column: 1 / -1; }
+.fd-when-field .field-input { font-size: var(--fs-headline); min-height: 32px; }
+
+/* ===================== Express pad (DESIGN §7.2 #4) ===================== */
+/* The + must never offer a text callout / selection while held. */
+#fab { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none; }
+
+.xp-layer { position: fixed; inset: 0; z-index: var(--z-sheet); touch-action: none; user-select: none; -webkit-user-select: none; }
+.xp-scrim { position: absolute; inset: 0; background: var(--scrim); opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.xp-layer[data-state="open"] .xp-scrim { opacity: 1; }
+.xp-layer[data-state="closing"] { pointer-events: none; }
+.xp-layer[data-state="closing"] .xp-scrim { opacity: 0; transition: opacity var(--dur-fast) var(--ease-in); }
+
+.xp-pad {
+  position: absolute; left: 0; right: 0; bottom: var(--xp-bottom, 120px);
+  width: min(358px, calc(100% - 2 * var(--pill-inset))); margin: 0 auto;
+  display: flex; flex-direction: column; align-items: stretch; gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-3);
+  background: var(--sheet-bg); color: var(--text);
+  border-radius: var(--r-xl); box-shadow: var(--shadow-sheet);
+  clip-path: circle(var(--gr, 29px) at var(--gx, 50%) var(--gy, 110%));
+  transition: clip-path var(--dur-grow) var(--ease-out);
+}
+.xp-layer[data-state="open"] .xp-pad { clip-path: circle(150% at var(--gx, 50%) var(--gy, 110%)); }
+.xp-layer[data-state="closing"] .xp-pad { clip-path: circle(var(--gr, 29px) at var(--gx, 50%) var(--gy, 110%)); transition: clip-path var(--dur-fast) var(--ease-in); }
+/* Targets fan out from the + (--move-md), staggered. */
+.xp-pad > * { transition: transform var(--dur-grow) var(--ease-out), opacity var(--dur-fast) var(--ease-out); }
+.xp-layer[data-state="pre"] .xp-pad > * { transform: translateY(var(--move-md)); opacity: 0; }
+.xp-layer[data-state="pre"] .xp-pad > :nth-child(odd) { transform: translateY(calc(var(--move-md) * 1.5)); }
+
+.xp-cap { text-align: center; }
+.xp-zone {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--s-3);
+  min-height: 64px; padding: 0 var(--s-4) 0 var(--s-3); border-radius: var(--r-lg);
+  background: var(--surface-2); color: var(--text);
+  transition: background-color var(--dur-press) var(--ease-std), box-shadow var(--dur-press) var(--ease-std);
+}
+.xp-zone b { font-size: var(--fs-headline); font-weight: var(--fw-heavy); }
+.xp-zone small { font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-strong); }
+.xp-zone-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--c-well); color: var(--c-ink); }
+.xp-zone.is-on { background: var(--c-tint); box-shadow: inset 0 0 0 2px var(--c-mid); }
+.xp-zone.is-on small { color: var(--c-ink); }
+.xp-readout { display: flex; align-items: center; justify-content: center; gap: var(--s-4); min-height: 64px; }
+.xp-arrow { color: var(--text-3); display: grid; }
+.xp-amt { display: inline-flex; align-items: baseline; gap: 4px; }
+.xp-amt b { font-size: var(--fs-amount); line-height: 1; font-weight: var(--fw-numeral); letter-spacing: var(--tracking-numeral); }
+.xp-amt small { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); }
+.xp-layer.is-cancel .xp-amt b { color: var(--text-2); }
+.xp-sub, .xp-foot { text-align: center; font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-strong); }
+.xp-foot { min-height: 18px; color: var(--text); font-weight: var(--fw-heavy); }
+
+/* The + stays put above the scrim as the anchor (and cancel target). */
+.xp-anchor {
+  position: fixed; left: var(--xp-fab-l); top: var(--xp-fab-t);
+  width: var(--xp-fab-s); height: var(--xp-fab-s); border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--fab-bg); color: var(--on-fab);
+  box-shadow: var(--shadow-fab), 0 0 0 4px var(--nav-bg);
+  transition: box-shadow var(--dur-press) var(--ease-std), transform var(--dur-press) var(--ease-std);
+}
+.xp-anchor .ic { width: 30px; height: 30px; }
+.xp-layer.is-cancel .xp-anchor { box-shadow: var(--shadow-fab), 0 0 0 4px var(--nav-bg), 0 0 0 7px var(--accent-soft); }
+
+/* Reduced motion: no growth, no fan-out — a short fade in place. */
+.xp-layer.is-reduced .xp-pad, .xp-layer.is-reduced[data-state] .xp-pad { clip-path: none; opacity: 0; transition: opacity 150ms linear; }
+.xp-layer.is-reduced[data-state="open"] .xp-pad { opacity: 1; }
+.xp-layer.is-reduced .xp-pad > * { transform: none !important; opacity: 1 !important; transition: none; }

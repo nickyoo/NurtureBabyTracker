@@ -1,1 +1,45 @@
-/* View: timeline (js/views/timeline.js). Owned by the timeline screen team. Build from tokens + components.css. */
+/* View: Timeline (js/views/timeline.js) — DESIGN §6.8 DayPager / StatTile /
+   TimelineStrip, §13 Frame 4, motion #12 / #20. Built from tokens +
+   components.css (.page-hd, .days/.day, .stats/.stat, .strip, .legend,
+   .sec-hd, .list/.row, .empty-state, .set-list). Only Timeline-specific
+   pieces live here; category colour comes from .cat-* → --c-*, never a theme
+   selector. */
+
+.tl .tl-hd { padding-top: 10px; padding-bottom: 12px; }
+.tl .tl-hd-text { min-width: 0; }
+.tl .tl-hd .page-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tl .tl-hd .hd-actions { gap: var(--s-4); }
+
+/* Week row: weekday + date; the ring moves between cells (--dur-fast). */
+.tl .day { color: var(--text); }
+.tl .day small { color: var(--text-2); }
+
+/* Day content pages sideways with a cross-fade (#12). Swipes that start on
+   it page too, so let vertical panning stay native. */
+.tl .tl-day {
+  touch-action: pan-y;
+  transition: transform var(--dur-base) var(--ease-out), opacity var(--dur-base) var(--ease-out);
+}
+.tl .tl-day.is-from-right { transform: translateX(var(--move-lg)); opacity: 0; transition: none; }
+.tl .tl-day.is-from-left { transform: translateX(calc(-1 * var(--move-lg))); opacity: 0; transition: none; }
+
+/* Summary tiles: 4 across, fewer when trackers are hidden. */
+.tl .stats[data-n="3"] { grid-template-columns: repeat(3, 1fr); }
+.tl .stats[data-n="2"] { grid-template-columns: repeat(2, 1fr); }
+.tl .stats[data-n="1"] { grid-template-columns: 1fr; }
+.tl .stat { transition: transform var(--dur-press) var(--ease-std), box-shadow var(--dur-fast) var(--ease-std); }
+@media (max-width: 360px) { .tl .stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* Strip: marks are tappable (the list below is the accessible equivalent). */
+.tl .tl-strip .s-mark { cursor: pointer; }
+.tl .tl-strip .s-dia-dry { stroke-dasharray: 2 2.2; }
+.tl .tl-strip .legend { row-gap: 6px; margin-top: 10px; }
+
+/* "Show all" while a stat filter is on. */
+.tl .sec-hd .link { padding-left: var(--s-2); }
+
+/* Empty states sit in the list's place, never a blank area. */
+.tl .tl-list > .empty-state { padding: var(--s-6) var(--s-4) var(--s-4); }
+
+/* Report entry, below the day. */
+.tl .tl-report { margin-top: var(--s-6); }
