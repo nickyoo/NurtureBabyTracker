@@ -50,11 +50,6 @@ const PLACE_WORD = Object.freeze({ fridge: 'Fridge', freezer: 'Freezer', deepFre
 const PLACE_IN = Object.freeze({ fridge: 'in the fridge', freezer: 'in the freezer', deepFreezer: 'in the deep freezer', room: 'at room temp', thawed: 'thawed, in the fridge' });
 const PLACE_ICON = Object.freeze({ fridge: 'fridge', freezer: 'snow', deepFreezer: 'snow', room: 'pouch', thawed: 'thaw' });
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-// The feed sheet keeps its own pouch cache, refreshed from the stash bus
-// (16 ms debounce + a read). A pouch thawed a moment ago must be in it
-// before "Thaw & feed" opens the feed sheet, or the sheet falls back to
-// another source. See the FOUNDATION REQUEST for feed.js in the report.
-const FEED_CACHE_SETTLE_MS = 200;
 let uidSeq = 0;
 const uid = () => `sx${(uidSeq += 1)}`;
 
@@ -1009,7 +1004,6 @@ export function openStashSheet(ctx, { origin = null, preset = null, pouchId = nu
       if (act === 'thaw-feed') {
         // The feed sheet takes over; Undo would hide under it, and thawing
         // is what "Thaw & feed" asked for.
-        await wait(FEED_CACHE_SETTLE_MS);
         if (closed) return;
         api.close('thaw-feed');
         ctx.sheets.feed({ origin: reopenOrigin(), preset: { method: 'bottle', sourceInventoryId: id } });

@@ -34,11 +34,6 @@ const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 const MONTH = 30.44 * DAY;
 const NEW_ROW_MS = 1500;          // > --dur-highlight (1200 ms)
-// The feed sheet keeps its own pouch cache, refreshed from the stash bus
-// (16 ms debounce + a read): let it see a just-thawed pouch before "Thaw &
-// feed" opens it, or it falls back to another source (see the report's
-// FOUNDATION REQUEST for feed.js).
-const FEED_CACHE_SETTLE_MS = 200;
 const EXPIRED_SHOWN_MS = 30 * DAY; // older expired pouches live in the archive only
 const SECTIONS = Object.freeze(['thawed', 'fridge', 'room', 'freezer', 'deepFreezer', 'expired']);
 const SEC_WORD = Object.freeze({ thawed: 'Thawed', fridge: 'Fridge', room: 'Room temp', freezer: 'Freezer', deepFreezer: 'Deep freezer', expired: 'Expired' });
@@ -406,7 +401,7 @@ export default {
       let meta;
       if (sec === 'expired') meta = `${SEC_WORD[item.location] || 'Stash'} · pumped ${shortDate(item.pumpedAt, now)}`;
       // Thawed: the thaw clock is what matters (the badge says what's left).
-      else if (sec === 'thawed') meta = Number.isFinite(item.thawedAt) ? `Thawed ${F.since(item.thawedAt, now).replace('Just now', 'just now')}` : `Pumped ${shortDate(item.pumpedAt, now)}`;
+      else if (sec === 'thawed') meta = Number.isFinite(item.thawedAt) ? `Thawed ${now - item.thawedAt < HOUR ? 'just now' : `${ageWords(now - item.thawedAt)} ago`}` : `Pumped ${shortDate(item.pumpedAt, now)}`;
       else if (isFrozen(item)) meta = ctx.time.isSameDay(item.pumpedAt, now) ? `Today, ${F.clock(item.pumpedAt)}` : F.dayLabel(item.pumpedAt, now);
       else meta = `${F.dayLabel(item.pumpedAt, now)}, ${F.clock(item.pumpedAt)}`;
       const note = (item.notes || '').split('\n')[0].trim();
@@ -642,8 +637,9 @@ export default {
           const next = await ctx.stash.thaw(id);
           if (!next) { ctx.toast({ message: 'That pouch isn’t frozen any more.' }); return; }
           if (opensSheet) {
-            await new Promise((r) => setTimeout(r, FEED_CACHE_SETTLE_MS));
             if (stopped) return;
+            // The feed sheet fetches a pouch its cache hasn't seen yet and
+            // keeps it selected meanwhile, so no settle wait is needed.
             ctx.sheets.feed({ origin: btn, preset: { method: 'bottle', sourceInventoryId: id } });
           } else {
             ctx.toast({ message: `Thawed · use within ${windows().thawedBottleHours}h`, action: { label: 'Undo', run: () => ctx.stash.restore(before) } });

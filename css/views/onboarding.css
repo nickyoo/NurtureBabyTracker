@@ -21,7 +21,16 @@
 .ob-dots { padding: 0 2px; }
 .ob-back { margin-left: calc(-1 * var(--s-3)); padding-left: var(--s-1); gap: 2px; }
 .ob-back .ic { width: 22px; height: 22px; }
-.ob-skip { margin-right: calc(-1 * var(--s-3)); color: var(--text-2); }
+.ob-skip {
+  margin-right: calc(-1 * var(--s-3)); color: var(--text-2);
+  transition: opacity var(--dur-fast) var(--ease-out), visibility 0s linear 0s;
+}
+/* Last step: its own buttons finish. Fades out, keeps its place (no dot jump);
+   visibility drops it from focus order and the accessibility tree. */
+.ob-skip.is-off {
+  opacity: 0; visibility: hidden;
+  transition: opacity var(--dur-fast) var(--ease-in), visibility 0s linear var(--dur-fast);
+}
 @keyframes ob-fade { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---- steps: one grid cell, so the outgoing and incoming steps overlap

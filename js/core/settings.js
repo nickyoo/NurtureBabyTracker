@@ -55,6 +55,8 @@ export const DEFAULTS = deepFreeze({
   onboarded: false,
   migratedV2: false,
   iconDataUrl: null, // §10: 180×180 PNG of the baby photo for apple-touch-icon
+  iconBabyId: null,  // which baby's photo iconDataUrl was made from (per device)
+  memoryCovers: {},  // { [babyId]: eventId } — the memory each baby's book shows on its cover
 });
 
 /** Keys a backup may carry. deviceId / migratedV2 / lastBackupAt /
@@ -62,7 +64,7 @@ export const DEFAULTS = deepFreeze({
  * from the photo; feedbackEmail is the app owner's, not the family's. */
 export const EXPORTABLE_KEYS = Object.freeze([
   'babies', 'activeBabyId', 'parentName', 'units', 'theme', 'trackers', 'todayOrder',
-  'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound', 'onboarded',
+  'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound', 'onboarded', 'memoryCovers',
 ]);
 
 // Upper bounds are shared with the stash import guard (domain/inventory.js),
@@ -224,6 +226,22 @@ export function sanitizeSetting(key, value, { lenient = false } = {}) {
     case 'iconDataUrl':
       return value === null || (typeof value === 'string' && value.length <= 400_000 && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(value))
         ? pass(value) : fail('iconDataUrl must be a PNG data URL');
+    case 'iconBabyId':
+      return value === null || (typeof value === 'string' && BABY_ID_RE.test(value)) ? pass(value) : fail('bad iconBabyId');
+    case 'memoryCovers': {
+      // baby id → milestone event id. Lenient (imports) drops bad pairs.
+      if (!isPlainObject(value)) return fail('memoryCovers must be an object');
+      const out = {};
+      let n = 0;
+      for (const k of Object.keys(value)) {
+        const v = value[k];
+        const good = BABY_ID_RE.test(k) && typeof v === 'string' && ID_RE.test(v);
+        if (!good) { if (!lenient) return fail('memoryCovers maps a baby id to a memory id'); continue; }
+        if (++n > 1000) break;
+        out[k] = v;
+      }
+      return pass(out);
+    }
     default:
       if (typeof key !== 'string' || !KEY_RE.test(key) || FORBIDDEN_KEYS.has(key)) return fail(`bad setting key: ${key}`);
       return pass(value);

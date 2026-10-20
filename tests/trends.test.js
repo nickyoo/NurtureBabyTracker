@@ -126,6 +126,8 @@ test('pumpProgress: goal stored in oz, shown in either unit', () => {
   assert.equal(ml.goal, 710);
   assert.equal(ml.total, 596);
   assert.equal(ml.unit, 'mL');
+  assert.equal(T.pumpProgress(events, 24.3, { unit: 'mL', now: NOW }).goal, 720, 'a 720 mL goal (stored 24.3 oz) reads 720, as in Settings');
+  assert.equal(T.pumpProgress(events, 26, { unit: 'mL', now: NOW }).goal, 770, 'mL goals read to the nearest 10');
   const reached = T.pumpProgress(events, 20, { now: NOW });
   assert.equal(reached.reached, true);
   assert.equal(reached.fraction, 1, 'clamped to 1');

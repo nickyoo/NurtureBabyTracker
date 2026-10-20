@@ -17,7 +17,7 @@
 // Re-renders on store changes (events, units, trackers, active baby).
 
 import { reportSummary } from '../domain/trends.js';
-import { shareCsv } from '../core/backup.js';
+import { eventVisible } from '../ui/format.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGES = Object.freeze([7, 14]);
@@ -26,17 +26,6 @@ let mountSeq = 0;
 
 // ----------------------------------------------------------------- pure
 
-/** Is this event's tracker visible? (Hidden trackers disappear everywhere.) */
-function eventVisible(e, t) {
-  switch (e && e.type) {
-    case 'feed': return e.data && e.data.method === 'breast' ? t.breastfeeding !== false : t.bottle !== false;
-    case 'pump': return t.pump !== false;
-    case 'sleep': return t.sleep !== false;
-    case 'diaper': return t.diaper !== false;
-    case 'milestone': return t.memories !== false;
-    default: return false;
-  }
-}
 
 /** Which report sections show for a trackers setting. */
 function sections(t) {
@@ -285,7 +274,7 @@ export default {
       btn.setAttribute('aria-busy', 'true');
       try {
         const b = baby();
-        const result = await shareCsv({ unit: unit(), babyId: b ? b.id : undefined });
+        const result = await ctx.backup.shareCsv({ unit: unit(), babyId: b ? b.id : undefined });
         if (result === 'download') ctx.toast({ message: 'CSV saved to your downloads' });
       } catch (err) {
         console.warn('Report: CSV not shared', err);

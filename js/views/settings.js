@@ -464,8 +464,8 @@ export default {
                 ? html`<button type="button" class="grip" data-grip="${r.unit}" aria-label="${r.unit === 'feed' ? 'Move feeds' : `Move ${r.title}`}" aria-describedby="${pid}-hint" aria-expanded="${moving === r.unit ? 'true' : 'false'}">${I('grip', 20)}</button>`
                 : html`<span class="st-grip-space" aria-hidden="true"></span>`}
               <span class="chip-ic ${r.cat}">${I(r.icon)}</span>
-              <span class="set-text" data-tap-toggle="${r.key}"><b>${r.title}</b><small>${trackerSub(r, on)}</small></span>
-              <button type="button" class="toggle" role="switch" aria-checked="${on ? 'true' : 'false'}" aria-label="${`Show ${r.title}`}" data-action="tracker" data-arg="${r.key}"></button>
+              <label class="set-text" for="${`${pid}-tg-${r.key}`}" data-tap-toggle="${r.key}"><b>${r.title}</b><small>${trackerSub(r, on)}</small></label>
+              <button type="button" class="toggle" id="${`${pid}-tg-${r.key}`}" role="switch" aria-checked="${on ? 'true' : 'false'}" aria-label="${`Show ${r.title}`}" data-action="tracker" data-arg="${r.key}"></button>
             </div></li>`;
             if (moving && r.unit === moving && lastOf[r.unit] === r.key) {
               const units = unitOrder();
@@ -898,7 +898,11 @@ export default {
       paint();
       try { await fn(); } finally {
         busyAction = null;
-        if (!stopped) paint();
+        if (!stopped) {
+          paint();
+          // A backup, import or new photo changes what's stored.
+          if (page === 'data') loadEstimate();
+        }
       }
     }
 
@@ -1516,12 +1520,8 @@ export default {
         }
         return;
       }
-      const tap = t.closest('[data-tap-toggle]');
-      if (tap && root.contains(tap)) {
-        const tg = tap.parentElement.querySelector('.toggle');
-        setTracker(tap.dataset.tapToggle, tg);
-        return;
-      }
+      // The row words are a <label for> the toggle: the browser forwards
+      // their tap to the switch, which lands in the 'tracker' case below.
       const b = t.closest('[data-action]');
       if (!b || !root.contains(b) || b.getAttribute('aria-disabled') === 'true' || b.getAttribute('aria-busy') === 'true') return;
       const arg = b.dataset.arg;
@@ -1662,14 +1662,16 @@ export default {
 
     // ------------------------------------------------------ stores
 
-    const offSettings = S.subscribe(() => {
+    const offSettings = S.subscribe((c) => {
       if (stopped) return;
       paint();
+      // An import (or another tab) replaced everything: re-measure storage.
+      if (c && c.key === '*' && ['root', 'customize', 'data', 'privacy'].includes(page)) loadEstimate();
     });
     const offPhotos = ctx.photos.subscribe ? ctx.photos.subscribe((c) => {
       if (stopped) return;
       if (c && c.op === 'bulk') urls.clear();
-      if (page === 'data') ctx.photos.usage().then((u) => { if (!stopped) { photoUse = u; paint(); } }).catch(() => {});
+      if (page === 'data') loadEstimate();
       paint();
     }) : () => {};
     const offRouter = ctx.router.subscribe(() => {

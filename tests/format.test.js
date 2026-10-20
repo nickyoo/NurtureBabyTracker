@@ -164,3 +164,19 @@ test('eventLabel is one sentence', () => {
   );
   assert.equal(eventLabel(ev('sleep', { kind: 'nap' }, at(2026, 10, 14, 8, 55), null), { now: NOW, hour12: true }), 'Nap, since 8:55 AM. Asleep · 55m so far.');
 });
+
+test('eventVisible: hidden trackers disappear everywhere; bottle and breastfeed have their own toggles', async () => {
+  const { eventVisible } = await import('../js/ui/format.js');
+  const all = { bottle: true, breastfeeding: true, pump: true, sleep: true, diaper: true, memories: true };
+  const bottle = { type: 'feed', data: { method: 'bottle' } };
+  const breast = { type: 'feed', data: { method: 'breast' } };
+  for (const e of [bottle, breast, { type: 'pump' }, { type: 'sleep' }, { type: 'diaper' }, { type: 'milestone' }]) assert.equal(eventVisible(e, all), true);
+  assert.equal(eventVisible(bottle, { ...all, bottle: false }), false);
+  assert.equal(eventVisible(breast, { ...all, bottle: false }), true);
+  assert.equal(eventVisible(breast, { ...all, breastfeeding: false }), false);
+  assert.equal(eventVisible({ type: 'milestone' }, { ...all, memories: false }), false);
+  assert.equal(eventVisible({ type: 'pump' }, {}), true, 'missing keys default to on');
+  assert.equal(eventVisible({ type: 'pump' }, null), true);
+  assert.equal(eventVisible({ type: 'weird' }, all), false);
+  assert.equal(eventVisible(null, all), false);
+});

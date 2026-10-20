@@ -10,7 +10,7 @@
 //    offline (or on hospital wifi that never answers).
 //  - Same-origin only. The app makes no third-party requests, so the worker
 //    never touches anything cross-origin.
-const CACHE_NAME = 'nurture-v2.0.0-dev';
+const CACHE_NAME = 'nurture-v2.0.0';
 const NETWORK_TIMEOUT_MS = 4000;
 
 const ASSETS = [

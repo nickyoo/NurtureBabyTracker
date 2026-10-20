@@ -107,6 +107,16 @@ async function waitToast(page, re, timeout = 4000) {
 async function waitSheet(page) { await page.waitForSelector('.sheet-layer[data-state="open"]', { timeout: 3000 }); await settle(page, 450); }
 async function waitNoSheet(page) { await page.waitForFunction(() => !document.querySelector('.sheet-layer'), null, { timeout: 4000 }).catch(() => {}); }
 async function shot(page, name) { await page.screenshot({ path: `${SHOTS}settings-${name}.png` }); }
+/** Screenshot the top settings screen scrolled to its start, once no toast covers it. */
+async function shotTop(page, name) {
+  await page.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 8000 }).catch(() => {});
+  await page.evaluate(() => {
+    const v = [...document.querySelectorAll('#viewport > [data-view="settings"]')].filter((s) => !s.classList.contains('is-leaving-right'));
+    v[v.length - 1].scrollTo(0, 0);
+  });
+  await page.waitForTimeout(150);
+  await shot(page, name);
+}
 
 /** Every interactive element on the top settings screen: ≥44×44 and named. */
 async function auditTargets(page, label) {
@@ -264,7 +274,7 @@ try {
   }));
   check('…and the Memories tab is gone', await page.evaluate(() => !document.querySelector('#tabBar [data-tab="memories"]')));
   // tapping the words toggles too
-  await clickTop(page, '[data-tap-toggle="memories"]');
+  await clickTop(page, 'label[data-tap-toggle="memories"] b');
   await settle(page, 300);
   check('tapping the row words toggles it back on', (await getSetting(page, 'trackers')).memories === true);
   // hide pumping
@@ -375,13 +385,13 @@ try {
   await clickTop(page, '[data-seg="theme"] [data-v="dark"]');
   await settle(page, 800);
   check('Appearance → Night: <html data-theme="dark">, saved', (await page.evaluate(() => document.documentElement.dataset.theme)) === 'dark' && (await getSetting(page, 'theme')) === 'dark');
-  await shot(page, 'root-night');
+  await shotTop(page, 'root-night');
   await page.focus(`${TOP} [data-seg="theme"] [data-v="dark"]`);
   await page.keyboard.press('ArrowLeft');
   await settle(page, 800);
   check('arrow keys move the segmented choice (→ Light)', (await getSetting(page, 'theme')) === 'light' && (await page.evaluate(() => document.documentElement.dataset.theme)) === 'light');
   check('…focus follows the selection', await page.evaluate(() => document.activeElement.matches('[data-seg="theme"] [data-v="light"]')));
-  await shot(page, 'root-light');
+  await shotTop(page, 'root-light');
   await clickTop(page, '[data-action="motion"]');
   await settle(page, 300);
   check('Reduce motion on → data-motion="reduce"', (await page.evaluate(() => document.documentElement.dataset.motion)) === 'reduce' && (await getSetting(page, 'reduceMotion')) === true);
@@ -501,7 +511,7 @@ try {
     return a && /^mailto:/.test(a.href) && !/body=/.test(a.href);
   }));
   await auditTargets(page, 'privacy');
-  await shot(page, 'privacy-light');
+  await shotTop(page, 'privacy-light');
   await goSub(page, '[data-arg="data"]');
   check('privacy → “Backup, export or erase” opens Your data', (await top(page)).page === 'st-page-data' && (await top(page)).back === 'Settings');
   await back(page);
@@ -512,7 +522,7 @@ try {
     return /never clears Clara’s log/.test(s.textContent) && /Add to Home Screen/.test(s.textContent) && /Install app/.test(s.textContent);
   }));
   await auditTargets(page, 'install');
-  await shot(page, 'install-light');
+  await shotTop(page, 'install-light');
   await back(page);
   await goSub(page, '[data-arg="about"]');
   check('about: version + OFL licenses linked locally', await page.evaluate(() => {
@@ -520,7 +530,7 @@ try {
     return /Version \d/.test(s.textContent) && !!s.querySelector('a[href="fonts/OFL-Nunito.txt"]') && !!s.querySelector('a[href="fonts/OFL-Fraunces.txt"]') && /MIT License/.test(s.textContent);
   }));
   await auditTargets(page, 'about');
-  await shot(page, 'about-light');
+  await shotTop(page, 'about-light');
   await back(page);
   await clickTop(page, '[data-action="report"]');
   await page.waitForSelector('[data-view="report"]');

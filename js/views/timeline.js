@@ -24,6 +24,7 @@
 // Only store subscriptions drive re-renders (views never call each other).
 
 import { dayTotals } from '../domain/trends.js';
+import { eventVisible } from '../ui/format.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NEW_ROW_MS = 1500;          // > --dur-highlight (1200 ms)
@@ -50,17 +51,6 @@ let mountSeq = 0;
 
 // ----------------------------------------------------------------- pure
 
-/** Is this event's tracker visible? (Hidden trackers disappear everywhere.) */
-function eventVisible(e, t) {
-  switch (e && e.type) {
-    case 'feed': return e.data && e.data.method === 'breast' ? t.breastfeeding !== false : t.bottle !== false;
-    case 'pump': return t.pump !== false;
-    case 'sleep': return t.sleep !== false;
-    case 'diaper': return t.diaper !== false;
-    case 'milestone': return t.memories !== false;
-    default: return false;
-  }
-}
 
 /** Which strip lanes / stat tiles show for these trackers, in lane order. */
 function visibleLanes(t) {

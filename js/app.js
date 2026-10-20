@@ -8,9 +8,9 @@
 //   6. onboarding or Today
 // Everything else lives in views/ and sheets/, which only see `ctx`.
 //
-// This file must never import a legacy v1 module (js/db.js etc.): the v1
-// db.js opens IndexedDB at version 1 and would fail against the v2 schema.
-// tests/sw-assets.test.js enforces that by walking this import graph.
+// The v1 modules (js/db.js, app.v1.js, …) are gone; the v1 *data* is still
+// read once by core/migrate.js. tests/sw-assets.test.js walks this import
+// graph to prove every module it reaches exists and is precached.
 
 import { runMigration } from './core/migrate.js';
 import { settings } from './core/settings.js';
@@ -20,6 +20,8 @@ import { photos } from './core/photos.js';
 import * as units from './core/units.js';
 import * as time from './core/time.js';
 import { persist } from './core/persist.js';
+import { backup } from './core/backup.js';
+import { bottleSafety, breastSideTotals, fmtSafetyWindow } from './domain/safety.js';
 import { html, raw, render, cls, element, fragment } from './ui/html.js';
 import { icons } from './ui/icons.js';
 import { openSheet, sheetsBusy, whenSheetsIdle, motionReduced } from './ui/sheet.js';
@@ -234,6 +236,26 @@ function askPersistence() {
   persist.requestPersistence().catch((err) => console.warn('storage persistence request failed', err));
 }
 
+const PHOTO_SWEEP_KEY = 'nurture.photoSweepAt';
+const PHOTO_SWEEP_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function sweepPhotos() {
+  try {
+    let last = 0;
+    try { last = Number(localStorage.getItem(PHOTO_SWEEP_KEY)) || 0; } catch { /* private mode */ }
+    if (Date.now() - last < PHOTO_SWEEP_EVERY_MS) return;
+    const used = new Set();
+    for (const b of settings.babies() || []) if (b && b.photoId) used.add(b.photoId);
+    for (const e of await events.query({ type: 'milestone' })) {
+      for (const id of (e.data && Array.isArray(e.data.photoIds) ? e.data.photoIds : [])) used.add(id);
+    }
+    await photos.sweepOrphans(used);
+    storageSet(PHOTO_SWEEP_KEY, String(Date.now()));
+  } catch (err) {
+    console.warn('photo cleanup skipped', err);
+  }
+}
+
 async function boot() {
   registerServiceWorker();
   const slow = setTimeout(() => showBootNote('Still opening… If Nurture is open in another tab, close it.'), 6000);
@@ -250,12 +272,15 @@ async function boot() {
   for (const [id, mod] of Object.entries(viewMods)) views[id] = mod.default || mod;
 
   const base = {
-    openSheet, toast, confirmSheet, settings, events, stash, photos, units, time, format, icons, persist,
+    openSheet, toast, confirmSheet, settings, events, stash, photos, units, time, format, icons, persist, backup,
+    safety: Object.freeze({ bottleSafety, breastSideTotals, fmtSafetyWindow }),
     html: Object.freeze({ html, raw, render, cls, element, fragment }),
     livePill: Object.freeze({ register: livePill.register, refresh: livePill.refresh, pillModel: livePill.pillModel }),
     RunningActivityError,
     activeBaby: () => settings.activeBaby(),
     motionReduced,
+    sheetsBusy,      // true while any sheet is open or closing
+    whenSheetsIdle,  // → Promise that resolves once no sheet is open
   };
   ctx = { ...base };
   ctx.sheets = buildSheets(sheetMods);
@@ -304,6 +329,10 @@ async function boot() {
   events.subscribe((change) => {
     if (change && change.op === 'add' && !change.restored && settings.get('persistGranted') !== true) askPersistence();
   });
+
+  // Quietly drop photos no memory or baby uses any more (left behind when the
+  // app closed while a delete's Undo was showing). At most once a week.
+  setTimeout(sweepPhotos, 15 * 1000);
 
   // Auto theme follows the clock (night hours) and the system scheme.
   setInterval(() => applyThemeFromSettings(true), 60 * 1000);

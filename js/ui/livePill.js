@@ -102,7 +102,7 @@ export function pillModel(event, now, { storageWindows, babies = [] } = {}) {
     m = {
       kind: 'sleep', cat: 'sleep', icon: 'moon', title: d.kind === 'night' ? 'Night sleep' : 'Nap',
       sub: `since ${clock(event.startTime)}`, subIcon: null, level: 'ok', time: timerClock(elapsedSec),
-      ring: (elapsedMs % 3600000) / 3600000, finishLabel: 'Wake up', openLabel: 'Open sleep timer',
+      ring: (elapsedMs % 3600000) / 3600000, finishLabel: d.kind === 'night' ? 'Wake up' : 'End nap', openLabel: 'Open sleep timer',
     };
   } else {
     m = {
@@ -144,10 +144,9 @@ function paint(el, m, minuteChanged) {
   el.querySelector('.lpill-time').textContent = m.time;
   const arc = el.querySelector('.lpill-ring-arc');
   arc.style.setProperty('stroke-dasharray', `${(RING_C * Math.max(0, Math.min(1, m.ring))).toFixed(2)} ${RING_C.toFixed(2)}`);
-  if (el.getAttribute('data-level') !== m.level || !el.__painted) {
-    el.setAttribute('data-level', m.level);
-    el.querySelector('.lpill-finish').textContent = m.finishLabel;
-  }
+  if (el.getAttribute('data-level') !== m.level || !el.__painted) el.setAttribute('data-level', m.level);
+  const fin = el.querySelector('.lpill-finish');
+  if (fin.textContent !== m.finishLabel) fin.textContent = m.finishLabel; // e.g. a nap switched to night sleep
   const subKey = `${m.subIcon || ''}|${m.sub}`;
   if (el.__subKey !== subKey) {
     el.__subKey = subKey;

@@ -155,6 +155,36 @@ function defaultBottleAmount(ctx, babyId, unit) {
   return ctx.units.clampAmount(v, cfg.step, cfg.max, cfg.step);
 }
 
+/**
+ * Express gesture (hold +): which milk the finger is on. The first pick is
+ * by the boundary between the two zones; after that it only flips once the
+ * finger is `hyst` px past the boundary, so a wobble never toggles it.
+ * Pure (exported for tests).
+ * @param {{ milk: string|null, y: number, boundary: number, lower: string, upper: string|null, hyst?: number }} a
+ * @returns {string}
+ */
+function expressMilk({ milk, y, boundary, lower, upper, hyst = 20 }) {
+  if (!upper) return lower;
+  if (!milk) return y < boundary ? upper : lower;
+  if (milk === lower && y < boundary - hyst) return upper;
+  if (milk === upper && y > boundary + hyst) return lower;
+  return milk;
+}
+
+/**
+ * Express gesture: the amount after sliding dx px sideways from `base`
+ * (one step per pxPerStep), clamped to the unit's range. Pure.
+ * @param {object} units core/units.js
+ * @param {number} base
+ * @param {number} dx
+ * @param {{ step: number, max: number, fineStep: number }} cfg units.inputConfig(unit)
+ * @param {number} [pxPerStep]
+ * @returns {number}
+ */
+function expressAmount(units, base, dx, cfg, pxPerStep = 16) {
+  return units.clampAmount(base + Math.round(dx / pxPerStep) * cfg.step, cfg.step, cfg.max, cfg.fineStep);
+}
+
 function pouchAmount(ctx, item, unit) {
   const cfg = ctx.units.inputConfig(unit);
   const v = ctx.units.convertQty(item.quantity, item.unit, unit);
@@ -451,7 +481,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
       </div>`);
     body.querySelector('[data-open-settings]').addEventListener('click', () => {
       api.close();
-      try { ctx.router.push('settings'); } catch (err) { console.warn('feed sheet: settings not reachable', err); }
+      try { ctx.router.push('settings', { page: 'customize' }); } catch (err) { console.warn('feed sheet: settings not reachable', err); }
     });
     return null;
   }
@@ -469,6 +499,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
     if (!milkOpts.some((o) => o.value === st.milk)) st.milk = 'breastmilk';
     const ids = { amt: uid(), banner: uid() };
     let busy = false;
+    let presetFetch = null; // null | Promise (fetching the preset pouch) | 'done'
 
     const other = runningFor(babyId);
     render(body, html`<div class="fd">
@@ -522,6 +553,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
 
     function canCommit() {
       if (st.milk !== 'stash') return true;
+      if (presetFetch && presetFetch !== 'done') return false;
       return !!(st.sourceId && cache.sources.some((s) => s.id === st.sourceId));
     }
 
@@ -537,16 +569,23 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
       sourcesEl.hidden = st.milk !== 'stash';
       if (st.milk !== 'stash') { render(sourcesEl, null); return; }
       const now = Date.now();
-      // A preset pouch that the cache doesn't know yet (just thawed): fetch it.
-      if (st.sourceId && !cache.sources.some((s) => s.id === st.sourceId)) {
-        ctx.stash.get(st.sourceId).then((item) => {
+      // A preset pouch that the cache doesn't know yet (just thawed): fetch it,
+      // and keep it selected (buttons disabled) until the fetch answers, so
+      // "Thaw & feed" never quietly feeds from a different pouch.
+      if (st.sourceId && !presetFetch && st.sourceId === p.sourceInventoryId && !cache.sources.some((s) => s.id === st.sourceId)) {
+        const want = st.sourceId;
+        presetFetch = ctx.stash.get(want).then((item) => {
           if (item && item.status === 'active' && item.expiresAt > Date.now() && FRESH_LOCATIONS.includes(item.location) && !cache.sources.some((s) => s.id === item.id)) {
             cache.sources = [item, ...cache.sources];
-            if (api.isOpen() && body.isConnected) { stepper.set(pouchAmount(ctx, item, st.unit), true); st.amount = stepper.value; paintSources(); paintButtons(); }
+            if (st.sourceId === want) { stepper.set(pouchAmount(ctx, item, st.unit), true); st.amount = stepper.value; }
           }
-        }).catch(() => {});
+        }).catch(() => {}).then(() => {
+          presetFetch = 'done';
+          if (api.isOpen() && body.isConnected) { paintSources(); paintButtons(); }
+        });
       }
-      if (!st.sourceId || !cache.sources.some((s) => s.id === st.sourceId)) {
+      const waitingForPreset = presetFetch && presetFetch !== 'done';
+      if (!waitingForPreset && (!st.sourceId || !cache.sources.some((s) => s.id === st.sourceId))) {
         st.sourceId = cache.sources.length ? cache.sources[0].id : st.sourceId;
       }
       if (!cache.sources.length && !cache.expired.length) {
@@ -1663,11 +1702,8 @@ function startPad(ctx, h, onEnd) {
       st.cancel = true;
     } else {
       st.cancel = false;
-      if (!upper) st.milk = lower;
-      else if (!st.milk) st.milk = e.clientY < boundary ? upper : lower;
-      else if (st.milk === lower && e.clientY < boundary - HYST) st.milk = upper;
-      else if (st.milk === upper && e.clientY > boundary + HYST) st.milk = lower;
-      st.amount = ctx.units.clampAmount(base + Math.round(dx / PX_PER_STEP) * cfg.step, cfg.step, cfg.max, cfg.fineStep);
+      st.milk = expressMilk({ milk: st.milk, y: e.clientY, boundary, lower, upper, hyst: HYST });
+      st.amount = expressAmount(ctx.units, base, dx, cfg, PX_PER_STEP);
     }
     if (prevMilk && st.milk !== prevMilk) {
       try { if (navigator.vibrate) navigator.vibrate(8); } catch { /* unsupported */ }
@@ -1759,3 +1795,6 @@ export function setup(ctx) {
 
   setupExpress(ctx);
 }
+
+/** Pure helpers, exported for unit tests only. */
+export const _test = Object.freeze({ expressMilk, expressAmount, pouchAmount });

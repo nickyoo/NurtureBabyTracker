@@ -162,6 +162,10 @@ export function openEventSheet(ctx, { origin = null, id = null, event = null, pr
 
   let ev = event && event.id ? event : (preset && preset.id && preset.type ? preset : null);
   const eventId = (ev && ev.id) || id || null;
+  // A memory has photos, which only the memory sheet can show and edit.
+  if (ev && ev.type === 'milestone' && ctx.sheets && ctx.sheets.memory) {
+    return ctx.sheets.memory({ origin, id: ev.id, event: ev, mode: mode === 'edit' ? 'edit' : 'view' });
+  }
   let api = null;
   let view = 'view';           // 'view' | 'edit' | 'gone'
   let busy = false;
@@ -734,6 +738,11 @@ export function openEventSheet(ctx, { origin = null, id = null, event = null, pr
     ctx.events.get(eventId).then((fresh) => {
       if (!api.isOpen()) return;
       if (!fresh) { paintGone(api.body); return; }
+      if (fresh.type === 'milestone' && ctx.sheets && ctx.sheets.memory) {
+        api.close();
+        ctx.sheets.memory({ origin, id: fresh.id, event: fresh, mode: mode === 'edit' ? 'edit' : 'view' });
+        return;
+      }
       ev = fresh;
       if (mode === 'edit') { paintEdit(api.body); } else paintView(api.body);
     }).catch((err) => {

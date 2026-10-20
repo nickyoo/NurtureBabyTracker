@@ -19,7 +19,7 @@ const bad = (key, value, opts) => assert.equal(sanitizeSetting(key, value, opts)
 
 test('§6 defaults: every key present; babies/profile replaced', () => {
   assert.deepEqual(Object.keys(DEFAULTS).sort(), [
-    'activeBabyId', 'babies', 'deviceId', 'feedbackEmail', 'iconDataUrl', 'lastBackupAt', 'migratedV2', 'onboarded',
+    'activeBabyId', 'babies', 'deviceId', 'feedbackEmail', 'iconBabyId', 'iconDataUrl', 'lastBackupAt', 'memoryCovers', 'migratedV2', 'onboarded',
     'parentName', 'persistGranted', 'pumpGoalOz', 'pumpIntervalMinutes', 'sound', 'storageWindows', 'theme', 'todayOrder', 'trackers', 'units',
   ].sort());
   assert.ok(!('profile' in DEFAULTS), 'v1-era profile object is gone');
@@ -192,4 +192,25 @@ test('storageWindows upper bounds are MAX_STORAGE_WINDOWS (shared with the stash
   for (const k of Object.keys(MAX_STORAGE_WINDOWS)) {
     assert.equal(ok('storageWindows', { ...MAX_STORAGE_WINDOWS, [k]: MAX_STORAGE_WINDOWS[k] + 1 })[k], DEFAULT_STORAGE_WINDOWS[k], `${k} above max → default`);
   }
+});
+
+test('iconBabyId: null or a baby id; per device, never in a backup', () => {
+  ok('iconBabyId', null);
+  ok('iconBabyId', 'baby_abc-123');
+  bad('iconBabyId', 'evt_1');
+  bad('iconBabyId', 42);
+  assert.equal(DEFAULTS.iconBabyId, null);
+  assert.ok(!EXPORTABLE_KEYS.includes('iconBabyId'));
+});
+
+test('memoryCovers: baby id → memory id, travels in backups, lenient import drops junk', () => {
+  assert.deepEqual(DEFAULTS.memoryCovers, {});
+  assert.ok(EXPORTABLE_KEYS.includes('memoryCovers'), 'a restore keeps the book covers');
+  assert.deepEqual(ok('memoryCovers', { baby_a: 'evt_1', baby_b: 'evt_2' }), { baby_a: 'evt_1', baby_b: 'evt_2' });
+  assert.deepEqual(ok('memoryCovers', {}), {});
+  bad('memoryCovers', null);
+  bad('memoryCovers', ['evt_1']);
+  bad('memoryCovers', { baby_a: 'evt 1' });
+  bad('memoryCovers', { notababy: 'evt_1' });
+  assert.deepEqual(ok('memoryCovers', { baby_a: 'evt_1', bad: 'x', baby_c: 7 }, { lenient: true }), { baby_a: 'evt_1' });
 });

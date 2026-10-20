@@ -44,7 +44,8 @@ test('fmtSafetyWindow: "1h 15m", "15m", ceil to the minute, "expired" (ported)',
   assert.equal(fmtSafetyWindow(4500), '1h 15m');
   assert.equal(fmtSafetyWindow(900), '15m');
   assert.equal(fmtSafetyWindow(61), '2m', 'rounds UP so it never under-promises');
-  assert.equal(fmtSafetyWindow(3600), '1h 0m');
+  assert.equal(fmtSafetyWindow(3600), '1h 00m', 'minutes padded once there are hours (DESIGN §10)');
+  assert.equal(fmtSafetyWindow(3900), '1h 05m');
   assert.equal(fmtSafetyWindow(0), 'expired');
   assert.equal(fmtSafetyWindow(-30), 'expired');
   assert.equal(fmtSafetyWindow(NaN), 'expired', 'NaN must not render as a time');

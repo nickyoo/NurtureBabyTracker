@@ -137,7 +137,7 @@
 .intro { font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-body); line-height: 1.4; margin: 0 2px var(--s-1); }
 
 /* ===================== 3. Since-last cards (QuickLogCard, §6.3) ===================== */
-.ql-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+.ql-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); } /* minmax: long text never widens a column */
 /* An odd card out spans the full width at the bottom (hidden trackers). */
 .ql-grid > .ql:last-child:nth-child(odd) { grid-column: 1 / -1; }
 .ql {
@@ -461,6 +461,8 @@ body[data-chrome="bare"] #toastRoot { bottom: calc(var(--safe-bottom) + var(--s-
   color: var(--pill-feed); font-weight: var(--fw-heavy); font-size: var(--fs-callout); flex: none;
 }
 .toast-action:active { background: var(--pill-well); }
+.toast-action-2 { color: var(--pill-text); font-weight: var(--fw-strong); padding: 0 var(--s-3); }
+.toast-action-1 + .toast-action-2 { margin-left: calc(-1 * var(--s-3)); }
 .toast[data-tone="warn"] .toast-msg { color: var(--pill-warn); }
 
 /* ===================== 10. Nav + the + (§5) ===================== */
@@ -497,6 +499,9 @@ body[data-chrome="bare"] #toastRoot { bottom: calc(var(--safe-bottom) + var(--s-
 .fab {
   position: absolute; left: 50%; top: calc(-1 * var(--fab-raise));
   transform: translateX(-50%);
+  /* hold + is the express bottle gesture (sheets/feed.js): no callout, no
+     text selection, no browser panning while the finger is down */
+  -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: none;
   transition: transform var(--dur-press) var(--ease-std), background-color var(--dur-press) var(--ease-std);
 }
 .fab:active { background: var(--fab-press); transform: translateX(-50%) scale(var(--press-scale)); }
@@ -622,6 +627,7 @@ body[data-chrome="bare"] #livePills { display: none; }
   border-radius: var(--r-pill); color: var(--text-2); font-weight: var(--fw-strong); font-size: var(--fs-callout);
   text-align: center; transition: color var(--dur-fast) var(--ease-std), background-color var(--dur-fast) var(--ease-std), box-shadow var(--dur-fast) var(--ease-std);
 }
+.segmented > button::after { content: ""; position: absolute; inset: -3px 0; } /* 44px hit target */
 .segmented > button[aria-checked="true"] { background: var(--surface); color: var(--text); font-weight: var(--fw-heavy); box-shadow: var(--shadow-1); }
 .segmented.cat-scoped > button[aria-checked="true"] { color: var(--c-ink); }
 

@@ -187,7 +187,11 @@ export function pumpProgress(events, goalOz, { unit = 'oz', now = Date.now(), da
   const { start, end } = dayBounds(day);
   const totals = rangeTotals(events, start, end, { unit: u, now });
   const g = toFiniteNumber(goalOz);
-  const goal = g !== null && g > 0 ? roundForUnit(convertQty(g, 'oz', u), u) : 0;
+  // The goal is stored in oz; in mL it reads to the nearest 10 (as Settings
+  // shows it), so a 720 mL goal saved as 24.3 oz never reads "719 mL".
+  const goal = g !== null && g > 0
+    ? (u === 'mL' ? Math.max(10, Math.round(convertQty(g, 'oz', 'mL') / 10) * 10) : roundForUnit(convertQty(g, 'oz', u), u))
+    : 0;
   const total = totals.pump.amount;
   return {
     unit: u,

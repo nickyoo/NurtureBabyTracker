@@ -327,7 +327,8 @@ export function openQuickLogSheet(ctx, { origin } = {}) {
     for (const o of all) o.setAttribute('aria-disabled', 'true');
     let added = null;
     try {
-      added = await ctx.events.add({ type: 'diaper', startTime: at(), data: { kind } });
+      const b = ctx.activeBaby();
+      added = await ctx.events.add({ type: 'diaper', startTime: at(), babyId: b ? b.id : undefined, data: { kind } });
     } catch (err) {
       console.error('diaper log failed', err);
       btn.classList.remove('is-done');
@@ -340,7 +341,19 @@ export function openQuickLogSheet(ctx, { origin } = {}) {
     await new Promise((r) => setTimeout(r, ctx.motionReduced() ? 0 : 160));
     api.close();
     await api.closed;
-    ctx.toast({ message: DIAPER_TOAST[kind] || 'Diaper logged', action: { label: 'Undo', run: () => ctx.events.remove(added.id) } });
+    ctx.toast({
+      message: DIAPER_TOAST[kind] || 'Diaper logged',
+      action: { label: 'Undo', run: () => ctx.events.remove(added.id) },
+      secondaryAction: {
+        label: 'Add details',
+        run: () => {
+          // Grow the details sheet from the row that just landed (else the +).
+          const row = [...document.querySelectorAll('[data-event-id]')]
+            .find((el) => el.getAttribute('data-event-id') === added.id && el.matches('button, a') && el.getClientRects().length);
+          ctx.sheets.diaper({ origin: row || ctx.fab, event: added });
+        },
+      },
+    });
   }
 
   // ------------------------------------------------------------ time picker step

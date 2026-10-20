@@ -54,18 +54,22 @@ function toastRoot() {
  * @param {{ label: string, run: () => (void|Promise<void>), doneMessage?: string }} [opts.action]
  *   one action button (usually Undo). After it runs the toast shows
  *   `doneMessage` (default "Restored" for Undo) for 1.2 s.
+ * @param {{ label: string, run: () => (void|Promise<void>) }} [opts.secondaryAction]
+ *   an optional second, quieter button (e.g. "Add details" next to Undo on a
+ *   one-tap diaper). It runs and the toast leaves at once.
  * @param {number} [opts.duration=5000] ms before it leaves on its own (0 = stays until dismissed)
  * @param {'default'|'success'|'warn'} [opts.tone]
  * @returns {ToastHandle}
  */
-export function toast({ message, action, duration = 5000, tone = 'default' } = {}) {
+export function toast({ message, action, secondaryAction, duration = 5000, tone = 'default' } = {}) {
   if (current) current.leave('replaced', true);
   const root = toastRoot();
   const safeTone = ['default', 'success', 'warn'].includes(tone) ? tone : 'default';
   const el = element(html`
     <div class="toast" data-tone="${safeTone}" data-state="pre">
       <p class="toast-msg">${message}</p>
-      ${action ? html`<button type="button" class="toast-action">${action.label}</button>` : ''}
+      ${action ? html`<button type="button" class="toast-action toast-action-1">${action.label}</button>` : ''}
+      ${secondaryAction ? html`<button type="button" class="toast-action toast-action-2">${secondaryAction.label}</button>` : ''}
     </div>`);
   root.appendChild(el);
   guardEnterTaps(el);
@@ -111,7 +115,17 @@ export function toast({ message, action, duration = 5000, tone = 'default' } = {
   el.addEventListener('focusin', pause);
   el.addEventListener('focusout', resume);
 
-  const btn = el.querySelector('.toast-action');
+  const btn2 = el.querySelector('.toast-action-2');
+  if (btn2 && secondaryAction) {
+    btn2.addEventListener('click', async () => {
+      if (leaving || btn2.disabled) return;
+      btn2.disabled = true;
+      leave('action');
+      try { await secondaryAction.run(); } catch (err) { console.error('toast action failed', err); }
+    });
+  }
+
+  const btn = el.querySelector('.toast-action-1');
   if (btn && action) {
     btn.addEventListener('click', async () => {
       if (leaving || btn.disabled) return;
@@ -130,6 +144,7 @@ export function toast({ message, action, duration = 5000, tone = 'default' } = {
       if (doneMessage) {
         el.querySelector('.toast-msg').textContent = doneMessage;
         btn.remove();
+        if (btn2) btn2.remove();
         el.classList.add('is-done');
         setTimeout(() => leave('action'), RESTORED_MS);
       } else {

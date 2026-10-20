@@ -1,86 +1,127 @@
-# Nurture — Baby Tracker
+# Nurture: a private baby tracker
 
-A free, offline-first progressive web app for tracking breast-milk pumping and feeding. No account, no backend, no tracking — all data lives in IndexedDB on the device.
+Nurture is a free baby tracker that works offline as a progressive web app. It logs feeds, sleep, diapers, pumping, the milk stash and memories. There is no account, no server, no analytics and no ads. Everything stays on the phone it was logged on.
 
-**Features**
-- Four tabs: **Pump** (goal, timer, trends, activity history), **Feed** (log feed, today's feeds, thaw from stash — each tab surfaces only the urgent items relevant to it, at the top), **Stash** (FIFO inventory), **Settings**
-- Pump session timer with one-tap output logging
-- Daily pumping goal with an animated bottle-fill progress visual, plus a next-pump-due readout
-- Today's Feeds tracker on the Feed tab — every feed row quick-edits via the tracker-entry editor
-- Thaw-from-stash tile on the Feed tab (shows only when frozen stash exists): frozen stash (oldest first) thaws into a "Thawed & ready" stash that feeds straight into the feed flow as a bottle-ready source
-- Feed logging in two speeds: a guided bottom-sheet flow (pick type → set amount with a 0.1oz slider, tap-to-type, or preset chips → **Start live timer** as the primary path for a feeding in progress, with a CDC safety countdown that answers "is this bottle still good," or Log finished feed for the "Look right?" review) and an **express gesture** — press-and-hold the elevated Feed nav button, slide up/down for formula vs breast milk (with a sticky, hysteresis-locked type picker), left/right for ounces, lift to review
-- Bottle timer: from inside the feed flow, watch the elapsed feed time alongside the per-type CDC safety countdown (formula 1h, breast milk 2h from first feed), then log how much was actually eaten — pace (oz/min) is recorded with the feed
-- Milk stash manager (fridge / freezer / deep freezer / thawed / room temp) with FIFO ordering and CDC-based expiration windows
-- 7-day supply trends chart (SVG, no dependencies)
-- Pump reminders with gentle chimes
-- Tracker entries are editable (Edit button on any session)
-- CSV export for the pediatrician, JSON backup / restore
-- 4-step onboarding: names, daily target, and an Add-to-Home-Screen install guide (iOS + Android)
-- Respects `prefers-reduced-motion`; pinch-zoom is not disabled
+> **Free. Private. Everything stays on this phone.**
 
-**Run it**
+## The privacy promise
 
-Any static file server works — the app is plain HTML/CSS/JS with ES modules:
+- **No network requests after the app loads.** The app ships only static files. Fonts and icons are self-hosted. A strict Content Security Policy (`default-src 'self'`, set in `netlify.toml` and repeated as a `<meta>` tag) blocks third-party scripts, styles, images and connections. Settings → Privacy shows a live count of requests to other sites, which should always read 0.
+- **Your data lives in IndexedDB on the device**, and photos are downscaled before they're stored. The app asks the browser not to evict that storage (`navigator.storage.persist()`).
+- **Yours to keep:** you can save a JSON backup (with or without photos), export a CSV for the pediatrician, import a backup (merge or replace), or erase everything.
+- Because there is no server, a lost phone means lost data. Nurture works against that in three ways:
+  - It suggests a weekly backup on Today. This is a card you can dismiss, never a pop-up.
+  - It presents Add to Home Screen as protection, because iPhone clears website storage after 7 days without use and Home Screen apps are exempt.
+  - Before any "replace" import, it saves a safety backup.
+
+## Features
+
+- **Today:** a masthead with the baby's name and age. Cards show the time since the last feed, sleep, diaper, pump and stash change, and their order and visibility can be changed. Below them are today's entries, newest first, plus the weekly backup card and an install hint.
+- **Quick log (the + button):**
+  - Tiles change with what's happening: a running bottle, which breast side to start on, pumping progress toward the goal, and starting or ending a nap.
+  - Wet, Dirty and Both each log a diaper in one tap, with Undo and "Add details".
+  - A time chip back-dates any entry.
+- **Feeding:**
+  - Bottles can be formula, breast milk, or milk from the stash.
+  - A live bottle shows a CDC safety countdown (formula 1 h; breast milk 2 h once feeding starts) and asks "How much did Clara drink?" when it ends.
+  - Breastfeeding has a left/right timer with pause and side switching.
+  - The **express gesture**: hold + and slide to log a bottle in one move.
+- **Pumping:** a live timer, past pumps, a daily goal, and "How much did you pump?" followed by storing the milk in the fridge or freezer.
+- **Sleep:** naps and night sleep, with live timers, past sleeps (checked for overlaps), and wake windows by age.
+- **Milk stash:** pouches in the fridge, freezer, deep freezer, at room temperature, or thawed. The fridge/freezer split bar and "Use next" suggestion work oldest first, and expiry badges follow CDC guidance. Pouches can be thawed, fed, marked used or discarded, and every action can be undone.
+- **Timeline:** a day pager, summary tiles that filter the list, a 24-hour strip (sleep, feeds, diapers, pumps), and an entry sheet to view, edit or delete any entry.
+- **Pediatrician report:** the last 7 or 14 days, which you can print or save as a PDF, or share as a CSV.
+- **Memories:** a keepsake book for each baby. It has a cover photo, 12 suggested firsts by typical age, photos grouped by week of life, and a photo viewer.
+- **Settings:**
+  - Babies (one or more), each with a photo that becomes the iPhone home-screen icon.
+  - Customize: turn trackers on or off and reorder Today's cards. Hidden trackers disappear everywhere but keep their data.
+  - oz or mL, Appearance (Auto, Light, Night), Reduce motion and Sound.
+  - Milk storage windows, and pump reminders added to your Calendar as an `.ics` file.
+  - Backup and data, Privacy, and About.
+- **Night mode:** warm and dim, and turned on automatically from 7 PM to 8 AM in Auto.
+- **Accessibility:** every control is a real button or input with a 44 px target and a visible focus ring. Sheets trap focus and return it when they close. Reduced motion is respected, both from the system and from the in-app setting.
+- **Twins and siblings:** feeds, sleep, diapers and memories are tracked per baby. Pumping and the stash are shared by the family.
+- **Upgrading from v1:** existing v1 data (sessions, stash and settings) moves over automatically on first launch.
+
+## Run it
+
+It's plain HTML, CSS and native ES modules, with no build step and no runtime dependencies. Any static file server works:
 
 ```sh
-npx serve .
-# or
 python3 -m http.server 8080
+# or
+npx serve .
 ```
 
-Then open the printed URL on your phone and use *Add to Home Screen* for the full-screen app experience with offline support.
+Open the printed URL. On a phone, use **Add to Home Screen** for the full-screen offline app.
 
-**Tests**
+## Tests
 
 ```sh
 npm test
 ```
 
-60 unit tests covering the safety-critical logic: milk expiration math, unit-safe totals (oz/mL), urgency badges, bottle countdown thresholds, thaw-from-stash transitions, stash summaries, feed-flow thawed-source prefills, feed-timer entry defaults, thaw-tile visibility rules, pump-duration validation, trend aggregation, ID generation, session editing, feed-flow gesture math (hysteresis, clamp/precision), and the bottle-timer safety windows. No dependencies — just Node's built-in test runner.
+The unit tests use Node's built-in `node:test` and cover every pure module:
 
-**Audit & roadmap**
+- units, time, format and html escaping
+- bottle safety and sleep wake windows
+- trends and the stash expiry engine (FIFO + CDC)
+- v1 migration, and backup validation, merge and CSV escaping
+- the pump schedule and `.ics` export
+- settings sanitising
+- the service-worker asset list and CSP guards
 
-See [`docs/AUDIT.md`](docs/AUDIT.md) — the full user-flow audit (dead clicks, animation continuity, accessibility, data bugs) and the build spec for the redesign + sleep / diaper / memories expansion.
+```sh
+PLAYWRIGHT_PATH=/opt/node-tools/node_modules/playwright/index.mjs npm run e2e
+```
 
-**Structure**
+The end-to-end suites run with Playwright, which is a dev-only tool. Point `PLAYWRIGHT_PATH` at a Playwright `index.mjs`, or install the `playwright` package. `tests/e2e/run.mjs` starts a throwaway static server on 127.0.0.1 and runs every `tests/e2e/*.mjs` script against it at 390×844.
+
+The suites cover the shell, motion and focus, Today, quick log, the feed, pump, sleep and diaper sheets, Timeline and the report, Stash, Memories, Settings, onboarding, and a full walkthrough of the app. Each one checks:
+
+- light and night themes, oz and mL, one baby and two
+- hidden trackers, empty data and lots of data
+- zero console errors, zero CSP violations and zero requests to other origins
+
+Screenshots go to `docs/design/build/`.
+
+## Structure
 
 ```
-index.html        App shell + onboarding flow
-manifest.json     PWA manifest (installable, standalone)
-sw.js             Service worker — offline-first cache
-css/style.css     All styling
+index.html            App shell only (no inline script or style; CSP meta)
+manifest.json         PWA manifest
+sw.js                 Service worker: precaches every shipped file, offline-first
+netlify.toml          Hosting headers (CSP, cache policy)
+arcade.json           Listing metadata for the owner's arcade
+fonts/                Self-hosted Fraunces + Nunito (OFL)
+icons/                Static app icons
+css/
+  tokens.css          Design tokens (light + night)
+  base.css            Reset, type, layout, focus ring
+  components.css      Buttons, cards, rows, sheet, toast, live pill, nav, …
+  views/*.css         One file per screen
+  sheets/*.css        One file per sheet
 js/
-  app.js            Thin orchestrator: shared settings state, navigation/tab
-                    switching, theme engine, the global delegated action
-                    dispatch, and the pure exported helpers the unit tests
-                    import directly (applySessionEdits, feed-flow math, etc.)
-  onboarding.js     4-step welcome/setup wizard (composed into App)
-  settingsView.js   Settings tab: preferences form, storage-window rules,
-                    backup/reset
-  pumpTimerView.js  Pump tab hero timer tile + the manual-pump modal
-  inventoryView.js  Stash tab: FIFO list + thaw/mark-used/discard actions
-                    (the shared inventory-mutation actions other views call)
-  dashboardView.js  Goal-bottle fill, activity history, trends chart, feeds
-                    tracker, thaw-from-stash tile, split urgent strips, and
-                    the session-edit modal
-  feedFlow.js       Guided feed-logging sheet, the press-and-hold express
-                    gesture, and the live bottle timer (per-type CDC safety
-                    countdown, persisted across reload)
-  installPrompt.js  PWA install banner (Pump tab) + Settings entry point +
-                    manual iOS/Android install-guide modal, wired to the
-                    native beforeinstallprompt event where supported
-  viewHelpers.js    Small pure display helpers (escapeHtml, displayQty)
-                    shared between dashboardView.js and feedFlow.js
-  db.js             IndexedDB layer (NurtureDB) + collision-safe IDs
-  timer.js          Pump timer with wall-clock restore
-  inventory.js      FIFO stash engine + expiration math
-  bottles.js        Legacy bottle-status helper — superseded by the live
-                    bottle-timer in feedFlow.js; kept only because it still
-                    has passing tests
-  reminders.js      Pump schedule + local notifications
-  trends.js         Daily aggregates + SVG chart
-  export.js         CSV export + JSON backup/restore
-  audio.js          Soft chime synthesizer (baby-sleep-safe)
-icons/            PWA icons
-tests/            Unit tests (node:test)
+  app.js              Bootstrap: theme, migration, ctx, router, live pills
+  theme-boot.js       Sets the theme before first paint
+  core/               Data layer: IndexedDB, events store, stash, photos,
+                      settings, units, time, migrate (v1 → v2), backup,
+                      persist, reminders, ics, audio
+  domain/             Pure logic: inventory (FIFO + CDC), safety, sleep, trends
+  ui/                 Primitives: html (safe templates), icons, sheet, toast,
+                      confirm, router, livePill, format
+  views/              today, timeline, report, stash, memories, settings, onboarding
+  sheets/             quickLog, feed, pump, sleep, diaper, event, stash, memory
+tests/
+  *.test.js           Unit tests (node:test)
+  e2e/*.mjs           Playwright suites + fixtures
+docs/
+  DESIGN.md           Design system, motion contract, screen layouts, copy voice
+  ARCHITECTURE.md     Module contracts
+  AUDIT.md            The v1 audit that motivated the rebuild
+  design/             Target frames (final/) and build screenshots (build/)
 ```
+
+## License
+
+MIT. The fonts are under the SIL Open Font License 1.1 (see `fonts/`).

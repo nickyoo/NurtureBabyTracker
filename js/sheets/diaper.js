@@ -204,6 +204,18 @@ function openWhen(ctx, { origin, value = null, title = 'When?', nowLabel = 'Now'
  * @param {object} [opts.event] a logged diaper → edit its details (time, kind, color, texture, note)
  * @returns {object} sheet api
  */
+/**
+ * "Add details" from the one-tap toast: open the details step for the diaper
+ * just logged, growing from its new row when one is on screen (else the +).
+ * @param {object} ctx
+ * @param {object} added the diaper event
+ */
+function openDetailsFor(ctx, added) {
+  const row = [...document.querySelectorAll('[data-event-id]')]
+    .find((el) => el.getAttribute('data-event-id') === added.id && el.matches('button, a') && el.getClientRects().length);
+  return ctx.sheets.diaper({ origin: row || ctx.fab, event: added });
+}
+
 export function openDiaperSheet(ctx, { origin = null, preset = null, event = null } = {}) {
   const { html, render } = ctx.html;
   const I = (name, size = 20) => ctx.icons.iconHtml(name, { size });
@@ -375,6 +387,7 @@ export function openDiaperSheet(ctx, { origin = null, preset = null, event = nul
       ctx.toast({
         message: `${bits.join(' · ')}${multi ? ` for ${name}` : ''}`,
         action: { label: 'Undo', doneMessage: 'Removed', run: () => ctx.events.remove(added.id) },
+        secondaryAction: { label: 'Add details', run: () => openDetailsFor(ctx, added) },
       });
     });
     return () => { paintCounts = null; };

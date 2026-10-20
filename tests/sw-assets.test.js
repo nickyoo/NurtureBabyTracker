@@ -15,14 +15,21 @@ import { fileURLToPath } from 'node:url';
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const rel = (p) => relative(ROOT, p).split(sep).join('/');
 
-// v1 files still on disk while their tests are ported. They are NOT shipped
-// by the v2 app (index.html never loads them). Delete entries as files go.
+// The v1 app is retired: none of its files may come back (a v1 js/db.js
+// opened IndexedDB at version 1 and would fail against the v2 database).
 const LEGACY_V1 = new Set([
   'js/app.v1.js', 'js/audio.js', 'js/bottles.js', 'js/dashboardView.js', 'js/db.js', 'js/export.js',
   'js/feedFlow.js', 'js/installPrompt.js', 'js/inventory.js', 'js/inventoryView.js', 'js/onboarding.js',
   'js/pumpTimerView.js', 'js/reminders.js', 'js/settingsView.js', 'js/timer.js', 'js/trends.js',
   'js/viewHelpers.js', 'css/style.css',
 ]);
+
+test('v1 is retired: no legacy file is on disk (arcade.json stays for the arcade listing)', () => {
+  for (const f of LEGACY_V1) assert.ok(!existsSync(join(ROOT, f)), `legacy v1 file is back: ${f}`);
+  assert.ok(existsSync(join(ROOT, 'arcade.json')), 'arcade.json must stay');
+  const page = readFileSync(join(ROOT, 'index.html'), 'utf8');
+  assert.ok(!/arcade-back-pill/.test(page), 'no arcade back pill in the v2 shell');
+});
 
 function walk(dir) {
   const out = [];
@@ -40,7 +47,7 @@ const ASSETS = new Set([...(assetBlock ? assetBlock[1] : '').matchAll(/'([^']+)'
 
 test('sw.js lists every shipped file under js/, css/, fonts/, icons/', () => {
   assert.ok(assetBlock, 'could not find const ASSETS = [...] in sw.js');
-  const shipped = ['js', 'css', 'fonts', 'icons'].flatMap(walk).filter((f) => !LEGACY_V1.has(f));
+  const shipped = ['js', 'css', 'fonts', 'icons'].flatMap(walk);
   const missing = shipped.filter((f) => !ASSETS.has(f));
   assert.deepEqual(missing, [], `add these to ASSETS in sw.js: ${missing.join(', ')}`);
 });
@@ -54,8 +61,14 @@ test('every sw.js asset exists on disk and none is a legacy v1 file', () => {
   for (const must of ['', 'index.html', 'manifest.json']) assert.ok(ASSETS.has(must), `ASSETS must include ./${must}`);
 });
 
-test('sw.js cache name is bumped for v2', () => {
-  assert.match(swSource, /const CACHE_NAME = 'nurture-v2\.0\.0-dev';/);
+test('sw.js cache name is the v2.0.0 release (bump with APP_VERSION in views/settings.js)', () => {
+  assert.match(swSource, /const CACHE_NAME = 'nurture-v2\.0\.0';/);
+  const settingsSrc = readFileSync(join(ROOT, 'js/views/settings.js'), 'utf8');
+  const v = /APP_VERSION = '([^']+)'/.exec(settingsSrc);
+  assert.ok(v, 'APP_VERSION in js/views/settings.js');
+  assert.match(swSource, new RegExp(`const CACHE_NAME = 'nurture-v${v[1].replace(/\./g, '\\.')}';`), 'CACHE_NAME and APP_VERSION move together');
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  assert.equal(pkg.version, v[1], 'package.json version matches APP_VERSION');
   assert.match(swSource, /cache: 'reload'/);
 });
 

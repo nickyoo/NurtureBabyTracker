@@ -59,3 +59,10 @@
 
 /* Stale card value ("—"): calm, not a heavy bar. */
 .today .ql-val.is-dash { color: var(--text-3); font-weight: var(--fw-body); }
+
+/* A live card whose label + chip don't fit (narrow phones): the label's icon
+   steps aside (set by fitTop in views/today.js), and as a last resort the
+   label clips rather than pushing the chip out of the card. */
+.today .ql.is-tight .ql-label .ic { display: none; }
+.today .ql-top > .ql-label { min-width: 0; overflow: hidden; white-space: nowrap; }
+.today .ql-top > .live-chip { flex: none; }

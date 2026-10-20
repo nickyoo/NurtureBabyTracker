@@ -44,8 +44,9 @@ test('breastfeeding: running side and paused state', () => {
 test('sleep and pump wording; the baby is named only with 2+ babies', () => {
   const nap = { id: 's', type: 'sleep', startTime: T0 - 55 * MIN, endTime: null, babyId: 'baby_a', data: { kind: 'nap' } };
   assert.equal(pillModel(nap, T0).title, 'Nap');
-  assert.equal(pillModel(nap, T0).finishLabel, 'Wake up');
+  assert.equal(pillModel(nap, T0).finishLabel, 'End nap');
   assert.equal(pillModel({ ...nap, data: { kind: 'night' } }, T0).title, 'Night sleep');
+  assert.equal(pillModel({ ...nap, data: { kind: 'night' } }, T0).finishLabel, 'Wake up');
   const babies = [{ id: 'baby_a', name: 'Ada' }, { id: 'baby_b', name: 'Bo' }];
   assert.equal(pillModel(nap, T0, { babies }).title, 'Ada · Nap');
   assert.equal(pillModel(nap, T0, { babies: [babies[0]] }).title, 'Nap');

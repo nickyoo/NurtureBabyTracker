@@ -401,6 +401,26 @@ export function isDayOffset(ts, offsetDays, now = Date.now()) {
   return daysBetween(addDays(now, offsetDays), ts) === 0;
 }
 
+/**
+ * Is this event's tracker switched on? Hidden trackers disappear everywhere
+ * (DESIGN §10) — their data stays. Bottle vs breastfeed follow their own
+ * toggles; unknown types are never shown.
+ * @param {object} e an event
+ * @param {Record<string, boolean>} [t] settings.trackers
+ * @returns {boolean}
+ */
+export function eventVisible(e, t = {}) {
+  const tr = t || {};
+  switch (e && e.type) {
+    case 'feed': return e.data && e.data.method === 'breast' ? tr.breastfeeding !== false : tr.bottle !== false;
+    case 'pump': return tr.pump !== false;
+    case 'sleep': return tr.sleep !== false;
+    case 'diaper': return tr.diaper !== false;
+    case 'milestone': return tr.memories !== false;
+    default: return false;
+  }
+}
+
 /** Hours/minutes constants re-exported for view math. */
 export { MINUTE, HOUR };
 
@@ -408,5 +428,5 @@ export { MINUTE, HOUR };
 export const format = Object.freeze({
   CATEGORY, categoryOf, categoryClass, amount, amountSplit, spanParts, span, since, spanSpoken,
   clock, clockParts, durationLabel, dayLabel, dateLabel, eyebrowDate, babyAge, babyName, possessive,
-  plural, eventTitle, eventSubtitle, eventAmount, eventLabel, isDayOffset,
+  plural, eventTitle, eventSubtitle, eventAmount, eventLabel, isDayOffset, eventVisible,
 });

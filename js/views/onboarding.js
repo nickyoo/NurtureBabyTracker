@@ -35,7 +35,7 @@ const ML_PER_OZ = 29.5735;
  * they are still at their defaults here: a merge import keeps local settings,
  * but a parent restoring onto a new phone expects their mL, hidden trackers
  * and goal to come back with the log. */
-const RESTORE_PREFS = Object.freeze(['units', 'theme', 'trackers', 'todayOrder', 'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound']);
+const RESTORE_PREFS = Object.freeze(['units', 'theme', 'trackers', 'todayOrder', 'pumpGoalOz', 'pumpIntervalMinutes', 'storageWindows', 'sound', 'memoryCovers']);
 
 function lsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
 function lsSet(key, v) { try { localStorage.setItem(key, v); } catch { /* private mode */ } }
@@ -163,7 +163,8 @@ export default {
       if (dotsEl.children.length !== list.length) render(dotsEl, html`${list.map(() => html`<i></i>`)}`);
       [...dotsEl.children].forEach((d, n) => d.classList.toggle('is-on', n === i));
       // The last step's own buttons finish; a Skip there would be a duplicate.
-      skipBtn.hidden = stepKey === 'install';
+      // It fades and keeps its place, so the dots don't jump sideways.
+      skipBtn.classList.toggle('is-off', stepKey === 'install');
     }
 
     // ------------------------------------------------------------ steps

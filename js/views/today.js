@@ -23,6 +23,7 @@
 import { classifyNapOrNight } from '../domain/sleep.js';
 import { pumpProgress } from '../domain/trends.js';
 import { breastSideTotals } from '../domain/safety.js';
+import { eventVisible } from '../ui/format.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const NUDGE_SNOOZE_MS = 3 * DAY_MS;          // "Not now" quiets the backup card this long
@@ -47,17 +48,6 @@ function isIOS() {
   return /iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1);
 }
 
-/** Is this event's tracker visible? (Hidden trackers disappear everywhere.) */
-function eventVisible(e, t) {
-  switch (e.type) {
-    case 'feed': return e.data && e.data.method === 'breast' ? t.breastfeeding !== false : t.bottle !== false;
-    case 'pump': return t.pump !== false;
-    case 'sleep': return t.sleep !== false;
-    case 'diaper': return t.diaper !== false;
-    case 'milestone': return t.memories !== false;
-    default: return false;
-  }
-}
 
 /** Today's cards, in the family's order, visible trackers only. */
 function visibleCards(order, t) {
@@ -207,6 +197,9 @@ export default {
     const spoken = (value, u) => `${value} ${UNIT_SPOKEN[u][Number(value) === 1 ? 0 : 1]}`;
     const whenLine = (ts, now) => (ctx.time.isSameDay(ts, now) ? `at ${F.clock(ts)}` : `${F.dayLabel(ts, now)} at ${F.clock(ts)}`);
 
+    // "Just now" stands alone: the sub-line drops its "ago ·" until a minute has passed.
+    const ago = (ts, now) => (F.spanParts(now - ts).length ? 'ago · ' : '');
+
     function valueOfSpan(ms) {
       const parts = F.spanParts(ms);
       if (!parts.length) return { words: 'Just now', sig: 'now' };
@@ -246,12 +239,12 @@ export default {
           let what; let whatSpoken;
           if (dd.method === 'breast') {
             const secs = breastSideTotals(dd, e.endTime ?? now).total;
-            what = html`ago · <b>${F.durationLabel(secs * 1000)}</b> breastfeed`;
+            what = html`${ago(e.startTime, now)}<b>${F.durationLabel(secs * 1000)}</b> breastfeed`;
             whatSpoken = `breastfed ${F.durationLabel(secs * 1000)}`;
           } else {
             const a = F.amountSplit(dd.amount, dd.unit, u);
             const milk = dd.milk === 'formula' ? 'formula' : 'breast milk';
-            what = a.missing ? html`ago · ${milk} bottle` : html`ago · <b>${a.value} ${a.unit}</b> ${milk}`;
+            what = a.missing ? html`${ago(e.startTime, now)}${milk} bottle` : html`${ago(e.startTime, now)}<b>${a.value} ${a.unit}</b> ${milk}`;
             whatSpoken = a.missing ? `${milk} bottle` : `${spoken(a.value, a.unit)} ${milk}`;
           }
           const method = t.bottle === false ? 'breast' : t.breastfeeding === false ? 'bottle' : (dd.method === 'breast' ? 'breast' : 'bottle');
@@ -310,7 +303,7 @@ export default {
           return {
             key, cat: 'diaper', icon: 'diaper', label: 'Diaper',
             value: valueOfSpan(now - e.startTime), anchor: e.startTime,
-            sub1: html`ago · <b>${word}</b>`,
+            sub1: html`${ago(e.startTime, now)}<b>${word}</b>`,
             sub2: html`${when}${count ? ` · ${count} today` : ''}`,
             aria: `Diaper ${F.spanSpoken(now - e.startTime)} ago, ${word}, ${when}${count ? `, ${count} today` : ''}. Log a diaper.`,
             tap: { kind: 'open', sheet: 'diaper' },
@@ -347,7 +340,7 @@ export default {
           return {
             ...base, label: 'Pumped',
             value: valueOfSpan(now - e.startTime), anchor: e.startTime,
-            sub1: a.missing ? html`ago · ${at}` : html`ago · <b>${a.value} ${a.unit}</b> · ${at}`,
+            sub1: a.missing ? html`${ago(e.startTime, now)}${at}` : html`${ago(e.startTime, now)}<b>${a.value} ${a.unit}</b> · ${at}`,
             sub2: goal ? null : html`<b>${String(prog.total)} ${prog.unit}</b> today`,
             aria: `Pumped ${F.spanSpoken(now - e.startTime)} ago${a.missing ? '' : `, ${spoken(a.value, a.unit)}`}, at ${F.clock(e.startTime)}. ${progSpoken}. Log a pump.`,
             tap: { kind: 'open', sheet: 'pump' },
@@ -404,6 +397,16 @@ export default {
           : html`<span class="ql-sub">${m.sub2}</span>`}`;
     }
 
+    // A live chip next to a long label ("Pumping ● Now", "Feeding ● Paused")
+    // can be wider than a half-width card on a narrow phone: drop the
+    // label's icon first (the chip and the words still say it's running).
+    function fitTop(el) {
+      const label = el.querySelector('.ql-top > .ql-label');
+      if (!label) return;
+      el.classList.remove('is-tight');
+      if (el.classList.contains('is-live') && label.scrollWidth > label.clientWidth + 1) el.classList.add('is-tight');
+    }
+
     const cardSig = (m) => [m.key, m.icon, m.label, m.live ? m.chip : '', m.stale ? '—' : m.value.sig, String(m.sub1), m.goal ? JSON.stringify(m.goal) : String(m.sub2), m.aria].join('|');
 
     function paintCards(now, { fresh = false } = {}) {
@@ -447,6 +450,7 @@ export default {
         el.className = `ql cat-${m.cat}${m.live ? ' is-live' : ''}${el.classList.contains('is-sheet-origin') ? ' is-sheet-origin' : ''}`;
         el.setAttribute('aria-label', m.aria);
         render(el, cardInner(m));
+        fitTop(el);
         const bar = el.querySelector('.goal-bar > i');
         if (bar && m.goal) {
           // Animate the fill only when its value changes (motion #14).
@@ -535,8 +539,7 @@ export default {
       if (btn.getAttribute('aria-busy') === 'true') return;
       btn.setAttribute('aria-busy', 'true');
       try {
-        const mod = ctx.backup ? { backup: ctx.backup } : await import('../core/backup.js');
-        const result = await mod.backup.share();
+        const result = await ctx.backup.share();
         if (result !== 'cancelled') {
           nudgeState.backup = false;
           paintNotes();

@@ -257,8 +257,41 @@ export async function usage() {
   return { count: all.length, bytes: all.reduce((n, r) => n + ((r.blob && r.blob.size) || 0), 0) };
 }
 
+/**
+ * Which stored photos nobody refers to any more and are old enough to be
+ * safe to drop. Pure. A photo younger than `minAgeMs` is always kept: it may
+ * belong to a memory sheet still open (in this or another tab), or to a
+ * delete whose Undo is still on screen.
+ * @param {Array<{id: string, createdAt?: number}>} records
+ * @param {Iterable<string>} referenced photo ids still in use
+ * @param {{ now?: number, minAgeMs?: number }} [opts]
+ * @returns {string[]}
+ */
+export function orphanPhotoIds(records, referenced, { now = Date.now(), minAgeMs = 24 * 60 * 60 * 1000 } = {}) {
+  const keep = new Set(referenced);
+  return (records || [])
+    .filter((r) => r && typeof r.id === 'string' && !keep.has(r.id)
+      && Number.isFinite(r.createdAt) && now - r.createdAt >= minAgeMs)
+    .map((r) => r.id);
+}
+
+/**
+ * Delete orphaned photos (see orphanPhotoIds). Photos only become orphans
+ * when the app closes while a memory delete's Undo toast is still showing,
+ * so this runs rarely and quietly (app.js, after boot).
+ * @param {Iterable<string>} referenced every photo id an event or baby uses
+ * @param {{ now?: number, minAgeMs?: number }} [opts]
+ * @returns {Promise<number>} how many were removed
+ */
+export async function sweepOrphans(referenced, opts = {}) {
+  const all = await getAll(STORES.photos);
+  const ids = orphanPhotoIds(all.map((r) => ({ id: r.id, createdAt: r.createdAt })), referenced, opts);
+  for (const id of ids) await remove(id);
+  return ids.length;
+}
+
 // `photos.delete(id)` per ARCHITECTURE §2 — `delete` is fine as an export name.
 export { remove as delete };
 
 /** The photos API as one object, for ctx injection. `delete` is an alias of remove. */
-export const photos = Object.freeze({ add, get, getRecord, remove, delete: remove, makeIconDataUrl, usage, subscribe });
+export const photos = Object.freeze({ add, get, getRecord, remove, delete: remove, makeIconDataUrl, usage, subscribe, sweepOrphans });

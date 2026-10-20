@@ -78,7 +78,7 @@ tests/
   e2e/*.mjs                Playwright walkthroughs (run against `python3 -m http.server`)
 ```
 
-Legacy v1 modules (`dashboardView.js`, `feedFlow.js`, `pumpTimerView.js`, `inventoryView.js`, `settingsView.js`, `bottles.js`, `viewHelpers.js`, `css/style.css`) are deleted once their behavior is ported. Their pure helpers move (with their tests) into `domain/` and `core/`.
+The legacy v1 modules (`app.v1.js`, `dashboardView.js`, `feedFlow.js`, `pumpTimerView.js`, `inventoryView.js`, `settingsView.js`, `bottles.js`, `viewHelpers.js`, `db.js`, `css/style.css`, …) were deleted in v2.0.0 once their behavior was ported; their pure helpers moved (with their tests) into `domain/` and `core/`, and `tests/sw-assets.test.js` keeps them from coming back. v1 *data* is still migrated by `core/migrate.js`.
 
 ---
 
@@ -201,7 +201,7 @@ export default {
 }
 ```
 
-`ctx` = `{ router, openSheet, toast, confirmSheet, settings, events, stash, photos, units, time, format, icons }` — everything a view needs, injected, so views don't import siblings.
+`ctx` = `{ router, openSheet, toast, confirmSheet, settings, events, stash, photos, units, time, format, icons, persist, backup, safety, html, livePill, sheets, activeBaby(), motionReduced(), sheetsBusy(), whenSheetsIdle(), fab }` — everything a view needs, injected, so views don't import siblings.
 
 ### 5.3 Sheet module contract
 
@@ -239,6 +239,9 @@ settings.get(key) / settings.set(key, value) / settings.all() / settings.subscri
 | `deviceId` | generated once | |
 | `onboarded` | `false` | |
 | `migratedV2` | `false` | |
+| `iconDataUrl` | `null` | 180×180 PNG of the baby photo (§10), per device |
+| `iconBabyId` | `null` | whose photo the icon is, per device |
+| `memoryCovers` | `{}` | `{ [babyId]: eventId }`, the cover of each baby's book; exported |
 
 ---
 
@@ -251,7 +254,7 @@ settings.get(key) / settings.set(key, value) / settings.all() / settings.subscri
 - Behavior: focus moves into the sheet, is trapped, and is restored to `origin` on close; `Esc`, backdrop tap and grabber drag-down dismiss when `dismissible`; app root gets `inert` while open; body scroll locked; nested sheets stack.
 - A running live activity's sheet is always dismissible — the activity keeps running and its live pill remains (fixes AUDIT F4 permanently).
 
-### 7.2 `toast({ message, action?: { label:'Undo', run }, duration = 5000, tone })`
+### 7.2 `toast({ message, action?: { label:'Undo', run }, secondaryAction?: { label, run }, duration = 5000, tone })`
 Rises from just above the nav / live pill (never from the top edge). One at a time; a new toast replaces the old. `aria-live="polite"`.
 
 ### 7.3 `confirmSheet({ title, body, confirmLabel, destructive }) → Promise<boolean>`

@@ -3,7 +3,7 @@
 // The canvas/IndexedDB paths run in Chromium: tests/e2e/core.mjs.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitWithin, squareCrop, MAX_EDGE, JPEG_QUALITY, PhotoDecodeError } from '../js/core/photos.js';
+import { fitWithin, squareCrop, MAX_EDGE, JPEG_QUALITY, PhotoDecodeError, orphanPhotoIds } from '../js/core/photos.js';
 import { sanitizeInventoryItem, StashNotFoundError } from '../js/core/stash.js';
 
 const NOW = new Date('2026-10-15T12:00:00').getTime();
@@ -65,4 +65,18 @@ test('sanitizeInventoryItem: rejects unusable pouches, repairs the rest', () => 
 test('StashNotFoundError carries the id', () => {
   const e = new StashNotFoundError('inv_x');
   assert.deepEqual([e.name, e.id], ['StashNotFoundError', 'inv_x']);
+});
+
+test('orphanPhotoIds: only unreferenced photos older than a day are dropped', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+  const recs = [
+    { id: 'pho_used', createdAt: NOW - 30 * DAY },
+    { id: 'pho_old', createdAt: NOW - 2 * DAY },
+    { id: 'pho_fresh', createdAt: NOW - 60 * 1000 },   // maybe in an open sheet / Undo window
+    { id: 'pho_nodate' },                               // unknown age: kept
+  ];
+  assert.deepEqual(orphanPhotoIds(recs, ['pho_used'], { now: NOW }), ['pho_old']);
+  assert.deepEqual(orphanPhotoIds(recs, new Set(['pho_used', 'pho_old']), { now: NOW }), []);
+  assert.deepEqual(orphanPhotoIds(recs, [], { now: NOW, minAgeMs: 0 }).sort(), ['pho_fresh', 'pho_old', 'pho_used']);
+  assert.deepEqual(orphanPhotoIds(null, [], { now: NOW }), []);
 });

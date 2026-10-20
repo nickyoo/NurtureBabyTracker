@@ -318,6 +318,8 @@ try {
     // Make a real backup with the app's own exporter.
     const { context: c0, page: p0 } = await freshPage();
     await p0.fill('[data-field="name"]', 'Juno');
+    await setSetting(p0, 'units', 'mL');
+    await p0.evaluate(async (url) => { const { settings } = await import(url); await settings.patch('trackers', { memories: false }); }, mod('/js/core/settings.js'));
     await p0.click('[data-action="start"]');
     await p0.waitForSelector('[data-view="today"]');
     const backup = await p0.evaluate(async ([s, b]) => {
@@ -342,6 +344,7 @@ try {
     check('restore merges and lands on Today', await activeView(page) === 'today' && await getSetting(page, 'onboarded') === true);
     check('restored baby + entries', (await activeBaby(page)).name === 'Juno'
       && await page.evaluate(async (s) => (await (await import(s)).events.query({ type: 'diaper' })).length === 2, mod('/js/core/store.js')));
+    check('the backup’s preferences come back on a fresh phone (mL, Memories hidden)', await getSetting(page, 'units') === 'mL' && (await getSetting(page, 'trackers')).memories === false);
     check('welcome-back toast', (await page.textContent('#toastRoot')).includes('Welcome back · 2 entries restored'), await page.textContent('#toastRoot'));
     await context.close();
   }
