@@ -536,6 +536,12 @@ try {
       const l = document.querySelector('.sheet-layer.sheet-st-import');
       return !!l && /Is Clara Rose the same baby as Clara\?/.test(l.textContent) && !!l.querySelector('[data-choice="new"]');
     }));
+    check('DI-04: the question reads as one sentence (not one flex item per word run)', await page.evaluate(() => {
+      const p = [...document.querySelectorAll('.sheet-st-import p')].find((x) => /backup’s baby is/.test(x.textContent));
+      if (!p) return false;
+      const b = p.querySelectorAll('b');
+      return getComputedStyle(p).display === 'block' && b.length === 2 && Math.abs(b[0].getBoundingClientRect().top - p.getBoundingClientRect().top) < 4;
+    }));
     await page.click('.sheet-st-import [data-choice="same"]');
     const roseToast = await waitToast(page, /Merged/);
     check('DI-04: "Same baby" merges onto Clara (no second baby)', /1 entry added/.test(roseToast || '') && await page.evaluate(async ([u, s]) => {
@@ -663,9 +669,10 @@ try {
     }));
     const [rmSafety] = await Promise.all([p2.waitForEvent('download', { timeout: 6000 }).catch(() => null), p2.click('.sheet-confirm [data-confirm]')]);
     check('FLOW-05: a safety backup is saved first', !!rmSafety && /before-removing/.test(rmSafety.suggestedFilename()), rmSafety && rmSafety.suggestedFilename());
-    const rmToast = await waitToast(p2, /Theo removed/);
-    check('FLOW-05: "Theo removed" with Undo; Theo and the entry are gone; back on Settings', !!rmToast
+    const rmToast = await waitToast(p2, /Theo removed · Today shows Clara/);
+    check('FLOW-05: "Theo removed · Today shows Clara" with Undo; Theo and the entry are gone; Today on Clara; back on Settings', !!rmToast
       && (await S(p2, 'return settings.babies().map((b) => b.name).join(",");')) === 'Clara'
+      && (await S(p2, 'return settings.activeBaby().name;')) === 'Clara'
       && await p2.evaluate(async (u) => (await (await import(u)).events.query({ type: 'diaper' })).length === 0, mod('/js/core/store.js'))
       && (await top(p2)).page === 'st-page-root', JSON.stringify(await top(p2)));
     await settle(p2, 400); // past the toast's enter-tap guard

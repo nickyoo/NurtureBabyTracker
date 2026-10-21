@@ -313,7 +313,7 @@ export function openEventSheet(ctx, { origin = null, id = null, event = null, pr
     const missingAmount = (k === 'bottle' || k === 'pump') && !running && (!amt || amt.missing);
     return html`<div class="ev ev-view cat-${cat}">
         <div class="ev-hero">
-          <span class="chip-ic${running ? ' ring-live' : ''}">${I(iconName, 22)}</span>
+          <span class="chip-ic${running ? ' ring-live' : ''}" data-sheet-icon>${I(iconName, 22)}</span>
           <div class="ev-hero-text">
             ${hero ? html`<p class="ev-big"><span aria-hidden="true" data-big>${hero.tpl}</span><span class="sr-only" data-big-sr>${hero.spoken}</span></p>` : ''}
             <p class="ev-when" data-when>${whenLine(e, now)}</p>

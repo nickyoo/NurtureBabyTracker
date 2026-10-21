@@ -28,6 +28,7 @@
 // skeleton patched in place, so focus and pressed states survive refreshes.
 
 import { effectiveStatus, FROZEN_LOCATIONS, THAWED_LOCATION, DEFAULT_STORAGE_WINDOWS } from '../domain/inventory.js';
+import { stashTotalsByUnit } from '../core/stash.js';
 
 const MINUTE = 60 * 1000;
 const HOUR = 60 * MINUTE;
@@ -193,8 +194,10 @@ export default {
       const usable = d.all.filter((i) => effectiveStatus(i, now) === 'active');
       const expired = d.all.filter((i) => effectiveStatus(i, now) === 'expired' && now - i.expiresAt < EXPIRED_SHOWN_MS);
       const archived = d.all.filter((i) => effectiveStatus(i, now) !== 'active').length;
-      const inUnit = (i) => ctx.units.convertQty(i.quantity, i.unit, unit);
-      const sum = (list) => ctx.units.roundForUnit(list.reduce((a, i) => a + inUnit(i), 0), unit);
+      // DI-10: the same unrounded per-unit sums Today's Stash card uses
+      // (stash.stashTotalsByUnit), rounded once, so the two always agree.
+      const by = stashTotalsByUnit(usable)[unit] || { total: 0, fresh: 0, frozen: 0 };
+      const round = (n) => ctx.units.roundForUnit(n, unit);
       const fresh = usable.filter((i) => !isFrozen(i));
       const frozen = usable.filter(isFrozen);
       const secs = {
@@ -217,7 +220,7 @@ export default {
       if (!hero && expired.length) hero = secs.expired[0];
       return {
         now, unit, usable, expired, archived, secs, hero, bottle,
-        total: sum(usable), freshAmt: sum(fresh), frozenAmt: sum(frozen), freshCount: fresh.length, frozenCount: frozen.length,
+        total: round(by.total), freshAmt: round(by.fresh), frozenAmt: round(by.frozen), freshCount: fresh.length, frozenCount: frozen.length,
       };
     }
 

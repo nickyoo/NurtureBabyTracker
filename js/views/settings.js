@@ -1022,28 +1022,11 @@ export default {
       });
     }
 
+    // One summary for every import (backup.describeImport): names each added
+    // baby and where to switch to it (DI-04), counts skipped entries (DI-11)
+    // and stopped timers (DI-12), and claims only the copy kept here (DI-01).
     function importSummary(res) {
-      if (res.mode === 'replace') {
-        // DI-01: only claim what is confirmed — the copy kept on this phone.
-        return res.safetyKept ? 'Replaced with the backup. What was here is kept on this phone.' : 'Replaced with the backup';
-      }
-      const s = res.stats || {};
-      const ev = (s.events ? s.events.added + s.events.updated : 0);
-      const inv = (s.inventory ? s.inventory.added + s.inventory.updated : 0);
-      const ph = (s.photos ? s.photos.added : 0);
-      const parts = [];
-      if (ev) parts.push(F.plural(ev, 'entry', 'entries'));
-      if (inv) parts.push(F.plural(inv, 'pouch', 'pouches'));
-      if (ph) parts.push(F.plural(ph, 'photo'));
-      let msg = parts.length ? `Merged · ${parts.join(', ')} added` : 'Already up to date · nothing new in that file';
-      // DI-04: a baby the merge added is named, never silent.
-      const born = ((s.babies && s.babies.addedBabies) || []).map((b) => b.name).filter(Boolean);
-      if (born.length) msg += ` · new baby: ${born.join(', ')}`;
-      // DI-11: what couldn't be read is said, not hidden.
-      const rej = s.rejected || {};
-      const skipped = (rej.events || 0) + (rej.inventory || 0);
-      if (skipped) msg += ` · ${F.plural(skipped, 'entry', 'entries')} skipped`;
-      return msg;
+      return (ctx.backup && ctx.backup.describeImport ? ctx.backup : backup).describeImport(res);
     }
 
     async function undoReplace(origin) {
@@ -1099,7 +1082,7 @@ export default {
           const ask = (q) => {
             api.setTitle(`Is ${q.incoming.name} the same baby as ${q.local.name}?`);
             render(body, html`
-              <p class="st-choice">The backup’s baby is <b>${q.incoming.name}</b>. This phone has <b>${q.local.name}</b>.</p>
+              <div class="st-choice"><p>The backup’s baby is <b>${q.incoming.name}</b>. This phone has <b>${q.local.name}</b>.</p></div>
               <p class="field-error" data-error hidden></p>
               <div class="sheet-footer">
                 <button type="button" class="btn btn-primary btn-block" data-choice="same">${`Same baby · merge into ${q.local.name}`}</button>
@@ -1246,8 +1229,10 @@ export default {
       });
     }
 
-    // FLOW-05: remove a baby (never the last one), behind a confirm sheet,
-    // with a safety backup first (backup.removeBaby) and Undo.
+    // FLOW-05: remove a baby (never the last one), behind a confirm sheet.
+    // settings.removeBaby saves the safety backup file first (downloaded
+    // before anything is deleted; if that fails nothing is removed), keeps a
+    // copy on this phone for Undo, and moves Today to the remaining baby.
     async function removeBabyFlow(origin) {
       const b = pageBaby();
       if (!b || babies().length < 2 || busyAction) return;
@@ -1265,16 +1250,27 @@ export default {
       if (!ok) return;
       await run('remove-baby', async () => {
         try {
-          const res = await backup.removeBaby(b.id);
+          const bk = ctx.backup || backup;
+          const res = await S.removeBaby(b.id, { safetyBackup: (file) => bk.downloadFile(file) });
           safetyInfo = { createdAt: Date.now() };
           if (!stopped) { try { ctx.router.back(); } catch { /* already gone */ } }
+          const left = S.activeBaby();
+          const leftName = left ? F.babyName(left, '') : '';
           ctx.toast({
-            message: `${who === 'this baby' ? 'Baby' : who} removed`,
-            action: res.safetyKept ? { label: 'Undo', run: () => backup.restoreSafetyCopy().then(() => { safetyInfo = null; }) } : undefined,
+            message: `${who === 'this baby' ? 'Baby' : who} removed${leftName ? ` · Today shows ${leftName}` : ''}`,
+            action: res && res.safetyKept ? { label: 'Undo', run: () => bk.restoreSafetyCopy().then(() => { safetyInfo = null; }) } : undefined,
           });
         } catch (ex) {
-          if (!(ex && ex.name === 'BackupError')) console.warn('settings: remove baby failed', ex);
-          ctx.toast({ message: ex && ex.name === 'BackupError' ? ex.message : 'That didn’t work. Nothing was removed.', tone: 'warn' });
+          // Only settings.removeBaby's own "no such baby" TypeError — a real
+          // bug's TypeError still gets logged and the generic message.
+          const gone = ex instanceof TypeError && /^No baby with id/.test(ex.message || '');
+          const known = ex && (ex.name === 'BackupError' || ex instanceof RangeError || gone);
+          if (!known) console.warn('settings: remove baby failed', ex);
+          const message = ex && ex.name === 'BackupError' ? ex.message
+            : ex instanceof RangeError ? 'The only baby can’t be removed.'
+              : gone ? 'That baby isn’t here anymore.'
+                : 'That didn’t work. Nothing was removed.';
+          ctx.toast({ message, tone: 'warn' });
         }
       });
     }

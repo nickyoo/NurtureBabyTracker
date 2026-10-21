@@ -50,6 +50,41 @@ const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 /** An incoming timer that has been "running" longer than this is a timer
  * someone forgot to stop, not a live activity: it is imported stopped (DI-12). */
 export const STALE_RUNNING_MS = 24 * 60 * 60 * 1000;
+/** Per-type limits for STALE_RUNNING_MS: no nap or night runs 16 hours, no
+ * feed or pump runs a day. Types not listed use STALE_RUNNING_MS. */
+export const STALE_RUNNING_LIMITS = Object.freeze({ sleep: 16 * 60 * 60 * 1000, feed: STALE_RUNNING_MS, pump: STALE_RUNNING_MS });
+/** Note added to a timer imported stopped because it was still running in
+ * the file long past any real feed, pump or sleep (DI-12). */
+export const STALE_RUNNING_NOTE = 'The timer was still running in the backup, so it was stopped when it was imported.';
+
+/**
+ * Is this running event a forgotten timer (running longer than its type's
+ * limit)? Pure.
+ * @param {object} e
+ * @param {number} [now]
+ * @returns {boolean}
+ */
+export function isStaleRunning(e, now = Date.now()) {
+  if (!e || e.endTime !== null || !Number.isFinite(e.startTime)) return false;
+  return now - e.startTime > (STALE_RUNNING_LIMITS[e.type] ?? STALE_RUNNING_MS);
+}
+
+/**
+ * The finished copy of a forgotten timer (DI-12): ends where it started (no
+ * made-up duration), a running breast side is closed without crediting it
+ * days, and the note says what happened. Pure.
+ * @param {object} e a running event
+ * @returns {object}
+ */
+export function stopStaleRunning(e) {
+  const out = { ...e, endTime: e.startTime };
+  if (e.data && (e.data.activeSide || e.data.activeSince != null)) {
+    out.data = { ...e.data, activeSide: null, activeSince: null };
+  }
+  const note = typeof e.note === 'string' ? e.note.trim() : '';
+  if (!note.includes(STALE_RUNNING_NOTE)) out.note = note ? `${note}\n${STALE_RUNNING_NOTE}`.slice(0, 2000) : STALE_RUNNING_NOTE;
+  return out;
+}
 /** Settings-store key of the copy of this phone's data kept by the last
  * Replace import (DI-01): written in the same transaction as the replace, so
  * Replace can always be undone — whatever happened to the downloaded copy. */
@@ -331,15 +366,18 @@ export function planBabyMerge(local = [], incoming = [], { force = null } = {}) 
 /**
  * Is this phone's profile just the untouched default baby (no name, birth
  * date or photo, no entries)? Then a restore adopts the file's babies instead
- * of keeping an empty extra "Baby" (DI-03). Pure.
+ * of keeping an empty extra "Baby" (DI-03). `ignoreDetails`: a name, birth
+ * date or photo typed during onboarding doesn't count — before the first
+ * entry, a restore on a new phone is the family's real profile (DI-03). Pure.
  * @param {object[]} babies
  * @param {object[]} events
+ * @param {{ ignoreDetails?: boolean }} [opts]
  * @returns {boolean}
  */
-export function isPristineProfile(babies = [], events = []) {
+export function isPristineProfile(babies = [], events = [], { ignoreDetails = false } = {}) {
   if (!Array.isArray(babies) || babies.length !== 1) return false;
   const b = babies[0] || {};
-  if (b.name || b.birthDate || b.photoId) return false;
+  if (!ignoreDetails && (b.name || b.birthDate || b.photoId)) return false;
   return !(events || []).some(e => e && e.babyId === b.id);
 }
 
@@ -418,8 +456,9 @@ export function mergeCovers(local, incoming, { remap = new Map(), babyIds, event
  * reachable. Keeps the one-running-per-type-per-baby rule: an incoming
  * running event that would make a second running activity in its slot is
  * stopped at its start time.
- * An incoming timer running for more than STALE_RUNNING_MS (a partner forgot
- * to stop it) is imported stopped at its start, too (stoppedStale).
+ * An incoming timer running longer than its type's limit (STALE_RUNNING_LIMITS:
+ * a partner forgot to stop it) is imported stopped at its start, with a note
+ * saying so (stoppedStale).
  * @param {{ events?: object[], inventory?: object[], photoIds?: string[], babies?: object[] }} existing
  * @param {{ events?: object[], inventory?: object[], photos?: object[]|null, babies?: object[] }} incoming
  * @param {{ now?: number, force?: Record<string, string|null>|null }} [opts] force: see planBabyMerge
@@ -458,8 +497,8 @@ export function mergeBackup(existing = {}, incoming = {}, { now = Date.now(), fo
       stats.events.unchanged += 1;
       continue;
     }
-    if (candidate.endTime === null && now - candidate.startTime > STALE_RUNNING_MS) {
-      candidate = { ...candidate, endTime: candidate.startTime };
+    if (isStaleRunning(candidate, now)) {
+      candidate = stopStaleRunning(candidate);
       stats.events.stoppedStale += 1;
     }
     if (local && local.endTime === null && runningBySlot.get(slot(local)) === local.id
@@ -779,10 +818,12 @@ async function hasAnyData() {
  * Throws BackupError with a user-facing message.
  * @param {File|Blob|string|object} file
  * @param {{ mode?: 'merge'|'replace', safetyBackup?: ((file: File) => (void|Promise<void>))|null,
- *   keepSafetyCopy?: boolean, babyMatches?: Record<string, string|null>|null, storageWindows?: object|null }} [opts]
- * @returns {Promise<{ mode: string, format: string, stats: object, warnings: string[], safetyBackup: string|null, safetyKept: boolean }>}
+ *   keepSafetyCopy?: boolean, babyMatches?: Record<string, string|null>|null, storageWindows?: object|null,
+ *   freshInstall?: boolean }} [opts] freshInstall: onboarding's restore — this phone's one baby, with no
+ *   entries yet, gives way to the file's babies even if a name was typed (DI-03).
+ * @returns {Promise<{ mode: string, format: string, stats: object, warnings: string[], safetyBackup: string|null, safetyKept: boolean, adoptedProfile: boolean }>}
  */
-export async function importBackup(file, { mode = 'merge', safetyBackup = downloadFile, keepSafetyCopy = true, babyMatches = null, storageWindows = null } = {}) {
+export async function importBackup(file, { mode = 'merge', safetyBackup = downloadFile, keepSafetyCopy = true, babyMatches = null, storageWindows = null, freshInstall = false } = {}) {
   if (mode !== 'merge' && mode !== 'replace') throw new BackupError(`Unknown import mode: ${mode}`);
   const parsed = await readInput(file);
   const deviceId = await getDeviceId(); // also loads settings
@@ -818,8 +859,17 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
   // An untouched default baby (fresh install, onboarding restore) gives way
   // to the file's babies instead of staying as an empty extra "Baby".
   const localEvents = replaceEvents ? [] : await getAll(STORES.events);
-  const pristine = incomingBabies.length > 0 && isPristineProfile(localBabies, localEvents);
+  const pristine = incomingBabies.length > 0 && isPristineProfile(localBabies, localEvents, { ignoreDetails: freshInstall });
   const existingBabies = (replaceEvents && incomingBabies.length) || pristine ? [] : localBabies;
+  // A photo or birth date picked during onboarding isn't thrown away when
+  // the file's only baby has none.
+  let adoptedBabies = incomingBabies;
+  if (pristine && incomingBabies.length === 1) {
+    const mine = localBabies[0] || {};
+    const theirs = { ...incomingBabies[0] };
+    for (const k of ['birthDate', 'photoId']) if (!theirs[k] && mine[k]) theirs[k] = mine[k];
+    adoptedBabies = [theirs];
+  }
   const existing = {
     events: localEvents,
     inventory: replaceInventory ? [] : await getAll(STORES.inventory),
@@ -828,7 +878,7 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
   };
   const windows = storageWindows || (replace && v.data.settings.storageWindows) || getSetting('storageWindows');
   const inventory = v.data.inventory.map(i => clampExpiryToWindows(i, windows));
-  const { toPut, stats, remap } = mergeBackup(existing, { ...v.data, inventory, photos: v.data.photos || [], babies: incomingBabies }, { force: babyMatches });
+  const { toPut, stats, remap } = mergeBackup(existing, { ...v.data, inventory, photos: v.data.photos || [], babies: adoptedBabies }, { force: babyMatches });
   const finalBabies = toPut.babies || existingBabies;
   if (finalBabies.length > MAX_BABIES) throw new BackupError(`This backup has more than ${MAX_BABIES} babies.`);
   const photosById = new Map(photoRecords.map(p => [p.id, p]));
@@ -846,6 +896,13 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
     if (pristine) {
       const want = v.data.settings.activeBabyId;
       settingsToPut.activeBabyId = finalBabies.some(b => b.id === want) ? want : finalBabies[0].id;
+      // The app icon made from the placeholder's photo follows that photo.
+      const gone = localBabies[0] && localBabies[0].id;
+      if (gone && getSetting('iconBabyId') === gone && !finalBabies.some(b => b.id === gone)) {
+        const heir = finalBabies.find(b => b.photoId && b.photoId === localBabies[0].photoId);
+        settingsToPut.iconBabyId = heir ? heir.id : null;
+        if (!heir) settingsToPut.iconDataUrl = null;
+      }
     }
     if (!getSetting('parentName') && v.data.settings.parentName) settingsToPut.parentName = v.data.settings.parentName;
     // Memory covers: the file's, for babies that have none here (FLOW-07).
@@ -909,61 +966,145 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
     warnings: v.warnings,
     safetyBackup: safetyName,
     safetyKept: !!safetyRecord,
+    // This phone's untouched placeholder baby gave way to the file's (DI-03).
+    adoptedProfile: !replace && pristine,
   };
+}
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * The one-line summary of an import (shown as a toast by Settings and by
+ * onboarding's restore), from importBackup's result. Pure. It only claims
+ * what happened: the safety copy is mentioned only when it was kept on this
+ * phone (DI-01); a baby the merge added is named, with where to switch to it
+ * (DI-04); skipped entries and timers that were stopped are counted (DI-11,
+ * DI-12).
+ * @param {object} res importBackup's result
+ * @param {{ restore?: boolean }} [opts] restore: onboarding's "Welcome back"
+ * @returns {string}
+ */
+export function describeImport(res, { restore = false } = {}) {
+  const r = res || {};
+  const s = r.stats || {};
+  if (r.mode === 'replace') {
+    return r.safetyKept ? 'Replaced with the backup. What was here is kept on this phone.' : 'Replaced with the backup.';
+  }
+  const ev = s.events ? (s.events.added || 0) + (s.events.updated || 0) : 0;
+  const inv = s.inventory ? (s.inventory.added || 0) + (s.inventory.updated || 0) : 0;
+  const ph = s.photos ? s.photos.added || 0 : 0;
+  const parts = [];
+  if (ev) parts.push(plural(ev, 'entry', 'entries'));
+  if (inv) parts.push(plural(inv, 'pouch', 'pouches'));
+  if (ph) parts.push(plural(ph, 'photo'));
+  let msg;
+  if (restore) msg = parts.length ? `Welcome back · ${parts.join(', ')} restored` : 'Welcome back · that file had nothing new';
+  else msg = parts.length ? `Merged · ${parts.join(', ')} added` : 'Already up to date · nothing new in that file';
+  const tail = [];
+  const rej = s.rejected || {};
+  const skipped = (rej.events || 0) + (rej.inventory || 0);
+  if (skipped) tail.push(`${plural(skipped, 'entry', 'entries')} skipped`);
+  const stale = s.events ? s.events.stoppedStale || 0 : 0;
+  if (stale) tail.push(`${plural(stale, 'old timer')} stopped`);
+  if (tail.length) msg += ` · ${tail.join(', ')}`;
+  if (!restore && !r.adoptedProfile && s.babies) {
+    const named = (s.babies.addedBabies || []).map(b => b.name).filter(Boolean);
+    const unnamed = (s.babies.added || 0) - named.length + (s.babies.placeholders || 0);
+    const who = [...named];
+    if (unnamed > 0) who.push(unnamed === 1 ? 'an unnamed baby' : `${unnamed} unnamed babies`);
+    if (who.length) {
+      const list = who.length > 1 ? `${who.slice(0, -1).join(', ')} and ${who[who.length - 1]}` : who[0];
+      msg += `. Added ${list} as ${who.length === 1 && !(unnamed > 1) ? 'a new baby' : 'new babies'}. Switch babies from the name on Today.`;
+    }
+  }
+  return msg;
 }
 
 /**
  * Remove a baby (a sibling added by mistake, a test name, a duplicate from a
- * partner merge — FLOW-05): deletes that baby's entries and the photos only
- * they used, drops their memory cover (and app icon), and moves Today to
- * another baby. Never the last baby. A safety backup is taken first, as for
- * Replace: downloaded, AND kept on this phone (SAFETY_COPY_KEY) in the same
- * transaction, so restoreSafetyCopy() undoes it.
+ * partner merge — FLOW-05, DI-03, DI-04): deletes that baby's entries (never
+ * the parent's own pumps, which have no baby) and the photos only they used,
+ * drops their memory cover (and the app icon made from their photo), and
+ * moves Today to another baby. Never the last baby. A safety copy is kept on
+ * this phone (SAFETY_COPY_KEY) in the same transaction, so
+ * restoreSafetyCopy() undoes it; `safetyBackup` also hands that copy out
+ * (downloaded by default, null for none).
+ * The baby list, active baby, covers and icon are read from the STORE inside
+ * the write transaction (another tab may have changed them), so nothing is
+ * rebuilt from this tab's cache.
+ * Throws BackupError: code 'missing' (no such baby), 'last' (the only baby).
  * @param {string} id
- * @param {{ safetyBackup?: ((file: File) => (void|Promise<void>))|null }} [opts]
+ * @param {{ safetyBackup?: ((file: File) => (void|Promise<void>))|null, keepSafetyCopy?: boolean }} [opts]
  * @returns {Promise<{ name: string, entries: number, photos: number, safetyKept: boolean }>}
  */
-export async function removeBaby(id, { safetyBackup = downloadFile } = {}) {
+export async function removeBaby(id, { safetyBackup = downloadFile, keepSafetyCopy = true } = {}) {
   await loadSettings();
-  const list = getSetting('babies');
-  const baby = list.find(b => b.id === id);
-  if (!baby) throw new BackupError('That baby isn’t here anymore.');
-  if (list.length < 2) throw new BackupError('The only baby can’t be removed.');
-  const all = await getAll(STORES.events);
-  const theirs = all.filter(e => e.babyId === id);
-  const photoIdsOf = e => (e && e.data && Array.isArray(e.data.photoIds) ? e.data.photoIds : []);
-  const keep = new Set();
-  for (const e of all) if (e.babyId !== id) photoIdsOf(e).forEach(p => keep.add(p));
-  for (const b of list) if (b.id !== id && b.photoId) keep.add(b.photoId);
-  const photoIds = [...new Set([baby.photoId, ...theirs.flatMap(photoIdsOf)])].filter(p => p && !keep.has(p));
+  const cached = getSetting('babies');
+  const refuse = (code) => {
+    const err = new BackupError(code === 'last' ? 'The only baby can’t be removed.' : 'That baby isn’t here anymore.');
+    err.code = code;
+    return err;
+  };
+  if (!cached.some(b => b.id === id)) throw refuse('missing');
+  if (cached.length < 2) throw refuse('last');
 
+  const photoIdsOf = e => (e && e.data && Array.isArray(e.data.photoIds) ? e.data.photoIds : []);
   const now = Date.now();
-  const safety = await exportBackupFile({ includePhotos: photoIds.length > 0, name: `nurture-backup-before-removing-${stamp()}.json` });
-  if (typeof safetyBackup === 'function') {
-    try { await safetyBackup(safety); } catch { throw new BackupError('Couldn’t save a safety copy first, so nothing was removed.'); }
+  let safetyRecord = null;
+  if (keepSafetyCopy || typeof safetyBackup === 'function') {
+    // Photos go into the copy only when some will be deleted (a photo-less
+    // copy leaves the photo journal alone when it is put back).
+    const target = cached.find(b => b.id === id);
+    const needPhotos = !!target.photoId || (await getAll(STORES.events)).some(e => e.babyId === id && photoIdsOf(e).length > 0);
+    const safety = await exportBackupFile({ includePhotos: needPhotos, name: `nurture-backup-before-removing-${stamp()}.json` });
+    if (typeof safetyBackup === 'function') {
+      try { await safetyBackup(safety); } catch { throw new BackupError('Couldn’t save a safety copy first, so nothing was removed.'); }
+    }
+    if (keepSafetyCopy) safetyRecord = { key: SAFETY_COPY_KEY, value: { name: safety.name, createdAt: now, blob: new Blob([safety], { type: 'application/json' }) }, updatedAt: now };
   }
-  const rest = list.filter(b => b.id !== id);
-  const active = getSetting('activeBabyId');
-  const covers = { ...(getSetting('memoryCovers') || {}) };
-  delete covers[id];
-  const settingsToPut = { babies: rest, memoryCovers: covers };
-  if (active === id || !rest.some(b => b.id === active)) settingsToPut.activeBabyId = rest[0].id;
-  if (getSetting('iconBabyId') === id) { settingsToPut.iconBabyId = null; settingsToPut.iconDataUrl = null; }
+
+  let result;
   try {
-    await transaction([STORES.events, STORES.photos, STORES.settings], 'readwrite', (s) => {
-      for (const e of theirs) s.events.delete(e.id);
-      for (const p of photoIds) s.photos.delete(p);
-      for (const [key, value] of Object.entries(settingsToPut)) s.settings.put({ key, value, updatedAt: now });
-      s.settings.put({ key: SAFETY_COPY_KEY, value: { name: safety.name, createdAt: now, blob: new Blob([safety], { type: 'application/json' }) }, updatedAt: now });
+    result = await transaction([STORES.events, STORES.photos, STORES.settings], 'readwrite', (s, ctx) => {
+      const keys = ['babies', 'activeBabyId', 'memoryCovers', 'iconBabyId'];
+      const reqs = Object.fromEntries(keys.map(k => [k, s.settings.get(k)]));
+      const evReq = s.events.getAll();
+      evReq.onsuccess = () => {
+        const raw = k => (reqs[k].result ? reqs[k].result.value : undefined);
+        const babiesRes = sanitizeSetting('babies', raw('babies'), { lenient: true });
+        const list = babiesRes.ok ? babiesRes.value : [];
+        const baby = list.find(b => b.id === id);
+        if (!baby) { ctx.fail(refuse('missing')); return; }
+        if (list.length < 2) { ctx.fail(refuse('last')); return; }
+        const all = evReq.result || [];
+        const theirs = all.filter(e => e.babyId === id);
+        const keep = new Set();
+        for (const e of all) if (e.babyId !== id) photoIdsOf(e).forEach(p => keep.add(p));
+        for (const b of list) if (b.id !== id && b.photoId) keep.add(b.photoId);
+        const photoIds = [...new Set([baby.photoId, ...theirs.flatMap(photoIdsOf)])].filter(p => p && !keep.has(p));
+        const rest = list.filter(b => b.id !== id);
+        const coversRes = sanitizeSetting('memoryCovers', raw('memoryCovers'), { lenient: true });
+        const covers = coversRes.ok ? coversRes.value : {};
+        const put = (key, value) => s.settings.put({ key, value, updatedAt: now });
+        put('babies', rest);
+        if (Object.prototype.hasOwnProperty.call(covers, id)) { delete covers[id]; put('memoryCovers', covers); }
+        const active = raw('activeBabyId');
+        if (active === id || !rest.some(b => b.id === active)) put('activeBabyId', rest[0].id);
+        if (raw('iconBabyId') === id) { put('iconBabyId', null); put('iconDataUrl', null); }
+        for (const e of theirs) s.events.delete(e.id);
+        for (const p of photoIds) s.photos.delete(p);
+        if (safetyRecord) s.settings.put(safetyRecord);
+        ctx.done({ name: baby.name || '', entries: theirs.length, photos: photoIds.length });
+      };
     });
   } catch (err) {
     if (err && err.name === 'QuotaExceededError') throw new BackupError('This phone is out of space for Nurture, so nothing was removed. Free some space, then try again.');
     throw err;
   }
   notifyEvents({ op: 'bulk' });
-  if (photoIds.length) notifyPhotosBulk();
+  if (result.photos) notifyPhotosBulk();
   await reloadSettings();
-  return { name: baby.name || '', entries: theirs.length, photos: photoIds.length, safetyKept: true };
+  return { ...result, safetyKept: !!safetyRecord };
 }
 
 /**
@@ -1045,7 +1186,7 @@ export async function eraseAll({ storage } = {}) {
 
 /** The backup API as one object. `share` is ARCHITECTURE §10b's backup.share(). */
 export const backup = Object.freeze({
-  exportBackup, exportBackupFile, exportCsvFile, buildCsv, validateBackup, mergeBackup, planBabyMerge, importBackup,
+  exportBackup, exportBackupFile, exportCsvFile, buildCsv, validateBackup, mergeBackup, planBabyMerge, importBackup, describeImport,
   getSafetyCopy, clearSafetyCopy, restoreSafetyCopy, babyQuestion, previewBabyQuestion, isPristineProfile, removeBaby,
   share: shareBackup, shareBackup, shareCsv, shareFile, downloadFile, eraseAll,
 });

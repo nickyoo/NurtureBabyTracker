@@ -329,10 +329,20 @@ try {
     await auditTargets(page, 'stash sources');
     await page.screenshot({ path: `${SHOTS}feed-stash-light.png` });
     await page.click('.sheet-feed [data-discard-src]');
-    await page.waitForSelector('.toast[data-state="in"]');
-    check('expired pouch Discard → toast with Undo', /Pouch discarded/.test(await page.textContent('.toast-msg')));
+    // The Undo stays inside the open sheet (a toast would sit under it).
+    await page.waitForSelector('.sheet-feed [data-discarded] [data-undo-discard]', { timeout: 2000 }).catch(() => {});
+    check('expired pouch Discard → "Pouch discarded" + Undo inside the sheet', /Pouch discarded/.test(await page.evaluate(() => (document.querySelector('.sheet-feed [data-discarded]') || {}).textContent || '')));
+    check('…the Undo has focus', await page.evaluate(() => document.activeElement && document.activeElement.matches('[data-undo-discard]')));
+    check('…no toast hidden under the sheet', await page.evaluate(() => !document.querySelector('#toastRoot .toast[data-state="in"]')));
     await page.waitForFunction(() => !document.querySelector('.sheet-feed .fd-src.is-expired'), null, { timeout: 2000 }).catch(() => {});
     check('…and it leaves the list', await page.evaluate(() => !document.querySelector('.sheet-feed .fd-src.is-expired')));
+    await page.click('.sheet-feed [data-undo-discard]');
+    await page.waitForFunction(() => !!document.querySelector('.sheet-feed .fd-src.is-expired'), null, { timeout: 2000 }).catch(() => {});
+    check('in-sheet Undo puts the pouch back in the list', await page.evaluate(() => !!document.querySelector('.sheet-feed .fd-src.is-expired') && !document.querySelector('.sheet-feed [data-discarded]')));
+    const back = await page.evaluate(async ([u, id]) => (await (await import(u)).stash.get(id)), [mod('/js/core/stash.js'), ids.old]).catch(() => null);
+    check('…and in the stash', !!back && back.status !== 'discarded', JSON.stringify(back && back.status));
+    await page.click('.sheet-feed [data-discard-src]');
+    await page.waitForFunction(() => !document.querySelector('.sheet-feed .fd-src.is-expired'), null, { timeout: 2000 }).catch(() => {});
     await page.click('.sheet-feed [data-preset="4"]');
     await page.click('.sheet-feed [data-start]');
     await page.waitForSelector('.sheet-feed [data-finish]');
@@ -645,6 +655,57 @@ try {
     }));
     await page.mouse.up();
     await settle(page, 400);
+    await context.close();
+  }
+
+  // ====================================================== MAV-10 (motion #5)
+  // "Start bottle": the amount hero shrinks into the live timer header (a FLIP
+  // of the numeral from the hero's rect) while the rest cross-fades — no
+  // generic step slide. Reduced motion: a plain cross-fade, no FLIP.
+  console.log('\nMAV-10 Start bottle: hero → timer header');
+  for (const reduce of [false, true]) {
+    const { context, page } = await freshPage();
+    if (reduce) await setSetting(page, 'reduceMotion', true);
+    await openBottleFromPlus(page);
+    await page.click('.sheet-feed [data-preset="4"]');
+    await settle(page, 300);
+    const hero = await page.evaluate(() => { const r = document.querySelector('.sheet-feed .fd-value').getBoundingClientRect(); return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, h: r.height }; });
+    // Watch the swap: record whether the steps morph (cross-fade) or slide,
+    // and freeze the timer's FLIP at its first frame the moment it appears.
+    await page.evaluate(() => {
+      window.__mav10 = { morph: false, slide: false, flip: null };
+      const mo = new MutationObserver(() => {
+        const leaving = document.querySelector('.sheet-feed .sheet-step.is-leaving');
+        if (leaving) { if (leaving.classList.contains('is-morph')) window.__mav10.morph = true; else window.__mav10.slide = true; }
+        const t = document.querySelector('.sheet-feed [data-timer]');
+        if (t && window.__mav10.flip === null) {
+          // The FLIP is queued in a microtask after the step is built.
+          queueMicrotask(() => queueMicrotask(() => {
+            const a = t.getAnimations().find((x) => x.effect && x.effect.getKeyframes().some((k) => /translate/.test(k.transform || '')));
+            if (!a) { window.__mav10.flip = false; return; }
+            a.pause(); a.currentTime = 0;
+            const r = t.getBoundingClientRect();
+            window.__mav10.flip = { cx: r.left + r.width / 2, cy: r.top + r.height / 2, dur: a.effect.getTiming().duration };
+            a.play();
+          }));
+        }
+      });
+      mo.observe(document.querySelector('.sheet-feed'), { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+      window.__mav10.stop = () => mo.disconnect();
+    });
+    await page.click('.sheet-feed [data-start]');
+    await page.waitForSelector('.sheet-feed [data-finish]');
+    await settle(page, 700);
+    const m = await page.evaluate(() => { window.__mav10.stop(); const { morph, slide, flip } = window.__mav10; return { morph, slide, flip }; });
+    if (!reduce) {
+      check('MAV-10: Start bottle cross-fades the steps (morph), no slide', m.morph && !m.slide, JSON.stringify(m));
+      check('MAV-10: the timer numeral starts on the amount hero (FLIP) over --dur-morph', !!m.flip && Math.abs(m.flip.cx - hero.cx) < 6 && Math.abs(m.flip.cy - hero.cy) < 6 && m.flip.dur >= 200, JSON.stringify({ hero, flip: m.flip }));
+      check('MAV-10: …and lands in the header (no transform left)', await page.evaluate(() => { const t = document.querySelector('.sheet-feed [data-timer]'); return t.getAnimations().length === 0 && getComputedStyle(t).transform === 'none'; }));
+    } else {
+      check('MAV-10 reduced motion: no FLIP of the numeral (cross-fade only)', m.flip === false && !m.slide, JSON.stringify(m));
+    }
+    await page.keyboard.press('Escape');
+    await waitNoLayers(page);
     await context.close();
   }
 

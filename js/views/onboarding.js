@@ -23,7 +23,7 @@
 // finishes from any step with whatever has been entered so far (every e2e
 // suite uses it to get past onboarding in one tap).
 
-import { importBackup, validateBackup, BackupError, MAX_IMPORT_BYTES } from '../core/backup.js';
+import { importBackup, validateBackup, describeImport, BackupError, MAX_IMPORT_BYTES } from '../core/backup.js';
 import { DEFAULTS as SETTING_DEFAULTS } from '../core/settings.js';
 
 const STEP_KEY = 'nurture.onboardingStep';
@@ -653,19 +653,10 @@ export default {
 
     // ------------------------------------------------------------ restore (merge) → finish
 
+    // One summary for every import (backup.describeImport): it counts what
+    // was skipped and timers that were stopped, and claims nothing more.
     function importSummary(res) {
-      const s = (res && res.stats) || {};
-      const ev = s.events ? s.events.added + s.events.updated : 0;
-      const inv = s.inventory ? s.inventory.added + s.inventory.updated : 0;
-      const ph = s.photos ? s.photos.added : 0;
-      const parts = [];
-      if (ev) parts.push(F.plural(ev, 'entry', 'entries'));
-      if (inv) parts.push(F.plural(inv, 'pouch', 'pouches'));
-      if (ph) parts.push(F.plural(ph, 'photo'));
-      const rej = s.rejected || {};
-      const skipped = (rej.events || 0) + (rej.inventory || 0);
-      const tail = skipped ? ` · ${F.plural(skipped, 'entry', 'entries')} skipped` : '';
-      return parts.length ? `Welcome back · ${parts.join(', ')} restored${tail}` : `Welcome back · that file had nothing new${tail}`;
+      return describeImport(res, { restore: true });
     }
 
     async function adoptPrefs(parsed) {
@@ -703,7 +694,9 @@ export default {
           if (pv.ok && pv.data.settings.storageWindows
             && JSON.stringify(S.get('storageWindows')) === JSON.stringify(SETTING_DEFAULTS.storageWindows)) windows = pv.data.settings.storageWindows;
         } catch { /* importBackup reports a bad file */ }
-        const res = await importBackup(parsed, { mode: 'merge', storageWindows: windows });
+        // freshInstall: this phone's baby has no entries yet, so the file's
+        // babies replace it even if a name was typed above (DI-03).
+        const res = await importBackup(parsed, { mode: 'merge', storageWindows: windows, freshInstall: true });
         await adoptPrefs(parsed);
         // The restored baby's photo becomes the iPhone icon, as if picked here.
         const b = S.activeBaby();

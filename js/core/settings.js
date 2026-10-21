@@ -579,6 +579,36 @@ export function setActiveBaby(id) {
 }
 
 /**
+ * Remove a baby and everything that is only theirs: their entries (never the
+ * parent's own pumps), the photos no one else uses, their memory cover, and
+ * the app icon if it was made from their photo. Today moves to another baby.
+ * A copy of what was here is kept on this phone first, in the same
+ * transaction (backup.getSafetyCopy / backup.restoreSafetyCopy undo it); no
+ * file is downloaded unless `safetyBackup` says how. Subscribers get a
+ * { key: '*' } change, event and photo listeners a bulk change.
+ * Throws RangeError for the last baby (there is always at least one),
+ * TypeError for an unknown id. Queued with the other baby edits.
+ * @param {string} id
+ * @param {{ safetyBackup?: ((file: File) => (void|Promise<void>))|null }} [opts]
+ * @returns {Promise<{ removedEvents: number, removedPhotos: number, name: string, safetyKept: boolean }>}
+ */
+export function removeBaby(id, { safetyBackup = null } = {}) {
+  return queueBabyEdit(async () => {
+    // backup.js imports this module; load it lazily so neither has to be
+    // evaluated first.
+    const backup = await import('./backup.js');
+    try {
+      const res = await backup.removeBaby(id, { safetyBackup, keepSafetyCopy: true });
+      return { removedEvents: res.entries, removedPhotos: res.photos, name: res.name, safetyKept: res.safetyKept };
+    } catch (err) {
+      if (err && err.code === 'last') throw new RangeError(err.message);
+      if (err && err.code === 'missing') throw new TypeError(`No baby with id ${String(id).slice(0, 100)}`);
+      throw err;
+    }
+  });
+}
+
+/**
  * Subscribe to changes: fn({ key, value, prev }). key '*' = reload (re-read
  * everything). Returns unsubscribe.
  * @param {(change: {key: string, value: any, prev: any}) => void} fn
@@ -592,7 +622,7 @@ export function subscribe(fn) {
 /** The settings API as one object, for ctx injection (ARCHITECTURE §5.2). */
 export const settings = Object.freeze({
   load, reload, get, set, patch, all, subscribe, deviceId,
-  babies, activeBaby, addBaby, updateBaby, setActiveBaby,
+  babies, activeBaby, addBaby, updateBaby, removeBaby, setActiveBaby,
   DEFAULTS, TRACKER_KEYS, TODAY_CARDS,
 });
 

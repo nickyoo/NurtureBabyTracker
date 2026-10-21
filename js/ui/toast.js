@@ -20,14 +20,43 @@
 //    rises into the slot the pill's Finish just left: the second tap of a
 //    double-tap on Finish would otherwise hit Undo and restart the activity.
 //    Keyboard activation is never delayed.
+//  - Every exit animates (160 ms fade-and-drop; reduced motion: the fade).
+//    A toast replaced while visible leaves in place UNDER the new one.
+//  - A sheet opening over a toast (which sits under the scrim) sends it out
+//    with that same exit, timer still running, so it can't be revealed by the
+//    sheet sliding away only to be replaced a frame later (MAV-9). Once every
+//    sheet is gone it rises back in — unless a new toast took its place in
+//    the meantime, or its time ran out while covered.
+//    NOTE: a toast raised while a sheet is open sits UNDER that sheet (z
+//    order) and is not seen until the sheet goes — show in-sheet results in
+//    the sheet (DESIGN §6.8).
 
 import { html, element } from './html.js';
-import { afterTransition, guardEnterTaps, motionReduced } from './sheet.js';
+import { afterTransition, guardEnterTaps, onSheetChange, openSheetCount, whenSheetsIdle } from './sheet.js';
 
 const EXIT_MS = 160;
 const RESTORED_MS = 1200;
+// After the last sheet is removed, wait this long before a covered toast
+// rises back: the sheet's own follow-up (e.g. "Bottle deleted · Undo" after
+// an entry sheet's Delete) arrives within a frame and replaces it unseen.
+export const UNCOVER_DELAY_MS = 120;
 
 let current = null;
+let sheetsWatched = false;
+let uncoverTimer = 0;
+
+function watchSheets() {
+  if (sheetsWatched) return;
+  sheetsWatched = true;
+  onSheetChange(({ count }) => {
+    clearTimeout(uncoverTimer);
+    if (count > 0) { if (current) current.cover(); return; }
+    whenSheetsIdle().then(() => {
+      clearTimeout(uncoverTimer);
+      uncoverTimer = setTimeout(() => { if (!openSheetCount() && current) current.uncover(); }, UNCOVER_DELAY_MS);
+    });
+  });
+}
 
 function toastRoot() {
   let root = document.getElementById('toastRoot');
@@ -65,6 +94,7 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
   // MAV-9: a visible toast being replaced runs its own 160 ms fade-and-drop
   // UNDER the new one (cross-fade), instead of blinking out between frames.
   if (current) current.leave('replaced', !current.visible());
+  watchSheets();
   const root = toastRoot();
   const safeTone = ['default', 'success', 'warn'].includes(tone) ? tone : 'default';
   const el = element(html`
@@ -85,6 +115,7 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
   let startedAt = 0;
   let paused = 0; // a counter: hover and focus can overlap
   let leaving = false;
+  let covered = false;
 
   const start = () => {
     if (!remaining || leaving) return;
@@ -109,10 +140,33 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
     leaving = true;
     clearTimeout(timer);
     if (current && current.el === el) current = null;
+    // Already out of sight (covered by a sheet, or never painted): nothing
+    // to animate, it simply goes.
+    if (covered) fast = true;
     if (reason === 'replaced' && !fast) { el.classList.add('is-replaced'); el.setAttribute('aria-hidden', 'true'); }
     el.setAttribute('data-state', 'leaving');
     const remove = () => { el.remove(); resolveDone(reason); };
     if (fast) remove(); else afterTransition(el, EXIT_MS + 160, remove, { property: 'opacity' });
+  }
+
+  // A sheet opened over it: the ordinary exit (fade + drop), out of the
+  // reading order; the timer keeps running.
+  function cover() {
+    if (leaving || covered) return;
+    covered = true;
+    el.setAttribute('aria-hidden', 'true');
+    el.setAttribute('data-state', 'leaving');
+    afterTransition(el, EXIT_MS + 160, () => { if (covered && !leaving) el.setAttribute('data-state', 'covered'); }, { property: 'opacity' });
+  }
+
+  // Every sheet is gone: rise back in from the pre state (the enter).
+  function uncover() {
+    if (leaving || !covered) return;
+    covered = false;
+    el.removeAttribute('aria-hidden');
+    el.setAttribute('data-state', 'pre');
+    el.getBoundingClientRect();
+    el.setAttribute('data-state', 'in');
   }
 
   el.addEventListener('pointerenter', pause);
@@ -158,7 +212,10 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
     });
   }
 
-  // enter on the next frame so the transition runs from the pre state
+  // enter on the next frame so the transition runs from the pre state. (A
+  // toast raised from inside an open sheet enters as usual, under that
+  // sheet, and shows as the sheet goes; only a sheet opening OVER a toast
+  // covers it.)
   el.getBoundingClientRect();
   el.setAttribute('data-state', 'in');
   start();
@@ -166,15 +223,18 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
   current = {
     el,
     leave,
-    // Seen right now: entered, on a visible page, and not under reduced motion.
-    visible: () => el.isConnected && el.getAttribute('data-state') === 'in' && !document.hidden && !motionReduced(),
+    cover,
+    uncover,
+    // Seen right now: entered, not covered, on a visible page.
+    visible: () => el.isConnected && el.getAttribute('data-state') === 'in' && !covered && !document.hidden,
   };
   return { dismiss: () => leave('dismissed'), done };
 }
 
 /**
- * Remove the current toast immediately (no animation), e.g. on navigation.
+ * Send the current toast away (e.g. on navigation): its exit animation when
+ * it is on screen, at once when nobody can see it.
  */
 export function clearToast() {
-  if (current) current.leave('dismissed', true);
+  if (current) current.leave('dismissed', !current.visible());
 }

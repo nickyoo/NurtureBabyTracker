@@ -368,20 +368,35 @@ button.row:active, a.row:active { background: var(--surface-2); }
   transition: transform 240ms var(--ease-in), clip-path 240ms var(--ease-in);
 }
 
+/* Dismissing a running-timer sheet (#6): it shrinks back INTO its live pill,
+   the rect grow in reverse — its header strip, the pill's size and radius,
+   lands on the pill (--rg-* set by sheet.js at close) — and fades onto it
+   over the last half, so the pill (never hidden) is what remains. */
+.sheet-layer.is-to-pill[data-state="open"] .sheet {
+  transform: translateY(var(--drag-y, 0px)); clip-path: inset(0 0 0 0 round var(--r-sheet) var(--r-sheet) 0 0);
+}
+.sheet-layer.is-to-pill[data-state="closing"] .sheet {
+  transform: translateY(var(--rg-y, 0px));
+  clip-path: inset(0 var(--rg-r, 0px) var(--rg-b, 0px) var(--rg-l, 0px) round var(--rg-rad, 30px));
+  opacity: 0;
+  transition: transform var(--dur-morph) var(--ease-spring), clip-path var(--dur-morph) var(--ease-spring),
+    opacity calc(var(--dur-morph) / 2) linear calc(var(--dur-morph) / 2);
+  will-change: transform, clip-path, opacity;
+}
+
 /* Shared-element flights (sheet.js flyCopy, #6 + #16): a fixed copy above
-   every layer, transformed from its start rect to its own box. */
+   every layer, laid out at its own natural box and transformed from its
+   start rect to its end rect. */
 .sheet-flight {
   position: fixed; margin: 0; z-index: calc(var(--z-fab-over-sheet) + 1);
   transform-origin: 0 0; pointer-events: none; box-sizing: border-box;
 }
 .sheet-flight.fd-timer, .sheet-flight.nb-timer { display: flex; align-items: center; justify-content: center; white-space: nowrap; }
 /* The header chip a card's sheet carries (#16): the card's icon, kept. */
-.sheet-hd-chip { width: 36px; height: 36px; border-radius: var(--r-sm); }
+.sheet-hd-chip { width: 36px; height: 36px; border-radius: var(--r-sm); flex: none; }
 .sheet-hd-chip .ic { width: 20px; height: 20px; }
 .sheet-hd-chip + .sheet-title { margin-right: auto; }
-/* The live pill a dismissed timer sheet flies into (#6): hidden until the
-   numeral lands, then it fades in. */
-#livePills .lpill.is-flight-target { opacity: 0; transition: none; }
+.sheet-hd.is-empty .sheet-hd-chip { display: none; }
 
 /* While sheet.js measures and sets the start geometry, nothing transitions
    (otherwise the geometry change itself would animate from unset values). */
@@ -477,6 +492,8 @@ body[data-chrome="bare"] #toastRoot { bottom: calc(var(--safe-bottom) + var(--s-
 /* Replaced while visible (MAV-9): it leaves in place, under the new toast,
    instead of taking a second slot in the column. */
 .toast.is-replaced { position: absolute; left: 0; right: 0; bottom: 0; z-index: -1; pointer-events: none; }
+/* Under an open sheet (toast.js cover): out of sight, waiting to rise back. */
+.toast[data-state="covered"] { opacity: 0; transform: translateY(var(--move-md)); visibility: hidden; pointer-events: none; transition: none; }
 .toast-msg { flex: 1; min-width: 0; font-size: var(--fs-callout); font-weight: var(--fw-body); line-height: 1.3; padding: 8px 0; }
 .toast:not(:has(.toast-action)) .toast-msg { padding-right: 12px; }
 .toast-action {

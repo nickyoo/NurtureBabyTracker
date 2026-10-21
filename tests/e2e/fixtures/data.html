@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Same CSP as production: proves the data layer needs nothing else. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Nurture data-fixes fixture</title>
+</head>
+<body>
+  <p>Nurture data/backup fix browser tests. Pick a suite with <code>?suite=</code>.</p>
+  <pre id="out"></pre>
+  <script type="module" src="./data.js"></script>
+</body>
+</html>

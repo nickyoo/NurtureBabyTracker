@@ -610,10 +610,21 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
       }
     }
 
+    // A pouch discarded from this list: its Undo stays INSIDE the sheet
+    // (DESIGN §6.8: an in-sheet result shows in the sheet). A toast would sit
+    // under the open sheet, out of reach until it closed.
+    let discarded = null;
+    const undoNote = () => (discarded ? html`<p class="note fd-note fd-undo" role="status" data-discarded>${I('check', 16)}<span>Pouch discarded</span>
+        <button type="button" class="btn btn-ghost btn-sm" data-undo-discard>Undo</button></p>` : '');
+
     function paintSources() {
       sourcesEl.hidden = st.milk !== 'stash';
       if (st.milk !== 'stash') { render(sourcesEl, null); return; }
       const now = Date.now();
+      // A repaint (the stash refresh after a discard) must not drop focus
+      // from the in-sheet Undo.
+      const fa = document.activeElement;
+      const keepUndoFocus = !!(fa && sourcesEl.contains(fa) && fa.matches('[data-undo-discard]'));
       // A preset pouch that the cache doesn't know yet (just thawed): fetch it,
       // and keep it selected (buttons disabled) until the fetch answers, so
       // "Thaw & feed" never quietly feeds from a different pouch.
@@ -638,7 +649,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
             <span class="fd-src-empty-ic cat-pump">${I('pouch', 20)}</span>
             <span class="fd-src-empty-text"><b>No thawed milk ready</b><small>${cache.frozen ? 'Frozen milk needs thawing first.' : 'Thawed or fridge milk shows up here.'}</small>
               <button type="button" class="btn btn-ghost btn-sm fd-go-stash" data-go-stash>Open Stash${I('chev-r', 18)}</button></span>
-          </div>`);
+          </div>${undoNote()}`);
       } else {
         render(sourcesEl, html`
           <div class="fd-src-list" role="radiogroup" aria-label="Milk from the stash">
@@ -662,8 +673,10 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
                 <button type="button" class="btn btn-danger-soft btn-sm" data-discard-src="${s.id}" aria-label="Discard expired ${amt.value} ${amt.unit} pouch">Discard</button>
               </div>`;
           })}
+          ${undoNote()}
           ${!cache.sources.length ? html`<p class="note fd-note">${I('info', 16)}<span>${cache.frozen ? 'Frozen milk needs thawing first.' : 'No usable milk in the stash right now.'}</span></p>` : ''}`);
       }
+      if (keepUndoFocus) { const u = sourcesEl.querySelector('[data-undo-discard]'); if (u) u.focus(); }
       const go2 = sourcesEl.querySelector('[data-go-stash]');
       if (go2) go2.addEventListener('click', () => { api.close(); ctx.router.go('stash'); });
       const list = sourcesEl.querySelector('[role="radiogroup"]');
@@ -682,10 +695,33 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
           try {
             const before = await ctx.stash.get(id);
             await ctx.stash.discard(id);
-            ctx.toast({ message: 'Pouch discarded', action: { label: 'Undo', run: () => ctx.stash.restore(before) } });
+            discarded = before;
+            cache.expired = cache.expired.filter((x) => x.id !== id);
+            if (api.isOpen() && body.isConnected) paintSources();
+            const u = sourcesEl.querySelector('[data-undo-discard]');
+            if (u) u.focus();
           } catch (err) {
             d.disabled = false;
             console.warn('feed sheet: pouch not discarded', err);
+          }
+        });
+      }
+      const undo = sourcesEl.querySelector('[data-undo-discard]');
+      if (undo) {
+        undo.addEventListener('click', async () => {
+          const item = discarded;
+          if (!item) return;
+          undo.disabled = true;
+          try {
+            await ctx.stash.restore(item);
+            discarded = null;
+            if (!cache.expired.some((x) => x.id === item.id)) cache.expired = [item, ...cache.expired];
+            if (api.isOpen() && body.isConnected) paintSources();
+            const again = sourcesEl.querySelector(`[data-discard-src="${item.id}"]`);
+            if (again) again.focus();
+          } catch (err) {
+            undo.disabled = false;
+            console.warn('feed sheet: pouch not restored', err);
           }
         });
       }
@@ -737,8 +773,9 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
       try {
         const ev = await ctx.events.start('feed', data, { startTime: st.when ?? Date.now(), babyId });
         markRefreezeUsed(ev);
-        // #5: the hero carries over (FLIP) and the content cross-fades, no slide.
-        go({ view: 'liveBottle', event: ev, morphFrom: from }, from && !ctx.motionReduced() ? 'morph' : 'forward');
+        // #5: the hero carries over (FLIP) and the content cross-fades, no
+        // slide. Reduced motion: the same cross-fade, without the FLIP.
+        go({ view: 'liveBottle', event: ev, morphFrom: from }, from ? 'morph' : 'forward');
       } catch (err) {
         busy = false;
         setBusy(startBtn, false);
@@ -1102,7 +1139,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
     setChip('none');
     render(body, html`<div class="fd fd-live">
         <div class="fd-hero cat-feed">
-          <span class="fd-timer num" aria-hidden="true" data-total>00:00</span>
+          <span class="fd-timer num" aria-hidden="true" data-total data-pill-for="${ev.id}">00:00</span>
           <span class="fd-hero-sub" data-state></span>
         </div>
         <div class="tiles fd-sides" role="group" aria-label="Sides">

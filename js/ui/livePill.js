@@ -325,7 +325,7 @@ export function mount(root, ctx) {
       for (const id of [...pills.keys()]) if (!ids.has(id)) removePill(id);
       for (const e of running) {
         const p = pills.get(e.id);
-        if (p) p.event = e; else addPill(e, !initial);
+        if (p) { p.event = e; p.el.removeAttribute('data-ending'); } else addPill(e, !initial);
       }
       // keep DOM order = start order (oldest closest to the nav). Only move
       // nodes when the order is actually wrong: re-inserting a node blurs
@@ -409,6 +409,12 @@ export function mount(root, ctx) {
     const e = change.event;
     const prev = change.prev;
     if (change.op === 'update' && prev && prev.endTime === null && e && e.endTime !== null) finished.add(e.id);
+    // Mark a pill whose event just ended or went, synchronously: the pill
+    // only goes after the (async) refresh, but a sheet showing that event
+    // closes on this same change — and must not shrink into a pill that is
+    // about to leave (sheet.js skips [data-ending] pills, #6).
+    const endedId = change.op === 'remove' ? (e ? e.id : change.id) : (e && e.endTime !== null ? e.id : null);
+    if (endedId && pills.has(endedId)) pills.get(endedId).el.setAttribute('data-ending', '');
     const relevant = change.op === 'bulk'
       || (e && e.endTime === null)
       || (prev && prev.endTime === null)

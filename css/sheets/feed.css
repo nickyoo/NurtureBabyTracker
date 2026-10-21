@@ -23,6 +23,8 @@
 .fd-hint b { color: var(--text); font-weight: var(--fw-heavy); }
 .fd-note { justify-content: center; text-align: left; }
 .fd-note .ic { color: var(--text-2); }
+.fd-undo { align-items: center; }
+.fd-undo .btn { margin-left: auto; color: var(--pump-ink); }
 .fd-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
 .fd-row .fd-label { text-align: left; }
 .fd-row .segmented { flex: 0 1 220px; }

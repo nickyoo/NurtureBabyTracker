@@ -334,48 +334,89 @@ function bindGlobals() {
 //
 // #16 (card / row → its sheet): the header icon chip FLIPs from the tapped
 // card's icon (or row's chip) as the sheet rises, and back on close.
-// #6 (running-timer sheet → its live pill): on dismiss, the timer numeral
-// flies into the pill's time while the sheet slides away; the pill, hidden
-// meanwhile, appears as it lands.
-// Both fly a fixed-position copy in #sheetRoot (above every layer), so the
-// real element's own layout — and the sheet's slide — are untouched. Never
-// under reduced motion.
+// #6 (running-timer sheet → its live pill): on dismiss, the sheet shrinks
+// back INTO the pill's rect — the reverse of the rect grow it opened with —
+// and fades onto the pill as it lands, while the timer numeral flies into
+// the pill's time. The pill itself never moves or blinks.
+// Flights use a fixed-position copy in #sheetRoot (above every layer), so
+// the real element's own layout — and the sheet's own motion — are
+// untouched. Never under reduced motion.
+//
+// Hooks a sheet can carry (all optional):
+//  - [data-sheet-icon]  its header icon, the #16 landing spot. Without one,
+//    a header chip carrying the card's icon is added (.sheet-hd-chip).
+//  - [data-pill-for="<event id>"]  "this sheet shows that running event":
+//    dismissing it shrinks it into that event's live pill (#6). On a
+//    [data-timer] element, the numeral also flies into the pill's time. A
+//    sheet opened FROM a live pill goes back into it even without the hook.
 
 /** The icon a card or row carries: a row's chip, a card's label icon. */
 function originIcon(el) {
-  return el.querySelector('.chip-ic') || el.querySelector('.ql-label .ic') || null;
+  return el.querySelector('[data-sheet-icon]') || el.querySelector('.chip-ic') || el.querySelector('.ql-label .ic') || null;
 }
 
 /**
- * Fly a copy of `el` between two viewport rects (translate + scale, transform
- * origin top-left), then remove it. Resolves when done (or after a fallback).
+ * The transform that maps a box laid out at `home` onto `rect` (transform
+ * origin top-left). `uniform` keeps the aspect ratio (text), scaling by
+ * height and centring horizontally. Pure (unit-tested).
+ * @param {{ left: number, top: number, width: number, height: number }} home
+ * @param {{ left: number, top: number, width: number, height: number }} rect
+ * @param {{ uniform?: boolean }} [o]
+ * @returns {string}
+ */
+export function flipTransform(home, rect, { uniform = false } = {}) {
+  const r = (n) => Math.round(n * 10000) / 10000;
+  const sx = home.width ? rect.width / home.width : 1;
+  const sy = home.height ? rect.height / home.height : 1;
+  if (uniform) {
+    const s = sy;
+    const dx = rect.left + rect.width / 2 - (home.left + (home.width * s) / 2);
+    return `translate(${r(dx)}px, ${r(rect.top - home.top)}px) scale(${r(s)})`;
+  }
+  return `translate(${r(rect.left - home.left)}px, ${r(rect.top - home.top)}px) scale(${r(sx)}, ${r(sy)})`;
+}
+
+/**
+ * Fly a copy of `el` from one viewport rect to another, then remove it.
+ * The copy is laid out at `home` — the element's own natural box, so text
+ * and icons keep their real size there — and transformed from `from` to `to`.
+ * Resolves when done (or after a fallback).
  * @param {Element} el what the copy looks like
+ * @param {DOMRect|object} home the box the copy is laid out in
  * @param {DOMRect|object} from start rect
- * @param {DOMRect|object} to end rect (the copy's own box)
- * @param {{ duration: number, easing: string, fadeOut?: boolean, fadeIn?: boolean, color?: [string, string] }} o
+ * @param {DOMRect|object} to end rect
+ * @param {{ duration: number, easing: string, fadeOut?: boolean, fadeIn?: boolean, uniform?: boolean, color?: [string, string] }} o
+ *   fadeOut: fade over the last 40% (merging into a visible target);
+ *   fadeIn: start at .4 (lifting off a target that stays visible)
  * @returns {Promise<void>}
  */
-function flyCopy(el, from, to, o) {
+function flyCopy(el, home, from, to, o) {
   return new Promise((resolve) => {
     const c = el.cloneNode(true);
     c.removeAttribute('id');
+    c.removeAttribute('data-sheet-icon');
     c.setAttribute('aria-hidden', 'true');
+    // The real element is hidden while its copy flies — the copy must not be.
+    c.style.removeProperty('visibility');
     c.classList.add('sheet-flight');
-    c.style.setProperty('left', `${to.left}px`);
-    c.style.setProperty('top', `${to.top}px`);
-    c.style.setProperty('width', `${to.width}px`);
-    c.style.setProperty('height', `${to.height}px`);
+    // Inline, so the element's own rules (loaded after components.css, same
+    // specificity — e.g. .fd-timer's centred transform-origin) can't move it.
+    c.style.setProperty('position', 'fixed');
+    c.style.setProperty('margin', '0');
+    c.style.setProperty('transform-origin', '0 0');
+    c.style.setProperty('left', `${home.left}px`);
+    c.style.setProperty('top', `${home.top}px`);
+    c.style.setProperty('width', `${home.width}px`);
+    c.style.setProperty('height', `${home.height}px`);
     sheetRoot().appendChild(c);
-    const sx = to.width ? from.width / to.width : 1;
-    const sy = to.height ? from.height / to.height : 1;
-    const start = `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${sx}, ${sy})`;
-    const k0 = { transform: start, opacity: o.fadeIn ? 0.4 : 1 };
-    const k1 = { transform: 'none', opacity: o.fadeOut ? 0 : 1 };
+    const k0 = { transform: flipTransform(home, from, o), opacity: o.fadeIn ? 0.4 : 1 };
+    const k1 = { transform: flipTransform(home, to, o), opacity: o.fadeOut ? 0 : 1 };
     if (o.color) { k0.color = o.color[0]; k1.color = o.color[1]; }
+    const frames = o.fadeOut ? [k0, { opacity: 1, offset: 0.6 }, k1] : [k0, k1];
     let done = false;
     const end = () => { if (done) return; done = true; c.remove(); resolve(); };
     try {
-      const a = c.animate([k0, k1], { duration: o.duration, easing: o.easing, fill: 'forwards' });
+      const a = c.animate(frames, { duration: o.duration, easing: o.easing, fill: 'forwards' });
       a.onfinish = end;
       a.oncancel = end;
     } catch { end(); return; }
@@ -565,9 +606,10 @@ export function openSheet(opts = {}) {
   if (!reduced && !fabOrigin && growMode === null && originEl && originEl.matches('.ql, .row') && typeof Element.prototype.animate === 'function') {
     const icon = originIcon(originEl);
     const s0 = sheet.getBoundingClientRect();
-    // The sheet's own chip if its first view leads with one (entry sheet),
-    // else a header chip carrying the card's icon.
-    let chip = currentStep.querySelector('.chip-ic');
+    // The sheet's declared header icon, else a header chip carrying the
+    // card's icon. Never an arbitrary .chip-ic in the body: the sleep sheet's
+    // "Awake" sun or a stash picker's pouch would be the wrong symbol.
+    let chip = layer.querySelector('[data-sheet-icon]');
     if (chip && chip.getBoundingClientRect().top - s0.top > 160) chip = null;
     if (!chip && icon && title) {
       const cat = [...originEl.classList].find((c) => /^cat-[\w-]+$/.test(c)) || '';
@@ -607,7 +649,7 @@ export function openSheet(opts = {}) {
     const from = icon.getBoundingClientRect();
     if (from.width && r.width) {
       chip.style.setProperty('visibility', 'hidden');
-      flyCopy(chip, from, rest, { duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-std', 'ease'), fadeIn: true })
+      flyCopy(chip, rest, from, rest, { duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-std', 'ease'), fadeIn: true })
         .then(() => chip.style.removeProperty('visibility'));
     } else {
       chipFlight = null;
@@ -733,23 +775,34 @@ export function openSheet(opts = {}) {
     sheet.addEventListener('pointercancel', onUp);
   }
 
-  // A dismissed running-timer sheet: its timer and the matching live pill.
-  function pillFlightTarget(result) {
-    if (reduced || result !== undefined || typeof Element.prototype.animate !== 'function') return null;
-    const timer = currentStep.querySelector('[data-timer][data-pill-for]');
-    if (!timer || !onScreen(timer)) return null;
-    const id = timer.getAttribute('data-pill-for');
-    const pill = [...document.querySelectorAll('#livePills .lpill')].find((p) => p.getAttribute('data-event-id') === id && !p.inert);
-    const time = pill && pill.querySelector('.lpill-time');
-    if (!time || !onScreen(pill)) return null;
-    return { timer, pill, time };
+  // A dismissed running-timer sheet (#6): the live pill it goes back into —
+  // the event it shows ([data-pill-for]), else the pill it was opened from —
+  // plus its timer numeral and the pill's time, when both are on screen.
+  // Null when there is no such pill still running and on screen (finished,
+  // discarded: the sheet then leaves the ordinary way), under reduced motion,
+  // when the sheet is closed with a result (an action, not a dismissal), on a
+  // drag (the slide follows the finger), or mid-growth from the + (a circle
+  // clip can't interpolate to the pill's rect).
+  function livePillTarget(result) {
+    if (reduced || result !== undefined) return null;
+    if (layer.classList.contains('is-drag-close')) return null;
+    if (layer.classList.contains('is-grow') && !layer.classList.contains('is-settled')) return null;
+    const alive = [...document.querySelectorAll('#livePills .lpill')].filter((p) => !p.inert && !p.hasAttribute('data-ending'));
+    const tagged = currentStep.querySelector('[data-pill-for]');
+    let pill = tagged ? alive.find((p) => p.getAttribute('data-event-id') === tagged.getAttribute('data-pill-for')) : null;
+    if (!pill && originInPills) pill = alive.find((p) => p.contains(originEl)) || null;
+    if (!pill || !onScreen(pill)) return null;
+    const timer = (tagged && tagged.matches('[data-timer]') ? tagged : null) || (originInPills ? currentStep.querySelector('[data-timer]') : null);
+    const time = pill.querySelector('.lpill-time');
+    const fly = !!(timer && time && onScreen(timer) && typeof Element.prototype.animate === 'function');
+    return { pill, timer: fly ? timer : null, time: fly ? time : null };
   }
 
   function close(result) {
     if (entry.closing) return closed;
     entry.closing = true;
     // Measure the shared elements before anything changes (#6, #16).
-    const toPill = pillFlightTarget(result);
+    const toPill = livePillTarget(result);
     const chipBack = !toPill && chipFlight && onScreen(chipFlight.icon) && chipFlight.chip.isConnected ? chipFlight : null;
     const i = stack.indexOf(entry);
     if (i !== -1) stack.splice(i, 1);
@@ -768,40 +821,76 @@ export function openSheet(opts = {}) {
       if (app) app.classList.remove('is-behind-sheet');
     }
 
-    // Grown sheets collapse back into the ×: restore the full circle first
-    // (it was dropped once settled) so the collapse has a start value.
-    if ((layer.classList.contains('is-grow') || layer.classList.contains('is-rect')) && layer.classList.contains('is-settled')) {
-      layer.classList.remove('is-settled');
-      reflow(sheet);
-    }
     if (toPill) {
-      // #6: the sheet slides away (#1) — not the + collapse or the pill
-      // rect — while the timer flies into the pill, which appears as it lands.
-      layer.classList.remove('is-grow', 'is-rect', 'is-settled');
-      const from = toPill.timer.getBoundingClientRect();
-      const to = restingRect(toPill.time);
-      const pill = toPill.pill;
-      pill.classList.add('is-flight-target');
-      toPill.timer.style.setProperty('visibility', 'hidden');
-      flyCopy(toPill.timer, from, to, {
-        duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-spring', 'ease'),
-        color: [getComputedStyle(toPill.timer).color, getComputedStyle(toPill.time).color],
-      }).then(() => { pill.classList.remove('is-flight-target'); });
-    } else if (chipBack) {
-      // #16 reverse: the chip flies back to the card / row it came from.
-      const from = chipBack.chip.getBoundingClientRect();
-      const to = restingRect(chipBack.icon);
-      chipBack.chip.style.setProperty('visibility', 'hidden');
-      chipBack.icon.style.setProperty('visibility', 'hidden');
-      flyCopy(chipBack.chip, from, to, { duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-std', 'ease'), fadeOut: true })
-        .then(() => chipBack.icon.style.removeProperty('visibility'));
+      // #6: shrink back INTO the live pill — the rect grow in reverse: the
+      // sheet's header strip, the pill's size and radius, lands on the pill
+      // (translateY + inset clip, --dur-morph on the spring) and fades onto
+      // it. Not the slide, not the + collapse. The pill's RESTING rect: the
+      // page behind is easing back from its .985 scale meanwhile.
+      const box = restingRect(toPill.pill);
+      const radius = Math.min(box.height / 2, parseFloat(getComputedStyle(toPill.pill).borderTopLeftRadius) || box.height / 2);
+      const midGrow = layer.classList.contains('is-rect') && !layer.classList.contains('is-settled');
+      if (!midGrow) {
+        // Commit an explicit start (the full sheet as an inset clip, where
+        // it is now) so the clip has a value to interpolate from: a settled
+        // sheet has clip-path none, a + sheet had a circle.
+        layer.classList.add('is-measuring');
+        layer.classList.remove('is-grow', 'is-rect', 'is-settled', 'is-staggered');
+        layer.classList.add('is-to-pill');
+        reflow(sheet);
+        layer.classList.remove('is-measuring');
+      } else {
+        // Still growing out of this pill: reverse from wherever it is.
+        layer.classList.remove('is-rect');
+        layer.classList.add('is-to-pill');
+      }
+      // The sheet's layout box (transforms ignored: it may be mid-rise or
+      // mid-grow); the layer is fixed at the viewport's origin.
+      const sTop = sheet.offsetTop;
+      const sLeft = sheet.offsetLeft;
+      const sRight = sLeft + sheet.offsetWidth;
+      sheet.style.setProperty('--rg-y', `${box.top - sTop}px`);
+      sheet.style.setProperty('--rg-l', `${Math.max(0, box.left - sLeft)}px`);
+      sheet.style.setProperty('--rg-r', `${Math.max(0, sRight - box.right)}px`);
+      sheet.style.setProperty('--rg-b', `${Math.max(0, sheet.offsetHeight - box.height)}px`);
+      sheet.style.setProperty('--rg-rad', `${radius}px`);
+      reflow(sheet);
+      if (toPill.timer) {
+        // …while the numeral flies into the pill's time.
+        const from = toPill.timer.getBoundingClientRect();
+        const to = restingRect(toPill.time);
+        const color = [getComputedStyle(toPill.timer).color, getComputedStyle(toPill.time).color];
+        toPill.timer.style.setProperty('visibility', 'hidden');
+        flyCopy(toPill.timer, from, from, to, {
+          duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-spring', 'ease'), uniform: true, color,
+        });
+      }
+    } else {
+      // Grown sheets collapse back into the ×: restore the full circle first
+      // (it was dropped once settled) so the collapse has a start value.
+      if ((layer.classList.contains('is-grow') || layer.classList.contains('is-rect')) && layer.classList.contains('is-settled')) {
+        layer.classList.remove('is-settled');
+        reflow(sheet);
+      }
+      if (chipBack) {
+        // #16 reverse: the chip flies back to the card / row it came from.
+        const from = chipBack.chip.getBoundingClientRect();
+        const to = restingRect(chipBack.icon);
+        // A row's chip looks just like the copy: hide it, land opaque, swap.
+        // A card's bare icon doesn't: it stays, and the copy fades into it.
+        const swap = chipBack.icon.matches('.chip-ic');
+        chipBack.chip.style.setProperty('visibility', 'hidden');
+        if (swap) chipBack.icon.style.setProperty('visibility', 'hidden');
+        flyCopy(chipBack.chip, from, from, to, { duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-std', 'ease'), fadeOut: !swap })
+          .then(() => { if (swap) chipBack.icon.style.removeProperty('visibility'); });
+      }
     }
     layer.setAttribute('data-state', 'closing');
     layer.inert = true;
     notifyChange();
 
     const growing = layer.classList.contains('is-grow');
-    const ms = (reduced ? 150 : growing ? cssMs('--dur-base', 280) : EXIT_MS) + FALLBACK_SLACK_MS;
+    const ms = (reduced ? 150 : toPill ? cssMs('--dur-morph', 320) : growing ? cssMs('--dur-base', 280) : EXIT_MS) + FALLBACK_SLACK_MS;
     // Wait for the EXIT property only (see afterTransition): the circle
     // collapse, the opacity fade, or the slide.
     const exitProp = reduced ? 'opacity' : growing ? 'clip-path' : 'transform';

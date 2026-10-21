@@ -294,7 +294,7 @@ export function openMemorySheet(ctx, { origin, preset, event, id, mode = 'view',
       body.querySelector('[data-edit]').focus({ preventScroll: true });
     } catch (err) {
       console.error('memory sheet: cover not saved', err);
-      showError(body, 'That didn’t work. Try again.');
+      showError(body, ctx.format.saveError(err, 'That didn’t work. Try again.'));
     } finally {
       busy = false;
     }
@@ -314,7 +314,7 @@ export function openMemorySheet(ctx, { origin, preset, event, id, mode = 'view',
       closingFor = null;
       busy = false;
       btn.removeAttribute('aria-busy');
-      showError(body, 'That didn’t delete. Try again.');
+      showError(body, ctx.format.saveError(err, 'That didn’t delete. Try again.'));
       return;
     }
     if (api.isOpen()) api.close('deleted');
@@ -569,7 +569,8 @@ export function openMemorySheet(ctx, { origin, preset, event, id, mode = 'view',
         busy = false;
         saveBtn.removeAttribute('aria-busy');
         saveBtn.style.removeProperty('min-width');
-        showError(body, 'That didn’t save. Check the day and try again.');
+        // DI-05: a full phone is said plainly (checking the day can't help).
+        showError(body, ctx.format.saveError(err, 'That didn’t save. Check the day and try again.'));
         return;
       }
       added.clear(); // they belong to the memory now
