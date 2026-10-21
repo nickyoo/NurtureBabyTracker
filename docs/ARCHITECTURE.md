@@ -78,7 +78,7 @@ tests/
   e2e/*.mjs                Playwright walkthroughs (run against `python3 -m http.server`)
 ```
 
-Legacy v1 modules (`dashboardView.js`, `feedFlow.js`, `pumpTimerView.js`, `inventoryView.js`, `settingsView.js`, `bottles.js`, `viewHelpers.js`, `css/style.css`) are deleted once their behavior is ported. Their pure helpers move (with their tests) into `domain/` and `core/`.
+The legacy v1 modules (`app.v1.js`, `dashboardView.js`, `feedFlow.js`, `pumpTimerView.js`, `inventoryView.js`, `settingsView.js`, `bottles.js`, `viewHelpers.js`, `db.js`, `css/style.css`, …) were deleted in v2.0.0 once their behavior was ported; their pure helpers moved (with their tests) into `domain/` and `core/`, and `tests/sw-assets.test.js` keeps them from coming back. v1 *data* is still migrated by `core/migrate.js`.
 
 ---
 
@@ -116,7 +116,7 @@ Per-type `data`:
 
 | type | data |
 |---|---|
-| `feed` | `{ method: 'bottle', milk: 'formula'\|'breastmilk', amount: number, unit: 'oz'\|'mL', prepared?: number, sourceInventoryId?: string }` **or** `{ method: 'breast', left: sec, right: sec, lastSide: 'left'\|'right', activeSide?: 'left'\|'right'\|null }` |
+| `feed` | `{ method: 'bottle', milk: 'formula'\|'breastmilk', amount: number, unit: 'oz'\|'mL', prepared?: number, sourceInventoryId?: string }` **or** `{ method: 'breast', left: sec, right: sec, lastSide: 'left'\|'right', activeSide?: 'left'\|'right'\|null, activeSince?: number\|null }` |
 | `pump` | `{ amount: number, unit, storedTo: 'fridge'\|'freezer'\|'deepFreezer'\|null, inventoryId?: string }` |
 | `sleep` | `{ kind: 'nap'\|'night' }` |
 | `diaper` | `{ kind: 'wet'\|'dirty'\|'both'\|'dry', color?: string, consistency?: string }` |
@@ -130,7 +130,7 @@ Amounts are stored **in the unit they were entered in** with the unit recorded; 
 
 A running activity is simply an event with `endTime: null`:
 - **Bottle feed** (`feed`, method bottle): safety countdown derives from `startTime` + `domain/safety.js`. Finish → set `endTime`, final `amount`; cancel → delete.
-- **Breastfeeding**: `data.activeSide` + side seconds accumulate; switching sides updates `data`.
+- **Breastfeeding**: `data.activeSide` + side seconds accumulate; `data.activeSince` (epoch ms) is when the live side started — `left`/`right` hold only *banked* seconds, the live side adds `now − activeSince` (`domain/safety.js` `breastSideTotals`). `activeSide` and `activeSince` always agree: a live side given without `activeSince` counts from `startTime` on create (`events.start('feed', { method:'breast', activeSide:'left' })`) and from *now* on edit. Switching sides is `events.update(id, { data: { activeSide } })`: without an explicit `activeSince` the old side's seconds are banked first (`switchBreastSide`). Stopping banks the live side up to `endTime`.
 - **Pump timer**: amount entered on stop.
 - **Sleep**: stop sets `endTime`.
 
@@ -143,6 +143,7 @@ On upgrade (or first v2 boot if `settings.migratedV2 !== true`):
   - `pump` → `{ type:'pump', startTime, endTime, data:{ amount: s.outputQty, unit: s.unit||'oz', storedTo: null } }`
   - `feed` → `{ type:'feed', data:{ method:'bottle', milk: s.feedType==='formula'?'formula':'breastmilk', amount: s.outputQty, unit: s.unit||'oz' } }`, `endTime = startTime + durationSec*1000` (or startTime)
   - non-finite `outputQty` (the v1.6 NaN bug) → `amount: null` and `note` "Amount wasn't recorded" so the UI shows "—" and offers edit.
+  - times v1 accepted are never a reason to drop a record (v1's edit modal takes any date): a session ending more than a day in the future is moved to **end now** (length kept), a `durationSec` over 24 h is capped, and the note gets "Time was adjusted (please check)". `runMigration()` reports `rejected` / `rejectedIds` for sessions that truly can't be migrated (unknown type, no usable time) so the UI can tell the parent.
   - auto-generated v1 notes ("Formula Feeding", "Breast Milk Bottle Feed", "Pumped session (…)") are dropped; real user notes kept.
 - v1 settings keys mapped: `dailyGoalOz`, `pumpIntervalMinutes`, `units`, `themeMode`, `soundEnabled`, `storageWindows`, `parentName`, `babyName`, `onboarding_completed` → v2 settings (§6). Junk keys (`dailyPumpingGoal`, `reminderIntervalHours`, `preferredUnit`) ignored.
 - v1 `localStorage` live timers (`nurture_active_pump_timer`, `nurture_bottle_timer`) → running events, then the keys are removed.
@@ -200,7 +201,7 @@ export default {
 }
 ```
 
-`ctx` = `{ router, openSheet, toast, confirmSheet, settings, events, stash, photos, units, time, format, icons }` — everything a view needs, injected, so views don't import siblings.
+`ctx` = `{ router, openSheet, toast, confirmSheet, settings, events, stash, photos, units, time, format, icons, persist, backup, safety, html, livePill, sheets, activeBaby(), motionReduced(), sheetsBusy(), whenSheetsIdle(), fab }` — everything a view needs, injected, so views don't import siblings.
 
 ### 5.3 Sheet module contract
 
@@ -238,6 +239,9 @@ settings.get(key) / settings.set(key, value) / settings.all() / settings.subscri
 | `deviceId` | generated once | |
 | `onboarded` | `false` | |
 | `migratedV2` | `false` | |
+| `iconDataUrl` | `null` | 180×180 PNG of the baby photo (§10), per device |
+| `iconBabyId` | `null` | whose photo the icon is, per device |
+| `memoryCovers` | `{}` | `{ [babyId]: eventId }`, the cover of each baby's book; exported |
 
 ---
 
@@ -250,7 +254,7 @@ settings.get(key) / settings.set(key, value) / settings.all() / settings.subscri
 - Behavior: focus moves into the sheet, is trapped, and is restored to `origin` on close; `Esc`, backdrop tap and grabber drag-down dismiss when `dismissible`; app root gets `inert` while open; body scroll locked; nested sheets stack.
 - A running live activity's sheet is always dismissible — the activity keeps running and its live pill remains (fixes AUDIT F4 permanently).
 
-### 7.2 `toast({ message, action?: { label:'Undo', run }, duration = 5000, tone })`
+### 7.2 `toast({ message, action?: { label:'Undo', run }, secondaryAction?: { label, run }, duration = 5000, tone })`
 Rises from just above the nav / live pill (never from the top edge). One at a time; a new toast replaces the old. `aria-live="polite"`.
 
 ### 7.3 `confirmSheet({ title, body, confirmLabel, destructive }) → Promise<boolean>`

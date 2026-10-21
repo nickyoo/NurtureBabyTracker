@@ -36,7 +36,8 @@ export function paceOzPerMin(eaten, durationSec) {
 export const pacePerMin = paceOzPerMin;
 
 /**
- * Human safety-countdown label: 4500 → "1h 15m", 900 → "15m", <=0 → "expired".
+ * Human safety-countdown label: 4500 → "1h 15m", 3600 → "1h 00m" (minutes
+ * are padded once there are hours, DESIGN §3.2/§10), 900 → "15m", <=0 → "expired".
  * @param {number} remainingSec
  * @returns {string}
  */
@@ -45,7 +46,7 @@ export function fmtSafetyWindow(remainingSec) {
   const mins = Math.ceil(remainingSec / 60);
   const h = Math.floor(mins / 60);
   const m = mins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  return h > 0 ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 }
 
 /**

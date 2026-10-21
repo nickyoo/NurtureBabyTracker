@@ -1,0 +1,66 @@
+/* =====================================================================
+   Stash view (js/views/stash.js, DESIGN §13 Frame 5). Builds on the
+   components.css Stash block (total, split bar, hero, pouch art).
+   Tokens only; category color via .cat-* → --c-*. No theme selectors.
+   ===================================================================== */
+
+.stx-hd { align-items: center; }
+.stx-hd .eyebrow { margin: 0; }
+.stx-total { margin-top: 2px; }
+.stx-sub { margin-top: 0; }
+.stx-split { margin-top: var(--s-4); }
+.stx-legend span { white-space: nowrap; }
+.stx-legend .ic { color: var(--text-2); }
+
+/* ---------------------------------------------------------- hero */
+.stx-hero { margin-top: var(--s-5); }
+.stx-hero .hero-mid { align-items: center; }
+.stx-hero .hero-amt .num { font: inherit; letter-spacing: inherit; }
+.stx-hero-text { min-width: 0; }
+.stx-hero .btns .btn { padding: 0 var(--s-3); }
+.stx-hero .btns.stx-btns-one { grid-template-columns: 1fr; }
+.stx-hero .hero-loc .ic { color: var(--text-2); }
+.stx-hero.is-entering, .stx-sec.is-entering, .stx-empty.is-entering { animation: stx-in var(--dur-base) var(--ease-out) both; }
+@keyframes stx-in { from { opacity: 0; transform: translateY(var(--move-sm)); } to { opacity: 1; transform: none; } }
+
+/* Pouch art: frozen / fridge = still milk; thawed = a softer, wavy level
+   and a drop. The variants cross-fade in place on Thaw (#19). */
+.stx-art { flex: none; }
+.stx-art .stx-milk-still, .stx-art .stx-milk-thawed, .stx-art .stx-art-drop { transition: opacity var(--dur-base) var(--ease-std); }
+.stx-art .stx-milk-thawed, .stx-art .stx-art-drop { opacity: 0; }
+.stx-art .stx-art-drop { fill: none; stroke: var(--pump-mid); stroke-width: 2.25; stroke-linejoin: round; }
+.stx-art.is-thawed .stx-milk-still { opacity: 0; }
+.stx-art.is-thawed .stx-milk-thawed, .stx-art.is-thawed .stx-art-drop { opacity: 1; }
+.stx-art.is-expired { opacity: .55; transition: opacity var(--dur-base) var(--ease-std); }
+
+/* ---------------------------------------------------------- sections */
+.stx-sec { margin-top: var(--s-2); }
+.stx-hero-slot + .stx-secs .stx-sec:first-child { margin-top: var(--s-3); }
+.stx-sec-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.stx-sec-title .ic { width: 24px; height: 24px; flex: none; color: var(--text); }
+.stx-sec-title > span:first-of-type { white-space: nowrap; }
+.stx-sec-amt {
+  font-family: var(--font-ui); font-size: var(--fs-headline); font-weight: var(--fw-heavy);
+  color: var(--text-2); letter-spacing: 0; font-variant-numeric: var(--numeric); white-space: nowrap;
+}
+.stx-sec.is-leaving { opacity: 0; transition: opacity var(--dur-fast) var(--ease-in); pointer-events: none; }
+.stx-row .row-title .num { font: inherit; }
+.stx-row .badge { max-width: 46%; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------------------------------------------------------- archive link */
+.stx-archive { margin-top: var(--s-6); }
+.stx-archive-row .chip-ic { background: var(--surface-2); color: var(--text-2); }
+.stx-archive-row > .ic { color: var(--text-3); flex: none; }
+.stx-empty + .stx-archive-slot .stx-archive, .stx-archive-slot:first-child .stx-archive { margin-top: 0; }
+
+@media (max-width: 359px) {
+  .stx-hd .btn-outline { padding: 0 var(--s-3) 0 var(--s-2); }
+  .stx-legend { font-size: var(--fs-footnote); }
+}
+
+/* The page's h1 is the "MILK STASH" eyebrow (the big number is the title);
+   undo .page-hd h1's display type so it reads as Frame 5's 12 px caps. */
+.page-hd.stx-hd h1.eyebrow {
+  font-family: var(--font-ui); font-size: var(--fs-caption); font-weight: var(--fw-heavy);
+  letter-spacing: var(--tracking-caps); line-height: 1.2; margin: 0;
+}

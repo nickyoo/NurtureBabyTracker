@@ -1,0 +1,23 @@
+// Thaw (hero) offers Undo; Thaw & feed does not, even when the feed is abandoned.
+import * as L from './lib.mjs';
+const { log, settle, shot } = L;
+await L.launch();
+const NOW = new Date('2026-10-20T15:30:00Z').getTime();
+const { page } = await L.fresh({ time: NOW });
+await L.onboard(page);
+await page.evaluate(async ([s, now]) => { const { stash } = await import(s); await stash.add({ quantity: 4, unit: 'oz', location: 'freezer', pumpedAt: now - 20 * 86400000 }); await stash.add({ quantity: 5, unit: 'oz', location: 'freezer', pumpedAt: now - 10 * 86400000 }); }, [L.mod('/js/core/stash.js'), NOW]);
+const inv = async () => (await page.evaluate(async (u) => (await import(u)).stash.list(), L.mod('/js/core/stash.js'))).map((p) => `${p.quantity}${p.unit}@${p.location}`).join(' ');
+await L.tab(page, 'stash');
+await L.clickView(page, 'stash', '[data-hero-act="thaw"]'); await settle(page, 600);
+log('Thaw: toast=', JSON.stringify(await L.toastText(page)), 'inv', await inv());
+await shot(page, 'p09-thaw-toast');
+await page.click('#toastRoot .toast-action'); await settle(page, 900);
+log('after Undo inv', await inv());
+await L.dismissToast(page);
+await L.clickView(page, 'stash', '[data-hero-act="thaw-feed"]'); await settle(page, 900);
+log('Thaw & feed sheet open: toast=', JSON.stringify(await L.toastText(page)), 'inv', await inv());
+await page.click('.sheet-layer[data-state="open"] .sheet-close').catch(() => page.keyboard.press('Escape'));
+await L.waitNoLayers(page); await settle(page, 800);
+log('closed via ×: toast=', JSON.stringify(await L.toastText(page)), 'inv', await inv());
+await shot(page, 'p09-thawfeed-abandoned');
+await L.close();

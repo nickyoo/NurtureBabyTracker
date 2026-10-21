@@ -1,0 +1,12 @@
+import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+const port = process.argv[2] || '8157';
+const page_ = process.argv[3] || 'store-probe.html';
+const browser = await chromium.launch();
+const ctx = await browser.newContext();
+const page = await ctx.newPage();
+page.on('console', m => { if (m.type() === 'error') console.log('console:', m.text()); });
+page.on('pageerror', e => console.log('pageerror:', e.message));
+await page.goto(`http://127.0.0.1:${port}/tests/e2e/probes/${page_}`);
+await page.waitForFunction(() => window.__done === true, null, { timeout: 30000 });
+console.log(JSON.stringify(await page.evaluate(() => window.__R), null, 2));
+await browser.close();

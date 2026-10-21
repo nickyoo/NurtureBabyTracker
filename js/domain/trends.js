@@ -8,6 +8,9 @@
 //  - Running feeds/pumps (endTime null) are excluded from counts and amounts
 //    until they're finished — their final amount isn't known yet.
 //  - Amounts convert per event from the unit they were entered in.
+//  - Aggregates count whatever events they're given: pass one baby's events
+//    (events.query({ babyId }) or forBaby()) for per-child cards. Pumps are
+//    the parent's (babyId null) and belong to every baby's view.
 
 import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from '../core/units.js';
 import { dayBounds, addDays, dayKey, toMs } from '../core/time.js';
@@ -43,6 +46,19 @@ export function overlapMs(event, from, to, now = Date.now()) {
 }
 
 const isRunning = e => e.endTime === null || e.endTime === undefined;
+
+/**
+ * One baby's events plus the parent-level ones (babyId null — pumps), the
+ * same rule as events.query({ babyId }). undefined babyId → all events.
+ * @param {object[]} events
+ * @param {string} [babyId]
+ * @returns {object[]}
+ */
+export function forBaby(events, babyId) {
+  const list = (events || []).filter(Boolean);
+  if (babyId === undefined) return list;
+  return list.filter(e => (e.babyId ?? null) === null || e.babyId === babyId);
+}
 const inRange = (e, from, to) => Number.isFinite(e.startTime) && e.startTime >= from && e.startTime < to;
 
 /**
@@ -120,7 +136,8 @@ export function rangeTotals(events, from, to, { unit = 'oz', now = Date.now() } 
       feed.count += 1;
       if (d.method === 'breast') {
         feed.breastCount += 1;
-        feed.breastSec += breastSideTotals(d, now).total;
+        // Finished feed: a stale activeSide can't add live seconds past its end.
+        feed.breastSec += breastSideTotals(d, e.endTime).total;
       } else {
         feed.bottleCount += 1;
         const amt = eventAmountIn(e, u) || 0;
@@ -170,7 +187,11 @@ export function pumpProgress(events, goalOz, { unit = 'oz', now = Date.now(), da
   const { start, end } = dayBounds(day);
   const totals = rangeTotals(events, start, end, { unit: u, now });
   const g = toFiniteNumber(goalOz);
-  const goal = g !== null && g > 0 ? roundForUnit(convertQty(g, 'oz', u), u) : 0;
+  // The goal is stored in oz; in mL it reads to the nearest 10 (as Settings
+  // shows it), so a 720 mL goal saved as 24.3 oz never reads "719 mL".
+  const goal = g !== null && g > 0
+    ? (u === 'mL' ? Math.max(10, Math.round(convertQty(g, 'oz', 'mL') / 10) * 10) : roundForUnit(convertQty(g, 'oz', u), u))
+    : 0;
   const total = totals.pump.amount;
   return {
     unit: u,
@@ -248,4 +269,65 @@ export function latest(events, type, { predicate, includeRunning = false, now } 
     if (!best || e.startTime > best.startTime) best = e;
   }
   return best;
+}
+
+/**
+ * Pediatrician report numbers (§10c) for the last `days` local days:
+ * per-day rows (lastNDays) plus totals and per-day averages of feeds, bottle
+ * amount, breastfeeding sessions, wet/dirty diapers, sleep and pumping, and
+ * the longest sleep stretch. Pass one baby's events (forBaby) for a per-child
+ * report.
+ *
+ * Two choices keep the averages honest: by default the window is the last N
+ * COMPLETE days (today's half-day would drag every average down), and
+ * averages divide by the days that have any data, so a week-old log isn't
+ * averaged over days before the app was installed.
+ * @param {object[]} events
+ * @param {{ days?: number, unit?: 'oz'|'mL', now?: number, includeToday?: boolean }} [opts]
+ * @returns {{
+ *   unit: 'oz'|'mL', from: number, to: number, dayCount: number, daysWithData: number,
+ *   days: ReturnType<typeof lastNDays>,
+ *   totals: { feeds:number, bottleAmount:number, breastSessions:number, wet:number, dirty:number, sleepMs:number, pumps:number, pumpAmount:number },
+ *   perDay: { feeds:number, bottleAmount:number, breastSessions:number, wet:number, dirty:number, sleepMs:number, pumps:number, pumpAmount:number },
+ *   longestSleepMs: number
+ * }}
+ */
+export function reportSummary(events, { days = 7, unit = 'oz', now = Date.now(), includeToday = false } = {}) {
+  const u = normalizeUnit(unit);
+  const n = Math.max(1, Math.min(90, Math.floor(Number.isFinite(days) ? days : 7) || 1));
+  // The last millisecond of yesterday stands in for "now" when today is
+  // excluded; only a sleep still running from yesterday is affected (it is
+  // clipped at midnight, which is what a per-day report wants anyway).
+  const asOf = includeToday ? now : dayBounds(now).start - 1;
+  const rows = lastNDays(events, n, { unit: u, now: asOf });
+  const from = rows[0].start;
+  const to = rows[rows.length - 1].end;
+  // Totals come from ONE pass over the whole window rather than by adding up
+  // the per-day rows, whose amounts are already rounded (7 × ±0.5 mL drift).
+  const whole = rangeTotals(events, from, to, { unit: u, now: asOf });
+  const totals = {
+    feeds: whole.feed.count,
+    bottleAmount: whole.feed.amount,
+    breastSessions: whole.feed.breastCount,
+    wet: whole.diaper.wet,
+    dirty: whole.diaper.dirty,
+    sleepMs: whole.sleep.totalMs,
+    pumps: whole.pump.count,
+    pumpAmount: whole.pump.amount,
+  };
+  const daysWithData = rows.filter(d => d.feed.count + d.pump.count + d.diaper.count + d.milestone.count + d.sleep.count > 0
+    || d.sleep.totalMs > 0).length;
+  const div = Math.max(1, daysWithData);
+  const avgCount = v => Math.round((v / div) * 10) / 10;
+  const perDay = {
+    feeds: avgCount(totals.feeds),
+    bottleAmount: roundForUnit(totals.bottleAmount / div, u),
+    breastSessions: avgCount(totals.breastSessions),
+    wet: avgCount(totals.wet),
+    dirty: avgCount(totals.dirty),
+    sleepMs: Math.round(totals.sleepMs / div / 60000) * 60000,
+    pumps: avgCount(totals.pumps),
+    pumpAmount: roundForUnit(totals.pumpAmount / div, u),
+  };
+  return { unit: u, from, to, dayCount: n, daysWithData, days: rows, totals, perDay, longestSleepMs: whole.sleep.longestMs };
 }

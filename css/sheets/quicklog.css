@@ -1,0 +1,23 @@
+/* Sheet family: quick log (js/sheets/quickLog.js) — DESIGN §6.7, Frame 3.
+   Tiles, the diaper row and the hint come from components.css (§4); this
+   file only adds the time-picker step and spacing specific to this sheet. */
+
+/* Row tiles directly under the tile grid (no diaper row between them). */
+.sheet-quicklog .tiles.ql-rows { margin-top: 10px; }
+.sheet-quicklog .diaper-row:first-child { margin-top: 0; }
+/* The two siblings of a just-tapped diaper button stay readable (no dimming). */
+.sheet-quicklog .dbtn[aria-disabled="true"] { pointer-events: none; }
+.sheet-quicklog .dbtn .ic { flex: none; }
+/* The live seconds clock inside a running tile is tabular. */
+.sheet-quicklog .tile-ctx .num { font-variant-numeric: var(--numeric); }
+
+/* "When did it happen?" step (opened from the time chip). */
+.ql-when-q { font-weight: var(--fw-heavy); font-size: var(--fs-headline); margin: 0 2px var(--s-2); }
+.ql-when-chips { margin: 0 -4px var(--s-3); }
+.ql-when-field { margin-top: var(--s-1); }
+.ql-when-field .field-input { min-height: 32px; }
+.ql-when-note { min-height: 19px; margin: var(--s-2) 2px 0; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); font-variant-numeric: var(--numeric); }
+.ql-when-actions { margin-top: var(--s-4); }
+
+/* "Start on left · last was R" fits one line in a half-width tile (Frame 3). */
+.sheet-quicklog .tiles > .tile:not(.row-tile) { padding-right: 8px; }

@@ -1,0 +1,86 @@
+/* =====================================================================
+   Entry sheet (js/sheets/event.js): view / edit / delete any entry.
+   DESIGN §6.4 (one pattern: row → detail sheet), §6.6, §6.8 Field /
+   Segmented / Stepper / Chip. Tokens + components.css only; category
+   colour via .cat-* → --c-*. No theme selectors (night is tokens only).
+   ===================================================================== */
+
+.sheet-event .ev { display: flex; flex-direction: column; gap: var(--s-4); }
+.sheet-event .ev > .sheet-footer { margin-top: 0; }
+
+/* ---------- View ---------- */
+.ev-hero {
+  display: flex; align-items: center; gap: var(--s-3);
+  min-height: 76px; padding: 12px 14px 12px 12px; border-radius: var(--r-lg);
+  background: var(--c-card);
+}
+.ev-hero .chip-ic { background: var(--c-well); }
+.ev-hero .chip-ic.ring-live { box-shadow: 0 0 0 2px var(--c-card), 0 0 0 3.5px var(--c-mid); }
+.ev-hero-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ev-big {
+  font-size: var(--fs-numeral); line-height: 44px; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); font-variant-numeric: var(--numeric); color: var(--text);
+  white-space: nowrap;
+}
+.ev-big small { font-size: var(--fs-unit); line-height: 0; font-weight: var(--fw-strong); color: var(--text-2); letter-spacing: 0; margin: 0 4px 0 2px; }
+.ev-big .ev-words { font-size: var(--fs-title-3); line-height: 1.3; letter-spacing: 0; font-weight: var(--fw-heavy); white-space: normal; }
+.ev-when { font-size: var(--fs-subhead); line-height: 19px; color: var(--text-2); font-weight: var(--fw-body); font-variant-numeric: var(--numeric); }
+.ev-now { align-self: flex-start; flex: none; background: var(--c-well); color: var(--c-ink); }
+.ev-now .dot { width: 7px; height: 7px; margin-right: 5px; color: var(--c-mid); }
+
+/* Facts: a quiet two-column list. */
+.ev-facts { display: flex; flex-direction: column; background: var(--surface-2); border-radius: var(--r-lg); padding: 2px 14px; }
+.ev-fact { display: flex; justify-content: space-between; align-items: baseline; gap: var(--s-3); min-height: 44px; padding: 11px 0; }
+.ev-fact + .ev-fact { border-top: 1px solid var(--line); }
+.ev-fact dt { font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-strong); flex: none; }
+.ev-fact dd { font-size: var(--fs-callout); color: var(--text); font-weight: var(--fw-heavy); text-align: right; font-variant-numeric: var(--numeric); min-width: 0; overflow-wrap: anywhere; }
+
+.ev-note { display: flex; flex-direction: column; gap: 2px; padding: 0 2px; }
+.ev-note-lbl { font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-strong); }
+.ev-note-txt { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ev-hint { padding: 0 2px; }
+.ev-hint .ic { flex: none; color: var(--c-ink, var(--text-2)); }
+.ev .field-error:not([hidden]) { justify-content: center; text-align: center; }
+.ev .field-error .ic { flex: none; }
+
+.ev-btns { display: grid; grid-template-columns: 1fr 1.25fr; gap: 10px; }
+.ev-btns .btn { min-height: 52px; }
+.ev-loading { padding: var(--s-6) 0 var(--s-8); text-align: center; }
+.sheet-event .ev-gone { padding-bottom: var(--s-6); }
+
+/* ---------- Edit ---------- */
+.ev-back { align-self: flex-start; margin: calc(-1 * var(--s-2)) 0 calc(-1 * var(--s-2)) calc(-1 * var(--s-2)); padding-left: var(--s-1); }
+.ev-block, .ev-when-grp { display: flex; flex-direction: column; gap: var(--s-2); }
+.ev-lbl { font-size: var(--fs-callout); font-weight: var(--fw-heavy); color: var(--text); line-height: 1.3; }
+.ev-when-row { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--s-2); }
+.ev-when-row .field-input { min-height: 30px; min-width: 0; }
+.ev-block .ev-when-row { grid-template-columns: 1fr 1fr; }
+
+/* Segmented: icon + word, each segment's hit area spans the 44px track. */
+.ev-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 6px; }
+.ev-seg > button::after { content: ""; position: absolute; inset: -3px 0; }
+.ev-seg > button .ic { color: var(--c-ink, var(--text-2)); flex: none; }
+
+/* Amount stepper: the value is a typed input in a fixed box, so the − / +
+   never move under a thumb. */
+.ev-stepper { gap: var(--s-3); justify-content: space-between; }
+.ev-stepper .ev-value { flex: 1; }
+.ev-value {
+  display: inline-flex; align-items: baseline; justify-content: center; gap: 4px;
+  min-width: 3.2em; min-height: 64px; padding: 4px 6px; border-radius: var(--r-md);
+  font-size: var(--fs-amount); line-height: 1; cursor: text;
+}
+.ev-value:has(.ev-value-input:focus-visible) { box-shadow: var(--focus-ring); }
+.ev-value-input {
+  width: calc(var(--chars, 1) * 0.6em + 0.1em); min-width: 0.7em; padding: 0; border: 0; background: transparent; color: var(--text);
+  font-size: 1em; line-height: 1.1; font-weight: var(--fw-numeral); letter-spacing: var(--tracking-numeral);
+  font-variant-numeric: var(--numeric); text-align: center; caret-color: var(--accent);
+}
+.ev-value-input::placeholder { color: var(--text-3); }
+.ev-value-input:focus-visible { box-shadow: none; }
+.ev-value-unit { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); }
+
+/* Diaper color + texture (dirty / both only). */
+.ev-more { display: flex; flex-direction: column; gap: var(--s-2); overflow: hidden; transition: opacity var(--dur-fast) var(--ease-std); }
+.ev-more.is-collapsed { display: none; }
+.ev-chips { gap: var(--s-2); }

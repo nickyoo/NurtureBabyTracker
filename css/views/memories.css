@@ -1,0 +1,95 @@
+/* View: Memories (js/views/memories.js) — DESIGN §6.8 MemoryCover /
+   FirstsRow, §13 Frame 6, §8.6 (photos dimmed at night via --photo-filter).
+   Built on components.css (.page-hd, .cover, .firsts/.first-row, .print,
+   .grid3, .sec-hd, .empty-state). Only Memories-specific pieces live here;
+   category colour comes from .cat-mem → --c-*, never a theme selector. */
+
+/* ---------- Cover print: a real button that opens its memory ---------- */
+.mem .mem-cover {
+  display: block; width: 100%; text-align: left; color: var(--text);
+  transition: transform var(--dur-press) var(--ease-std);
+}
+.mem .mem-cover:active { transform: scale(var(--card-press-scale)); }
+.mem .mem-cover:focus-visible { box-shadow: var(--focus-ring), var(--shadow-1); }
+.mem .mem-cover .cover-cap .it { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem .mem-cover.is-missing .cover-photo { opacity: 1; }
+
+/* Photos fade in once decoded (no pop-in); the --surface-2 well holds the place. */
+.mem img[data-photo] { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.mem img[data-photo].is-loaded { opacity: 1; }
+
+/* No photo yet: the EmptyState sits on the cover's mounted card. */
+.mem .mem-cover-empty {
+  margin-top: var(--s-1); padding: var(--s-6) var(--s-4) var(--s-5);
+  background: var(--surface); border-radius: 6px; box-shadow: var(--shadow-1), 0 0 0 1px var(--line);
+}
+.mem .mem-cover-empty .empty-text { max-width: 32ch; }
+.mem .is-entering { animation: mem-enter var(--dur-base) var(--ease-out) both; }
+@keyframes mem-enter { from { opacity: 0; transform: translateY(var(--move-sm)); } to { opacity: 1; transform: none; } }
+
+/* ---------- Firsts ---------- */
+.mem .firsts .first-row { border-radius: var(--r-sm); transition: background-color var(--dur-press) var(--ease-std); }
+.mem .firsts button.first-row:active { background: var(--surface-2); }
+.mem .firsts .first-text b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem .firsts .first-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mem .firsts .print { overflow: hidden; }
+.mem .firsts .print.is-missing img { opacity: 1; }
+.mem .first-row.is-suggested .first-text .it { line-height: 1.25; }
+.mem .mem-suggest-add { flex: none; }
+
+/* ---------- The family's own memories, by week of life ---------- */
+.mem .mem-week { margin-top: var(--s-2); }
+.mem .mem-grid { row-gap: var(--s-3); }
+.mem .mem-grid > li { aspect-ratio: auto; overflow: visible; border-radius: 0; }
+.mem .mem-tile {
+  display: flex; flex-direction: column; gap: 6px; width: 100%; min-height: 44px;
+  text-align: left; color: var(--text); border-radius: var(--r-print);
+  transition: transform var(--dur-press) var(--ease-std);
+}
+.mem .mem-tile:active { transform: scale(var(--press-scale)); }
+.mem .mem-tile-ph {
+  display: grid; place-items: center; width: 100%; aspect-ratio: 1; overflow: hidden;
+  border-radius: var(--r-print); background: var(--surface-2);
+  box-shadow: var(--shadow-1), 0 0 0 1px var(--line);
+}
+.mem .mem-tile-ph img { display: block; width: 100%; height: 100%; object-fit: cover; filter: var(--photo-filter); }
+.mem .mem-tile.is-text .mem-tile-ph { background: var(--c-tint); color: var(--c-ink); box-shadow: none; }
+.mem .mem-tile-ic .ic { width: 26px; height: 26px; }
+.mem .mem-tile-cap {
+  font-size: var(--fs-footnote); font-weight: var(--fw-heavy); line-height: 1.3; color: var(--text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+
+/* ---------- Storage, said quietly ---------- */
+.mem .mem-storage { justify-content: center; margin: var(--s-8) 0 var(--s-2); text-align: center; }
+.mem .mem-storage .ic { flex: none; }
+
+/* ---------- New / removed items (motion #9) ---------- */
+.mem .firsts > li.is-inserting, .mem .mem-grid > li.is-inserting, .mem .mem-week.is-inserting {
+  animation: row-insert var(--dur-base) var(--ease-out) both; overflow: hidden;
+}
+.mem .mem-grid > li.is-inserting { animation-name: mem-tile-insert; }
+.mem .mem-week.is-inserting { animation-name: mem-enter; overflow: visible; }
+.mem .firsts > li.is-inserting > .first-row,
+.mem .mem-grid > li.is-inserting .mem-tile-cap,
+.mem .mem-week.is-inserting .mem-tile-cap { animation: row-wash var(--dur-highlight) var(--ease-std) both; border-radius: var(--r-xs); }
+.mem .firsts > li.is-inserting .spark-chip { animation: chip-pop var(--dur-base) var(--ease-out) both; }
+@keyframes mem-tile-insert { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: none; } }
+.mem .is-removing {
+  max-height: 0 !important; opacity: 0; overflow: hidden;
+  transition: max-height var(--dur-fast) var(--ease-in), opacity var(--dur-fast) var(--ease-in);
+}
+
+/* Reduced motion: no slides or pops — the tint wash stays (it's colour). */
+:root[data-motion="reduce"] .mem .is-entering,
+:root[data-motion="reduce"] .mem .firsts > li.is-inserting,
+:root[data-motion="reduce"] .mem .mem-grid > li.is-inserting,
+:root[data-motion="reduce"] .mem .mem-week.is-inserting,
+:root[data-motion="reduce"] .mem .firsts > li.is-inserting .spark-chip { animation: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="full"]) .mem .is-entering,
+  :root:not([data-motion="full"]) .mem .firsts > li.is-inserting,
+  :root:not([data-motion="full"]) .mem .mem-grid > li.is-inserting,
+  :root:not([data-motion="full"]) .mem .mem-week.is-inserting,
+  :root:not([data-motion="full"]) .mem .firsts > li.is-inserting .spark-chip { animation: none !important; }
+}

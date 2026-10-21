@@ -9,7 +9,9 @@
 // commit in the middle and race another writer. `transaction()` below keeps
 // each read-modify-write inside request callbacks, so it is atomic everywhere.
 
+/** Same database as v1, so the upgrade happens in place (§3). */
 export const DB_NAME = 'NurtureDB';
+/** v1 was 1. Opening at 2 runs upgradeSchema(); v1 code can no longer open it. */
 export const DB_VERSION = 2;
 
 /** Store names, so callers never hand-type them. */
@@ -36,8 +38,8 @@ export function newId(prefix) {
 }
 
 /**
- * Schema upgrade. Pure function of (db, oldVersion, upgradeTx) so it can be
- * reasoned about on its own. It only ever CREATES stores/indexes — it never
+ * Schema upgrade, run inside the versionchange transaction. Idempotent
+ * (ensure-style), so it is correct from any old version, including 0. It only ever CREATES stores/indexes — it never
  * deletes or rewrites a v1 store, so a v1 → v2 upgrade cannot lose data.
  * The v1 sessions → v2 events copy happens later in core/migrate.js, in a
  * normal transaction that also flips settings.migratedV2 (exactly-once).

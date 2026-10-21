@@ -8,9 +8,10 @@
 
 import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from '../core/units.js';
 
-// Thawed stash lives in the fridge physically, so it gets its own location
-// value distinct from the frozen sources it came from.
+/** Thawed stash lives in the fridge physically, so it gets its own location
+ * value distinct from the frozen sources it came from. */
 export const THAWED_LOCATION = 'thawed';
+/** Locations whose pouches can be thawed. */
 export const FROZEN_LOCATIONS = ['freezer', 'deepFreezer'];
 
 /** Every location a pouch can be in. */
@@ -30,7 +31,66 @@ export const DEFAULT_STORAGE_WINDOWS = Object.freeze({
   startedBottleHours: 2,
 });
 
+/** The longest window Settings allows for each storage place (the upper
+ * bounds of settings.storageWindows). Nothing — not even an imported file —
+ * may keep milk longer than this. */
+export const MAX_STORAGE_WINDOWS = Object.freeze({
+  roomTempHours: 24,
+  fridgeDays: 14,
+  freezerMonths: 24,
+  deepFreezerMonths: 24,
+  thawedBottleHours: 72,
+  startedBottleHours: 24,
+});
+
 const HOUR_MS = 60 * 60 * 1000;
+
+/** Bounds every stored pouch meets. The app's own writes (buildInventoryItem,
+ * applyInventoryPatch) and the import/undo sanitizer (core/stash.js
+ * sanitizeInventoryItem) check the SAME ones, so a pouch the app stores can
+ * always be restored by Undo and from its own backup. `futureSkewMs` matches
+ * core/store.js FUTURE_SKEW_MS (clock skew between two phones). */
+export const POUCH_LIMITS = Object.freeze({
+  minTime: Date.UTC(2000, 0, 1),
+  maxTime: Date.UTC(2100, 0, 1),
+  futureSkewMs: 24 * HOUR_MS,
+  maxQuantity: 10000,
+});
+
+/**
+ * The latest moment a pouch pumped at `pumpedAt` can have been thawed: the
+ * end of the longest frozen window any setting allows. A thaw after that was
+ * thawing spoiled milk.
+ * @param {number} pumpedAt
+ * @returns {number}
+ */
+export function latestThawAt(pumpedAt) {
+  return calculateExpiration(pumpedAt, 'deepFreezer', MAX_STORAGE_WINDOWS);
+}
+
+/**
+ * Is `thawedAt` a possible thaw time for milk pumped at `pumpedAt`? Not
+ * before it was pumped (minus clock skew between two phones), not after the
+ * longest frozen window ran out.
+ * @param {number} thawedAt
+ * @param {number} pumpedAt
+ * @returns {boolean}
+ */
+export function isPlausibleThaw(thawedAt, pumpedAt) {
+  return Number.isFinite(thawedAt) && Number.isFinite(pumpedAt)
+    && thawedAt >= pumpedAt - POUCH_LIMITS.futureSkewMs && thawedAt <= latestThawAt(pumpedAt);
+}
+
+function checkPumpedAt(t, now) {
+  if (t === null) throw new RangeError('pumpedAt must be a timestamp');
+  if (t < POUCH_LIMITS.minTime) throw new RangeError('pumpedAt is too far in the past');
+  if (t > now + POUCH_LIMITS.futureSkewMs) throw new RangeError('pumpedAt is in the future');
+}
+
+function checkQuantity(q) {
+  if (q === null || q <= 0) throw new RangeError('Pouch quantity must be a positive number');
+  if (q > POUCH_LIMITS.maxQuantity) throw new RangeError('Pouch quantity is too large');
+}
 
 /**
  * Pure transition for thawing a frozen stash item (frozen → thawed).
@@ -115,6 +175,26 @@ export function calculateExpiration(pumpedAt, location, storageWindows) {
     expiresAt = d.getTime();
   }
   return expiresAt;
+}
+
+/**
+ * The latest expiry any allowed storage window could give this pouch
+ * (MAX_STORAGE_WINDOWS). Thawed milk: thawedAt + the longest thawed window,
+ * where thawedAt can never be later than the latest it could have been
+ * thawed (latestThawAt: end of the longest frozen window) — so a thawed pouch
+ * never outlives pumpedAt + longest frozen + longest thawed window, whatever
+ * thawedAt a file claims. Used to bound an untrusted expiresAt.
+ * @param {{pumpedAt:number, location:string, thawedAt?:number}} item
+ * @returns {number}
+ */
+export function maxExpiresAt(item) {
+  const thawMs = MAX_STORAGE_WINDOWS.thawedBottleHours * HOUR_MS;
+  if (item.location === THAWED_LOCATION) {
+    const latest = latestThawAt(item.pumpedAt);
+    const thawedAt = Number.isFinite(item.thawedAt) ? Math.min(item.thawedAt, latest) : latest;
+    return thawedAt + thawMs;
+  }
+  return calculateExpiration(item.pumpedAt, item.location, MAX_STORAGE_WINDOWS);
 }
 
 /**
@@ -286,7 +366,10 @@ export function pickUseNext(items, now = Date.now()) {
 
 /**
  * Build a NEW pouch record. Throws RangeError on a non-positive / non-finite
- * quantity or an unknown location, so a NaN pouch can't be stored.
+ * / absurd quantity, an unknown location, or a pumpedAt outside
+ * POUCH_LIMITS (before 2000, or more than a day ahead), so the app can never
+ * store a pouch that Undo or its own backup would then refuse. Expiry never
+ * exceeds maxExpiresAt.
  * @param {{pumpedAt?:number, quantity:unknown, unit?:string, location:string, notes?:string}} input
  * @param {object} [storageWindows]
  * @param {{ now?: number, id: string, deviceId?: string }} ctx
@@ -294,10 +377,11 @@ export function pickUseNext(items, now = Date.now()) {
  */
 export function buildInventoryItem(input, storageWindows, { now = Date.now(), id, deviceId } = {}) {
   const quantity = toFiniteNumber(input && input.quantity);
-  if (quantity === null || quantity <= 0) throw new RangeError('Pouch quantity must be a positive number');
+  checkQuantity(quantity);
   const location = input.location;
   if (!STORE_LOCATIONS.includes(location)) throw new RangeError(`Unknown stash location: ${location}`);
   const pumpedAt = toFiniteNumber(input.pumpedAt) ?? now;
+  checkPumpedAt(pumpedAt, now);
   const unit = normalizeUnit(input.unit);
   const item = {
     id,
@@ -305,7 +389,7 @@ export function buildInventoryItem(input, storageWindows, { now = Date.now(), id
     quantity: roundForUnit(quantity, unit),
     unit,
     location,
-    expiresAt: calculateExpiration(pumpedAt, location, storageWindows),
+    expiresAt: Math.min(calculateExpiration(pumpedAt, location, storageWindows), maxExpiresAt({ pumpedAt, location })),
     status: 'active',
     notes: typeof input.notes === 'string' ? input.notes.slice(0, 2000) : '',
     createdAt: now,
@@ -320,7 +404,13 @@ export function buildInventoryItem(input, storageWindows, { now = Date.now(), id
  * expiresAt). Expiry is recomputed when pumpedAt/location change unless an
  * explicit expiresAt is given. Thawed milk can't be moved: refreezing thawed
  * milk is unsafe and moving it to "fridge" would silently restart a 4-day
- * clock on milk that has 24h.
+ * clock on milk that has 24h. 'expired' is derived from expiresAt, so a pouch
+ * the sweep marked expired comes back to 'active' when the edit (e.g. "this
+ * was really in the freezer") gives it an expiry that is still ahead.
+ * The same bounds as buildInventoryItem apply (RangeError otherwise): a
+ * pumpedAt within POUCH_LIMITS (and, for thawed milk, still a possible
+ * thaw time), a quantity ≤ POUCH_LIMITS.maxQuantity, and an explicit
+ * expiresAt no later than maxExpiresAt. A recomputed expiry is capped there.
  * @param {object} item
  * @param {object} patch
  * @param {object} [storageWindows]
@@ -332,7 +422,7 @@ export function applyInventoryPatch(item, patch, storageWindows, now = Date.now(
   const p = patch || {};
   if ('quantity' in p) {
     const q = toFiniteNumber(p.quantity);
-    if (q === null || q <= 0) throw new RangeError('Pouch quantity must be a positive number');
+    checkQuantity(q);
     next.quantity = q;
   }
   if ('unit' in p) next.unit = normalizeUnit(p.unit);
@@ -340,7 +430,10 @@ export function applyInventoryPatch(item, patch, storageWindows, now = Date.now(
   let reExpire = false;
   if ('pumpedAt' in p) {
     const t = toFiniteNumber(p.pumpedAt);
-    if (t === null) throw new RangeError('pumpedAt must be a timestamp');
+    checkPumpedAt(t, now);
+    if (Number.isFinite(item.thawedAt) && !isPlausibleThaw(item.thawedAt, t)) {
+      throw new RangeError('A thawed pouch must have been pumped before it was thawed');
+    }
     next.pumpedAt = t;
     reExpire = true;
   }
@@ -352,21 +445,26 @@ export function applyInventoryPatch(item, patch, storageWindows, now = Date.now(
   }
   if ('expiresAt' in p) {
     const t = toFiniteNumber(p.expiresAt);
-    if (t === null) throw new RangeError('expiresAt must be a timestamp');
+    if (t === null || t < POUCH_LIMITS.minTime) throw new RangeError('expiresAt must be a timestamp');
+    if (t > maxExpiresAt(next)) throw new RangeError('expiresAt is later than milk can safely be kept there');
     next.expiresAt = t;
   } else if (reExpire && next.location !== THAWED_LOCATION) {
     next.expiresAt = calculateExpiration(next.pumpedAt, next.location, storageWindows);
   }
+  if (Number.isFinite(next.expiresAt)) next.expiresAt = Math.min(next.expiresAt, maxExpiresAt(next));
   next.quantity = roundForUnit(next.quantity, next.unit);
+  if (next.status === 'expired' && Number.isFinite(next.expiresAt) && next.expiresAt > now) next.status = 'active';
   next.updatedAt = now;
   return next;
 }
 
 /**
  * Consume `amount` (in `amountUnit`) from a pouch after a feed. Using all of
- * it (within ~1.5 mL) marks it used; a partial use leaves the remainder in the
- * pouch, rounded in the pouch's own unit. Returns null when nothing changes
- * (unusable pouch, missing/zero amount).
+ * it (within 0.1 oz ≈ 3 mL) marks it used; a partial use leaves the remainder
+ * in the pouch, rounded in the pouch's own unit. The tolerance absorbs
+ * oz↔mL rounding: a "120 mL" pouch fed as "4 oz" (118.3 mL) must not leave a
+ * 2 mL ghost pouch that someone has to discard by hand. Returns null when
+ * nothing changes (unusable pouch, missing/zero amount).
  * @param {object} item
  * @param {unknown} amount
  * @param {unknown} amountUnit
@@ -379,7 +477,7 @@ export function consumeUpdate(item, amount, amountUnit, now = Date.now()) {
   if (n === null || n <= 0) return null;
   const unit = normalizeUnit(item.unit);
   const used = convertQty(n, amountUnit, unit);
-  const tolerance = convertQty(0.05, 'oz', unit);
+  const tolerance = convertQty(0.1, 'oz', unit);
   if (used >= item.quantity - tolerance) {
     return { ...item, status: 'used', usedAt: now, updatedAt: now };
   }

@@ -6,9 +6,13 @@
 // 86 400 000 ms across a DST change lands on 23:00 or 01:00 and files events
 // under the wrong day.
 
+/** Milliseconds in a second / minute / hour. */
 export const SECOND = 1000;
+/** @see SECOND */
 export const MINUTE = 60 * SECOND;
+/** @see SECOND */
 export const HOUR = 60 * MINUTE;
+/** 24h in ms — a fixed span, NOT a calendar day (use addDays/dayBounds). */
 export const DAY = 24 * HOUR;
 
 /**
@@ -168,6 +172,9 @@ export function timerClock(totalSeconds) {
   const hrs = Math.floor(mins / 60);
   const mm = pad2(mins % 60);
   const ss = pad2(secs);
+  // A timer left running for days (e.g. one merged from a partner's backup)
+  // reads "12 days", not a 10-character "7200:00:10" that squeezes its label.
+  if (hrs > 99) return `${Math.floor(hrs / 24)} days`;
   return hrs > 0 ? `${hrs}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 

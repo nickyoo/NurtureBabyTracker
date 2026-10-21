@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <!-- Same CSP as production: the components need nothing else. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Nurture component gallery</title>
+  <!--
+    The final mockup frames (docs/design/mockup.html) rebuilt from the
+    PRODUCTION stylesheets + js/ui modules, with fixed sample data. Two uses:
+      1. tests/e2e/gallery.mjs screenshots each frame (light + dark) to
+         docs/design/build/gallery-*.png for comparison with
+         docs/design/final/frame-*.png.
+      2. Screen teams: copy the markup in gallery.js — it is the reference
+         for which classes each component expects.
+    ?frame=today|quicklog|timeline|stash|memories|customize  &theme=light|dark
+  -->
+  <link rel="stylesheet" href="../../../css/tokens.css">
+  <link rel="stylesheet" href="../../../css/base.css">
+  <link rel="stylesheet" href="../../../css/components.css">
+  <link rel="stylesheet" href="./gallery.css">
+  <script type="module" src="./gallery.js"></script>
+</head>
+<body data-chrome="boot">
+  <div id="app">
+    <header id="appHeader"></header>
+    <main id="viewport"></main>
+    <div id="livePills"></div>
+    <nav id="tabBar"></nav>
+  </div>
+  <div id="sheetRoot"></div>
+  <div id="toastRoot" role="status" aria-live="polite"></div>
+</body>
+</html>

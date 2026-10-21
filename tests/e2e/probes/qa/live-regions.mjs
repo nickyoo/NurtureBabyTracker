@@ -1,0 +1,32 @@
+// Count announcements: text changes inside aria-live / role=status|alert|timer|log regions over time.
+import { launch, freshApp, startEvent } from './lib.mjs';
+const browser = await launch();
+const { context, page } = await freshApp(browser);
+await startEvent(page, 'feed', { method: 'bottle', milk: 'formula', amount: 4, unit: 'oz' }, 3);
+await startEvent(page, 'sleep', { kind: 'nap' }, 20);
+await page.waitForTimeout(1000);
+const install = () => page.evaluate(() => {
+  window.__ann = [];
+  const live = (n) => { const el = n.nodeType === 1 ? n : n.parentElement; return el && el.closest('[aria-live]:not([aria-live="off"]), [role="status"], [role="alert"], [role="log"], [role="timer"]'); };
+  const regions = [...document.querySelectorAll('[aria-live], [role="status"], [role="alert"], [role="log"], [role="timer"]')].map(r => `${r.tagName}.${r.className} live=${r.getAttribute('aria-live')} role=${r.getAttribute('role')} atomic=${r.getAttribute('aria-atomic')}`);
+  window.__mo && window.__mo.disconnect();
+  window.__mo = new MutationObserver((ms) => { for (const m of ms) { const r = live(m.target); if (!r || r.closest('[aria-hidden="true"]') && !m.target.closest) continue; if (m.target.nodeType === 1 && m.target.closest('[aria-hidden="true"]')) continue; if (m.target.nodeType === 3 && m.target.parentElement.closest('[aria-hidden="true"]')) continue; window.__ann.push({ t: Math.round(performance.now() / 1000), region: (r.className || r.id || r.tagName).toString().slice(0, 30), text: (r.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 70) }); } });
+  window.__mo.observe(document.body, { subtree: true, childList: true, characterData: true });
+  return regions;
+});
+console.log('regions on Today:', await install());
+await page.waitForTimeout(65000);
+let ann = await page.evaluate(() => window.__ann);
+console.log(`Today, 65 s, 2 pills: ${ann.length} live mutations`); ann.slice(0, 12).forEach(a => console.log('  ', JSON.stringify(a)));
+await page.click('#livePills .lpill-open'); await page.waitForTimeout(800);
+console.log('regions in pill sheet:', await install());
+await page.waitForTimeout(65000);
+ann = await page.evaluate(() => window.__ann);
+console.log(`Pill sheet, 65 s: ${ann.length} live mutations`); ann.slice(0, 12).forEach(a => console.log('  ', JSON.stringify(a)));
+await page.keyboard.press('Escape'); await page.waitForTimeout(700);
+await page.click('#fab'); await page.waitForTimeout(800);
+console.log('regions in quick log:', (await install()).length);
+await page.waitForTimeout(20000);
+ann = await page.evaluate(() => window.__ann);
+console.log(`Quick log, 20 s: ${ann.length} live mutations`); ann.slice(0, 8).forEach(a => console.log('  ', JSON.stringify(a)));
+await context.close(); await browser.close();

@@ -1,624 +1,343 @@
-// Nurture — Master Application Orchestrator
-import { db } from './db.js';
-import { sound } from './audio.js';
-import { timer } from './timer.js';
-import { THAWED_LOCATION } from './inventory.js';
-import { reminders } from './reminders.js';
-import { OnboardingController } from './onboarding.js';
-import { SettingsView } from './settingsView.js';
-import { PumpTimerView } from './pumpTimerView.js';
-import { InventoryView } from './inventoryView.js';
-import { DashboardView } from './dashboardView.js';
-import { FeedFlowController } from './feedFlow.js';
-import { InstallPromptController } from './installPrompt.js';
+// Nurture v2 bootstrap (ARCHITECTURE §2, §5.2, §8). Bootstrap ONLY:
+//   1. theme on <html> before first paint: js/theme-boot.js (a blocking
+//      classic script) does it from the per-device cache this file keeps
+//   2. service worker
+//   3. await runMigration()  (opens the v2 DB, migrates v1, loads settings)
+//   4. baby-photo app icon, theme + motion from settings
+//   5. build ctx, the router (+ nav), live pills; register sheets
+//   6. onboarding or Today
+// Everything else lives in views/ and sheets/, which only see `ctx`.
+//
+// The v1 modules (js/db.js, app.v1.js, …) are gone; the v1 *data* is still
+// read once by core/migrate.js. tests/sw-assets.test.js walks this import
+// graph to prove every module it reaches exists and is precached.
+
+import { runMigration } from './core/migrate.js';
+import { settings } from './core/settings.js';
+import { events, RunningActivityError } from './core/store.js';
+import { stash } from './core/stash.js';
+import { photos } from './core/photos.js';
+import * as units from './core/units.js';
+import * as time from './core/time.js';
+import { persist } from './core/persist.js';
+import { backup } from './core/backup.js';
+import { bottleSafety, breastSideTotals, fmtSafetyWindow } from './domain/safety.js';
+import { html, raw, render, cls, element, fragment } from './ui/html.js';
+import { icons } from './ui/icons.js';
+import { openSheet, sheetsBusy, whenSheetsIdle, motionReduced } from './ui/sheet.js';
+import { toast } from './ui/toast.js';
+import { confirmSheet } from './ui/confirm.js';
+import { createRouter } from './ui/router.js';
+import { livePill } from './ui/livePill.js';
+import { format } from './ui/format.js';
+
+// ------------------------------------------------------------------ theme
+
+const THEME_PREF_KEY = 'nurture.themePref'; // per-device copy of settings.theme, read by js/theme-boot.js
+const MOTION_CACHE_KEY = 'nurture.motion';   // per-device: last applied motion preference
+const NIGHT_START_HOUR = 19;                 // ARCHITECTURE §6: night hours 19:00–08:00
+const NIGHT_END_HOUR = 8;
+const BG = Object.freeze({ light: '#F6F1E8', dark: '#191512' }); // = --bg (tokens.css), for theme-color
+
+const root = document.documentElement;
+const darkQuery = typeof matchMedia === 'function' ? matchMedia('(prefers-color-scheme: dark)') : null;
+
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); } catch { /* private mode: fine */ }
+}
 
 /**
- * Pure merge for editing a logged session (pump or feed).
- * `edits` may contain: outputQty, startTime, notes, feedType ('formula'|'breastmilk'),
- * durationMin. Returns a new session object; never mutates the original.
- * Auto-generated feed notes ("Formula Bottle Feed" / "Breast Milk Bottle Feed")
- * follow a feedType change; user-written notes are left alone.
+ * 'auto' is dark when the system is dark OR during night hours (so a 3 am
+ * feed is dim even on a phone left in light mode); explicit choices win.
+ * @param {'auto'|'light'|'dark'} pref
+ * @param {Date} [now]
+ * @returns {'light'|'dark'}
  */
-export function applySessionEdits(original, edits = {}) {
-  const updated = { ...original };
-
-  if (edits.outputQty !== undefined) {
-    updated.outputQty = Math.round(edits.outputQty * 10) / 10;
-  }
-  if (edits.startTime !== undefined) {
-    updated.startTime = edits.startTime;
-  }
-  if (edits.notes !== undefined) {
-    updated.notes = edits.notes;
-  }
-  if (updated.type === 'feed' && edits.feedType !== undefined) {
-    const autoNotes = {
-      formula: 'Formula Bottle Feed',
-      breastmilk: 'Breast Milk Bottle Feed',
-    };
-    const wasAuto = Object.values(autoNotes).includes(original.notes);
-    updated.feedType = edits.feedType;
-    if (wasAuto) {
-      updated.notes = autoNotes[edits.feedType] || original.notes;
-    }
-  }
-  if (updated.type === 'pump' && edits.durationMin !== undefined) {
-    const durationSec = Math.max(0, Math.round(edits.durationMin * 60));
-    updated.durationSec = durationSec;
-    updated.endTime = updated.startTime + durationSec * 1000;
-  }
-  updated.updatedAt = Date.now();
-  return updated;
+function resolveTheme(pref, now = new Date()) {
+  if (pref === 'light' || pref === 'dark') return pref;
+  const h = now.getHours();
+  const night = h >= NIGHT_START_HOUR || h < NIGHT_END_HOUR;
+  return (darkQuery && darkQuery.matches) || night ? 'dark' : 'light';
 }
 
-// ---------------------------------------------------------------------------
-// FEED-FLOW PURE HELPERS (exported for unit tests — no DOM, no side effects)
-// ---------------------------------------------------------------------------
+let pendingTheme = null;
 
 /**
- * Prefill for the merged feed flow when the user picks a thawed stash item
- * as the bottle-ready source. Thawed stash is always breast milk; amounts
- * stay canonical oz inside the flow.
+ * Set <html data-theme>, cross-fading over --dur-theme. Never flips while a
+ * sheet is open (DESIGN §2.1): the change is queued until sheets are idle.
+ * @param {'light'|'dark'} theme
+ * @param {{ animate?: boolean }} [opts]
  */
-export function buildFeedFlowPrefill(item) {
-  if (!item || item.status !== 'active' || item.location !== THAWED_LOCATION) return null;
-  const oz = item.unit === 'mL' ? item.quantity / 29.5735 : item.quantity;
-  return {
-    type: 'breastmilk',
-    amountOz: Math.round(oz * 10) / 10,
-    sourceInventoryId: item.id,
-  };
+function applyTheme(theme, { animate = true } = {}) {
+  if (root.getAttribute('data-theme') === theme) { pendingTheme = null; return; }
+  if (sheetsBusy()) {
+    const first = pendingTheme === null;
+    pendingTheme = theme;
+    if (first) whenSheetsIdle().then(() => { const t = pendingTheme; pendingTheme = null; if (t) applyTheme(t); });
+    return;
+  }
+  if (animate && !motionReduced()) {
+    root.classList.add('is-theme-switching');
+    setTimeout(() => root.classList.remove('is-theme-switching'), 700);
+  }
+  root.setAttribute('data-theme', theme);
+  for (const meta of document.querySelectorAll('meta[name="theme-color"]')) meta.setAttribute('content', BG[theme]);
 }
 
-// Resolve the live feed-timer start from the feed flow's draft state.
-// The live timer is a first-class path in the feed flow: starting a feed
-// starts the CDC safety countdown (1h formula / 2h breast milk) that answers
-// "is this bottle still good." Defaults keep the timer usable even when the
-// draft type/amount was never picked.
-export function resolveFeedTimerStart(flow) {
-  const f = flow || {};
-  const type = f.type === 'breastmilk' ? 'breastmilk' : 'formula';
-  const amountOz = typeof f.amountOz === 'number' && f.amountOz > 0 ? f.amountOz : 4.0;
-  return {
-    type,
-    amountOz,
-    sourceInventoryId: f.sourceInventoryId || null,
-  };
+function applyThemeFromSettings(animate = true) {
+  const pref = settings.get('theme');
+  storageSet(THEME_PREF_KEY, pref);
+  applyTheme(resolveTheme(pref), { animate });
 }
 
-// CDC safety window for a started bottle, in seconds. Formula is only good
-// for 1 hour once feeding begins; breast milk for 2 hours.
-export function safetyWindowSec(feedType) {
-  return feedType === 'formula' ? 3600 : 7200;
+/** In-app Reduce motion: true → 'reduce', false → 'full', unset → follow the system. */
+function applyMotion(pref) {
+  if (pref === true) root.setAttribute('data-motion', 'reduce');
+  else if (pref === false) root.setAttribute('data-motion', 'full');
+  else root.removeAttribute('data-motion');
+  storageSet(MOTION_CACHE_KEY, pref === true ? 'reduce' : pref === false ? 'full' : '');
 }
 
-// Feeding pace in oz per minute, rounded to 2 decimals. 0 when unmeasurable.
-export function paceOzPerMin(eatenOz, durationSec) {
-  if (!durationSec || durationSec <= 0 || !eatenOz || eatenOz <= 0) return 0;
-  return Math.round((eatenOz / (durationSec / 60)) * 100) / 100;
-}
+// First paint: js/theme-boot.js already set data-theme / data-motion from
+// the cache. If it couldn't run (e.g. a stale cached index.html), resolve
+// now so base.css's paint gate (#app hidden until data-theme) still lifts.
+if (!root.hasAttribute('data-theme')) root.setAttribute('data-theme', resolveTheme('auto'));
 
-// Wall-clock formatter: 65 -> "01:05", 3665 -> "1:01:05".
-export function fmtClock(totalSeconds) {
-  const s = Math.max(0, Math.floor(totalSeconds));
-  const secs = s % 60;
-  const mins = Math.floor(s / 60);
-  const hrs = Math.floor(mins / 60);
-  const mm = String(mins % 60).padStart(2, '0');
-  const ss = String(secs).padStart(2, '0');
-  return hrs > 0 ? `${hrs}:${mm}:${ss}` : `${mm}:${ss}`;
-}
+// -------------------------------------------------------------- app icon
 
-// Human safety-countdown label: 4500 -> "1h 15m", 900 -> "15m", <=0 -> "expired".
-export function fmtSafetyWindow(remainingSec) {
-  if (remainingSec <= 0) return 'expired';
-  const mins = Math.ceil(remainingSec / 60);
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
+const DEFAULT_ICONS = Object.freeze({ touch: 'icons/apple-touch-icon.png', favicon: 'icons/icon.svg', faviconType: 'image/svg+xml' });
 
-// Clamp + snap to step, without float dust (4.0 not 4.0000000004).
-export function clampAmount(v, min, max, step) {
-  const num = parseFloat(v);
-  const safe = Number.isNaN(num) ? min : num;
-  const clamped = Math.min(max, Math.max(min, safe));
-  const stepped = Math.round(clamped / step) * step;
-  const decimals = step >= 1 ? 0 : 1;
-  const factor = 10 ** decimals;
-  return Math.round(stepped * factor) / factor;
-}
-
-// Express gesture: first vertical move locks the side (ny in 0..1, top = 0).
-export function resolveLockedType(ny) {
-  return ny < 0.5 ? 'formula' : 'breastmilk';
-}
-
-// Sticky type lock: flipping requires pushing clearly past center
-// (62% / 38% hysteresis) so mid-gesture drift can't accidentally flip.
-export function shouldFlipType(current, ny) {
-  if (current === 'formula') return ny > 0.62;
-  return ny < 0.38;
-}
-
-// Preset chips per unit system.
-export function feedPresets(unit) {
-  return unit === 'mL' ? [60, 120, 180, 240] : [2, 4, 6, 8];
-}
-
-// Pure bottle-timer state: elapsed + safety countdown from wall clock, so the
-// live feed survives backgrounding — the UI just re-renders from timestamps.
-export function getBottleTimerStatus(startTs, feedType, nowTs) {
-  const elapsedSec = Math.max(0, Math.floor((nowTs - startTs) / 1000));
-  const windowSec = safetyWindowSec(feedType);
-  const safetyRemainingSec = windowSec - elapsedSec;
-  return {
-    elapsedSec,
-    windowSec,
-    safetyRemainingSec,
-    expired: safetyRemainingSec <= 0
-  };
-}
-
-export class App {
-  constructor() {
-    this.currentTab = 'pump';
-    this.settings = {
-      parentName: '',
-      babyName: '',
-      units: 'oz',
-      themeMode: 'auto', // 'auto' | 'light' | 'dark'
-      dailyGoalOz: 24.0,
-      pumpIntervalMinutes: 180,
-      soundEnabled: true,
-      storageWindows: {
-        roomTempHours: 4,
-        fridgeDays: 4,
-        freezerMonths: 6,
-        deepFreezerMonths: 12,
-        thawedBottleHours: 24,
-        startedBottleHours: 2
-      }
-    };
-    this.onboarding = new OnboardingController(this);
-    this.settingsView = new SettingsView(this);
-    this.pumpTimerView = new PumpTimerView(this);
-    this.inventoryView = new InventoryView(this);
-    this.dashboardView = new DashboardView(this);
-    this.feedFlow = new FeedFlowController(this);
-    this.installPrompt = new InstallPromptController(this);
-  }
-
-  async init() {
-    // 1. Load settings & initialize defaults
-    await this.loadSettings();
-
-    // 2. Clock-based Theme Engine (8am Light, 7pm Dark)
-    this.initThemeEngine();
-
-    // 3. Service Worker
-    this.registerServiceWorker();
-
-    // 3b. Install-to-home-screen banner + guide modal. Registered early so
-    // the `beforeinstallprompt` listener is live well before onboarding's
-    // install slide checks for it in step 7.
-    this.installPrompt.initEvents();
-
-    // 4. Bind Navigation & Global Events
-    this.bindNavigation();
-    this.inventoryView.initEvents();
-    this.dashboardView.initEditSessionModal();
-    this.bindGlobalActions();
-
-    // 5. Initialize Core Subsystems
-    await this.pumpTimerView.initEvents();
-    await this.initReminders();
-    await this.renderTodayDashboard();
-    await this.renderInventory();
-    await this.settingsView.initEvents();
-
-    // 6. Quick Food Tracker Subsystem & Activity Filters
-    this.feedFlow.initFeedFlow();
-    this.feedFlow.initBottleTimer();
-    this.initActivityFilter();
-
-    // 7. Onboarding & First Launch check
-    this.onboarding.initEvents();
-    await this.checkFirstLaunch();
-
-    // 8. Live refresh loops for countdowns and theme clock checks
-    setInterval(() => {
-      this.checkClockTheme();
-      if (this.currentTab === 'pump') this.updateBottleFillLevel();
-      if (this.currentTab === 'inventory') this.renderInventory();
-    }, 20000);
-  }
-
-  // --- CLOCK-BASED THEME ENGINE ---
-  initThemeEngine() {
-    this.checkClockTheme();
-  }
-
-  checkClockTheme() {
-    const mode = this.settings.themeMode || 'auto';
-    const now = new Date();
-    const hour = now.getHours();
-
-    let isDark = false;
-    let label = 'Day';
-
-    if (mode === 'dark') {
-      isDark = true;
-      label = 'Night';
-    } else if (mode === 'light') {
-      isDark = false;
-      label = 'Light';
-    } else {
-      // Auto Clock: Past 7pm (19:00) until 8am is Dark; Past 8am (08:00) until 7pm is Light
-      if (hour >= 19 || hour < 8) {
-        isDark = true;
-        label = 'Night (7pm)';
-      } else {
-        isDark = false;
-        label = 'Day (8am)';
-      }
-    }
-
-    if (isDark) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      const metaTheme = document.querySelector('meta[name="theme-color"]');
-      if (metaTheme) metaTheme.setAttribute('content', '#0b0f17');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-      const metaTheme = document.querySelector('meta[name="theme-color"]');
-      if (metaTheme) metaTheme.setAttribute('content', '#fff7f9');
-    }
-
-    const chipLabel = document.getElementById('themeClockLabel');
-    const chipIcon = document.getElementById('themeClockIcon');
-    if (chipLabel) chipLabel.textContent = label;
-    if (chipIcon) {
-      chipIcon.innerHTML = isDark
-        ? `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>`
-        : `<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>`;
-    }
-  }
-
-  async setThemeMode(mode) {
-    this.settings.themeMode = mode;
-    await db.setSetting('themeMode', mode);
-    this.checkClockTheme();
-  }
-
-  // --- SETTINGS MANAGEMENT ---
-  async loadSettings() {
-    const saved = await db.getAllSettings();
-    if (saved.parentName) this.settings.parentName = saved.parentName;
-    if (saved.babyName) this.settings.babyName = saved.babyName;
-    if (saved.units) this.settings.units = saved.units;
-    if (saved.themeMode) this.settings.themeMode = saved.themeMode;
-    if (saved.dailyGoalOz !== undefined) this.settings.dailyGoalOz = saved.dailyGoalOz;
-    if (saved.pumpIntervalMinutes) this.settings.pumpIntervalMinutes = saved.pumpIntervalMinutes;
-    if (saved.soundEnabled !== undefined) this.settings.soundEnabled = saved.soundEnabled;
-    if (saved.storageWindows) this.settings.storageWindows = saved.storageWindows;
-
-    sound.setEnabled(this.settings.soundEnabled);
-    this.updateUnitLabels();
-    this.updateNamesUI();
-  }
-
-  formatPossessive(name) {
-    if (!name) return '';
-    const trimmed = String(name).trim();
-    if (!trimmed) return '';
-    if (trimmed.endsWith('s') || trimmed.endsWith('S')) {
-      return `${trimmed}'`;
-    }
-    return `${trimmed}'s`;
-  }
-
-  updateNamesUI() {
-    const parent = (this.settings.parentName || '').trim();
-    // Treat the legacy 'Baby' placeholder as unset
-    const rawBaby = (this.settings.babyName || '').trim();
-    const baby = rawBaby.toLowerCase() === 'baby' ? '' : rawBaby;
-    const parentPossessive = parent ? this.formatPossessive(parent) : 'Nurture';
-    const babyPossessive = baby ? this.formatPossessive(baby) : '';
-
-    // Brand header
-    const brandNameEl = document.getElementById('appBrandName');
-    if (brandNameEl) {
-      brandNameEl.innerHTML = `${parentPossessive}<span>.</span>`;
-    }
-
-    const brandSubtitleEl = document.getElementById('appBrandSubtitleText');
-    if (brandSubtitleEl) {
-      brandSubtitleEl.textContent = babyPossessive ? `${babyPossessive} Tracker` : 'Baby Tracker';
-    }
-
-    // Document title
-    document.title = parent ? `${parentPossessive} Baby Tracker` : 'Nurture — Baby Tracker';
-
-    // Settings title
-    const settingsTitle = document.getElementById('settingsPreferencesTitle');
-    if (settingsTitle) {
-      settingsTitle.textContent = parent ? `${parentPossessive} Preferences` : 'My Preferences';
-    }
-
-    // Settings inputs
-    const pInput = document.getElementById('settingParentNameInput');
-    if (pInput && document.activeElement !== pInput) {
-      pInput.value = parent;
-    }
-    const bInput = document.getElementById('settingBabyNameInput');
-    if (bInput && document.activeElement !== bInput) {
-      bInput.value = baby;
-    }
-  }
-
-  async setUnit(unit) {
-    this.settings.units = unit;
-    await db.setSetting('units', unit);
-    this.updateUnitLabels();
-    this.renderTodayDashboard();
-    this.renderInventory();
-    this.settingsView.renderForm();
-    this.pumpTimerView.updateDisplay(timer.getDisplayData());
-  }
-
-  async adjustDailyGoal(deltaOz) {
-    const isMl = this.settings.units === 'mL';
-    let newGoal = this.settings.dailyGoalOz + (isMl ? (deltaOz * 30 / 29.5735) : deltaOz);
-    newGoal = Math.max(4, Math.round(newGoal * 2) / 2);
-    this.settings.dailyGoalOz = newGoal;
-    await db.setSetting('dailyGoalOz', newGoal);
-    sound.playChime('tick');
-    this.updateBottleFillLevel();
-  }
-
-  updateUnitLabels() {
-    const unit = this.settings.units;
-    document.querySelectorAll('.unit-label-current').forEach(el => {
-      el.textContent = unit;
-    });
-    const toggleBtn = document.getElementById('unitToggleBtn');
-    if (toggleBtn) {
-      toggleBtn.textContent = unit === 'oz' ? 'oz' : 'mL';
-    }
-  }
-
-  // --- SERVICE WORKER REGISTRATION ---
-  registerServiceWorker() {
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').then((reg) => {
-          console.log('Nurture Service Worker registered:', reg.scope);
-        }).catch((err) => {
-          console.warn('Service Worker registration failed:', err);
-        });
-      });
-    }
-  }
-
-  // --- NAVIGATION (4 TABS) ---
-  bindNavigation() {
-    const navButtons = document.querySelectorAll('.nav-item');
-    navButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tab = btn.dataset.tab;
-        this.switchTab(tab);
-      });
-    });
-
-    const unitToggle = document.getElementById('unitToggleBtn');
-    if (unitToggle) {
-      unitToggle.addEventListener('click', () => {
-        const newUnit = this.settings.units === 'oz' ? 'mL' : 'oz';
-        this.setUnit(newUnit);
-      });
-    }
-
-    const themeChip = document.getElementById('themeClockChip');
-    if (themeChip) {
-      themeChip.addEventListener('click', () => {
-        const nextMode = this.settings.themeMode === 'auto' ? 'light' : (this.settings.themeMode === 'light' ? 'dark' : 'auto');
-        this.setThemeMode(nextMode);
-        const sel = document.getElementById('settingThemeSelect');
-        if (sel) sel.value = nextMode;
-      });
-    }
-  }
-
-  switchTab(tabName) {
-    this.currentTab = tabName;
-
-    document.querySelectorAll('.nav-item').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tab === tabName);
-    });
-
-    document.querySelectorAll('.tab-pane').forEach(pane => {
-      pane.classList.toggle('active', pane.id === `tab-${tabName}`);
-    });
-
-    // Pump/History/Stash all show data that can change from any other tab
-    // (a feed logged on Pump affects History's accordion and Stash's thaw
-    // tile, etc.), so refresh both cross-cutting renders on any of the three.
-    if (tabName === 'pump' || tabName === 'history' || tabName === 'inventory') {
-      this.renderTodayDashboard();
-      this.renderInventory();
-    }
-    if (tabName === 'settings') this.settingsView.renderForm();
-
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  // --- GLOBAL DELEGATED ACTION DISPATCH ---
-  // Every dynamically-rendered row (session entries, inventory tiles, thaw
-  // rows, thawed-source chips) and a handful of static buttons carry a
-  // data-action (+ data-id / data-delta / data-tab as needed) instead of an
-  // inline onclick="" string. One listener here replaces what used to be
-  // ~18 separate onclick="window.nurtureApp...." attributes.
-  bindGlobalActions() {
-    document.addEventListener('click', (e) => {
-      const el = e.target.closest('[data-action]');
-      if (!el) return;
-      const id = el.dataset.id;
-      switch (el.dataset.action) {
-        case 'edit-session': this.dashboardView.openEditSession(id); break;
-        case 'delete-session': this.dashboardView.deleteSession(id); break;
-        case 'toggle-older-history': this.dashboardView.toggleOlderHistory(); break;
-        case 'toggle-pumps-accordion': this.dashboardView.toggleAccordion(); break;
-        case 'thaw-item': this.inventoryView.thawItem(id); break;
-        case 'mark-used': this.inventoryView.markUsedItem(id); break;
-        case 'discard-item': this.inventoryView.discardItem(id); break;
-        case 'open-feed-flow': this.feedFlow.openFeedFlow(); break;
-        case 'open-manual-pump': this.pumpTimerView.openManualPump(); break;
-        case 'pick-thawed-source': this.feedFlow.pickThawedSource(id); break;
-        case 'switch-tab': this.switchTab(el.dataset.tab); break;
-        case 'adjust-goal': this.adjustDailyGoal(parseFloat(el.dataset.delta)); break;
-        case 'save-storage-windows': this.settingsView.saveStorageWindows(); break;
-        default: break;
-      }
-    });
-  }
-
-  // --- ONBOARDING & FIRST LAUNCH CHECK ---
-  async checkFirstLaunch() {
-    // Check if reset was explicitly requested via URL (e.g. ?reset=true)
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('reset') === 'true') {
-      // A URL must never silently wipe someone's baby log — links get shared.
-      const ok = confirm('This link asks to erase all Nurture data on this device. Erase everything?');
-      if (ok) {
-        await db.resetAllData();
-        localStorage.removeItem('onboarding_completed');
-      }
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
-    const completedSetting = await db.getSetting('onboarding_completed', false);
-    const completedLocal = localStorage.getItem('onboarding_completed') === 'true';
-    if (!completedSetting && !completedLocal) {
-      this.onboarding.showModal();
-    }
-  }
-
-  // --- ONBOARDING FLOW LOGIC (js/onboarding.js — this.onboarding) ---
-
-  // --- TOP REMINDER BANNER ---
-  async initReminders() {
-    const banner = document.getElementById('reminderBanner');
-    const labelEl = document.getElementById('reminderLabel');
-    const actionBtn = document.getElementById('reminderActionBtn');
-
-    if (actionBtn) {
-      actionBtn.addEventListener('click', () => {
-        this.switchTab('pump');
-        if (!timer.active) {
-          timer.start();
-        }
-        // Land on the timer that just started, not the top of the page
-        const hero = document.getElementById('timerHeroTile');
-        if (hero) requestAnimationFrame(() => hero.scrollIntoView({ behavior: 'smooth', block: 'center' }));
-      });
-    }
-
-    reminders.setCallbacks({
-      onStatusUpdate: (info) => {
-        if (!banner || !labelEl) return;
-        banner.className = 'reminder-banner';
-        if (info.isOverdue) {
-          banner.classList.add('state-overdue');
-          labelEl.textContent = info.label;
-          if (actionBtn) {
-            actionBtn.textContent = 'Pump Now';
-            actionBtn.style.display = 'block';
-          }
-        } else if (info.status === 'due-soon') {
-          banner.classList.add('state-due-soon');
-          labelEl.textContent = info.label;
-          if (actionBtn) {
-            actionBtn.textContent = 'Start';
-            actionBtn.style.display = 'block';
-          }
-        } else if (info.hasSession) {
-          banner.classList.add('state-upcoming');
-          labelEl.textContent = info.label;
-          if (actionBtn) {
-            actionBtn.textContent = 'Pump';
-            actionBtn.style.display = 'block';
-          }
-        } else {
-          labelEl.textContent = info.message;
-          if (actionBtn) {
-            actionBtn.textContent = 'Start First';
-            actionBtn.style.display = 'block';
-          }
-        }
-        // Mirror the pump schedule into the Today goal tile + urgent strip
-        const nextPumpEl = document.getElementById('nextPumpLabel');
-        if (nextPumpEl) {
-          nextPumpEl.textContent = info.hasSession ? info.label : info.message;
-          nextPumpEl.className = 'goal-next-pump status-' + (info.hasSession ? info.status : 'none');
-        }
-        this.renderTodayUrgent();
-      }
-    });
-
-    reminders.start();
-  }
-
-  // --- TIMER SUBSYSTEM (js/pumpTimerView.js — this.pumpTimerView) ---
-
-  // --- MERGED PUMPS DASHBOARD (js/dashboardView.js — this.dashboardView) ---
-  // Thin facade: many controllers call these two as a stable cross-cutting
-  // refresh point after any session/settings change.
-  renderTodayDashboard() {
-    return this.dashboardView.renderAll();
-  }
-
-  updateBottleFillLevel() {
-    return this.dashboardView.updateBottleFillLevel();
-  }
-
-  // --- INVENTORY SUBSYSTEM (js/inventoryView.js — this.inventoryView) ---
-  // Thin facade: many controllers (settings, pump timer, feed flow, dashboard)
-  // call app.renderInventory() as a stable cross-cutting refresh point.
-  renderInventory() {
-    return this.inventoryView.render();
-  }
-
-  // --- TODAY'S FEEDS TRACKER + THAW-FROM-STASH (js/dashboardView.js) ---
-  renderFeedsTracker() {
-    return this.dashboardView.renderFeedsTracker();
-  }
-
-  renderThawSection() {
-    return this.dashboardView.renderThawSection();
-  }
-
-  // --- SETTINGS SUBSYSTEM (js/settingsView.js — this.settingsView) ---
-  // --- MODAL DIALOGS: Add Milk (js/inventoryView.js), Edit Session (js/dashboardView.js) ---
-
-  // --- FEED FLOW + BOTTLE TIMER (js/feedFlow.js — this.feedFlow) ---
-  // Thin facade: called from many places (dashboard, pump timer, inventory).
-  updateQuickFoodTally() {
-    return this.feedFlow.updateQuickFoodTally();
-  }
-
-  // --- URGENT STRIPS + ACTIVITY FILTER (js/dashboardView.js) ---
-  renderTodayUrgent() {
-    return this.dashboardView.renderTodayUrgent();
-  }
-
-  initActivityFilter() {
-    return this.dashboardView.initActivityFilter();
+/**
+ * Point the apple-touch-icon + favicon at the baby's photo (ARCHITECTURE
+ * §10), or back at the static icons when there is none.
+ * @param {string|null} dataUrl a PNG data URL (settings.iconDataUrl)
+ */
+function applyIcon(dataUrl) {
+  const ok = typeof dataUrl === 'string' && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(dataUrl);
+  const touch = document.getElementById('appleTouchIcon');
+  const fav = document.getElementById('favicon');
+  if (touch) touch.setAttribute('href', ok ? dataUrl : DEFAULT_ICONS.touch);
+  if (fav) {
+    fav.setAttribute('type', ok ? 'image/png' : DEFAULT_ICONS.faviconType);
+    fav.setAttribute('href', ok ? dataUrl : DEFAULT_ICONS.favicon);
   }
 }
 
-const app = new App();
-window.nurtureApp = app;
+// -------------------------------------------------------- service worker
 
-document.addEventListener('DOMContentLoaded', () => {
-  app.init();
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  const go = () => navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('service worker not registered', err));
+  if (document.readyState === 'complete') go(); else window.addEventListener('load', go, { once: true });
+}
+
+// ------------------------------------------------------------- modules
+
+// Literal import() calls (not a template) so tests can walk the graph and
+// prove no legacy v1 module is reachable. Loaded with allSettled so one
+// broken screen can't stop the others from booting.
+const VIEW_LOADERS = {
+  today: () => import('./views/today.js'),
+  timeline: () => import('./views/timeline.js'),
+  stash: () => import('./views/stash.js'),
+  memories: () => import('./views/memories.js'),
+  settings: () => import('./views/settings.js'),
+  onboarding: () => import('./views/onboarding.js'),
+  report: () => import('./views/report.js'),
+};
+const SHEET_LOADERS = {
+  quickLog: () => import('./sheets/quickLog.js'),
+  feed: () => import('./sheets/feed.js'),
+  pump: () => import('./sheets/pump.js'),
+  sleep: () => import('./sheets/sleep.js'),
+  diaper: () => import('./sheets/diaper.js'),
+  event: () => import('./sheets/event.js'),
+  stash: () => import('./sheets/stash.js'),
+  memory: () => import('./sheets/memory.js'),
+};
+/** Each sheet module's opener export (ARCHITECTURE §5.3). */
+const SHEET_EXPORTS = Object.freeze({
+  quickLog: 'openQuickLogSheet', feed: 'openFeedSheet', pump: 'openPumpSheet', sleep: 'openSleepSheet',
+  diaper: 'openDiaperSheet', event: 'openEventSheet', stash: 'openStashSheet', memory: 'openMemorySheet',
 });
+
+async function loadAll(loaders) {
+  const names = Object.keys(loaders);
+  const results = await Promise.allSettled(names.map((n) => loaders[n]()));
+  const out = {};
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') out[names[i]] = r.value;
+    else console.error(`module "${names[i]}" failed to load`, r.reason);
+  });
+  return out;
+}
+
+// --------------------------------------------------------------- boot
+
+let ctx = null;
+let router = null;
+
+function fallbackSheet(name, { origin } = {}) {
+  // A sheet whose module failed to load still opens something real.
+  return openSheet({
+    title: 'Not available yet',
+    origin,
+    render(body, api) {
+      render(body, html`<div class="empty-state cat-neutral">
+          <p class="empty-text">This part of Nurture didn’t load. Your data is safe.</p>
+          <button type="button" class="btn btn-secondary" data-close>Close</button>
+        </div>`);
+      body.querySelector('[data-close]').addEventListener('click', () => api.close());
+    },
+  });
+}
+
+function buildSheets(sheetMods) {
+  const sheets = {};
+  for (const [name, exportName] of Object.entries(SHEET_EXPORTS)) {
+    sheets[name] = (opts = {}) => {
+      const mod = sheetMods[name];
+      const fn = mod && (mod[exportName] || (mod.default && mod.default.open));
+      if (typeof fn !== 'function') return fallbackSheet(name, opts);
+      try {
+        return fn(ctx, opts);
+      } catch (err) {
+        console.error(`sheet "${name}" failed to open`, err);
+        return fallbackSheet(name, opts);
+      }
+    };
+  }
+  return Object.freeze(sheets);
+}
+
+function showBootNote(text) {
+  const vp = document.getElementById('viewport');
+  if (!vp || vp.querySelector('.view')) return;
+  render(vp, html`<div class="boot-msg"><p>${text}</p></div>`);
+}
+
+function showFatal(err) {
+  console.error('Nurture failed to start', err);
+  const vp = document.getElementById('viewport');
+  if (!vp) return;
+  document.body.setAttribute('data-chrome', 'bare');
+  render(vp, html`<div class="boot-msg">
+      <h1 class="disp">Nurture couldn’t open its storage</h1>
+      <p>Nothing on this phone was changed. If Nurture is open in another tab or window, close it, then try again.</p>
+      <button type="button" class="btn btn-primary" data-reload>Try again</button>
+    </div>`);
+  vp.querySelector('[data-reload]').addEventListener('click', () => location.reload());
+}
+
+let persistAsked = false;
+function askPersistence() {
+  if (persistAsked) return;
+  persistAsked = true;
+  persist.requestPersistence().catch((err) => console.warn('storage persistence request failed', err));
+}
+
+const PHOTO_SWEEP_KEY = 'nurture.photoSweepAt';
+const PHOTO_SWEEP_EVERY_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function sweepPhotos() {
+  try {
+    let last = 0;
+    try { last = Number(localStorage.getItem(PHOTO_SWEEP_KEY)) || 0; } catch { /* private mode */ }
+    if (Date.now() - last < PHOTO_SWEEP_EVERY_MS) return;
+    const used = new Set();
+    for (const b of settings.babies() || []) if (b && b.photoId) used.add(b.photoId);
+    for (const e of await events.query({ type: 'milestone' })) {
+      for (const id of (e.data && Array.isArray(e.data.photoIds) ? e.data.photoIds : [])) used.add(id);
+    }
+    await photos.sweepOrphans(used);
+    storageSet(PHOTO_SWEEP_KEY, String(Date.now()));
+  } catch (err) {
+    console.warn('photo cleanup skipped', err);
+  }
+}
+
+async function boot() {
+  registerServiceWorker();
+  const slow = setTimeout(() => showBootNote('Still opening… If Nurture is open in another tab, close it.'), 6000);
+  await runMigration();
+  clearTimeout(slow);
+
+  // Before anything the user could reach "Add to Home Screen" from.
+  applyIcon(settings.get('iconDataUrl'));
+  applyMotion(settings.get('reduceMotion'));
+  applyThemeFromSettings(false);
+
+  const [viewMods, sheetMods] = await Promise.all([loadAll(VIEW_LOADERS), loadAll(SHEET_LOADERS)]);
+  const views = {};
+  for (const [id, mod] of Object.entries(viewMods)) views[id] = mod.default || mod;
+
+  const base = {
+    openSheet, toast, confirmSheet, settings, events, stash, photos, units, time, format, icons, persist, backup,
+    safety: Object.freeze({ bottleSafety, breastSideTotals, fmtSafetyWindow }),
+    html: Object.freeze({ html, raw, render, cls, element, fragment }),
+    livePill: Object.freeze({ register: livePill.register, refresh: livePill.refresh, pillModel: livePill.pillModel }),
+    RunningActivityError,
+    activeBaby: () => settings.activeBaby(),
+    motionReduced,
+    sheetsBusy,      // true while any sheet is open or closing
+    whenSheetsIdle,  // → Promise that resolves once no sheet is open
+  };
+  ctx = { ...base };
+  ctx.sheets = buildSheets(sheetMods);
+
+  router = createRouter({
+    viewport: document.getElementById('viewport'),
+    nav: document.getElementById('tabBar'),
+    views,
+    getCtx: () => ctx,
+    settings,
+    onFab: (fab) => ctx.sheets.quickLog({ origin: fab }),
+  });
+  ctx.router = router;
+  Object.defineProperty(ctx, 'fab', { get: () => router.fab, enumerable: true });
+  Object.freeze(ctx);
+
+  // Sheets register live-pill handlers etc. (optional `setup(ctx)` export).
+  for (const [name, mod] of Object.entries(sheetMods)) {
+    if (mod && typeof mod.setup === 'function') {
+      try { mod.setup(ctx); } catch (err) { console.error(`sheet "${name}" setup failed`, err); }
+    }
+  }
+  livePill.mount(document.getElementById('livePills'), ctx);
+
+  if (settings.get('onboarded')) router.go('today', { animate: false });
+  else router.showRoot('onboarding');
+
+  // ---- keep the shell in step with settings ----
+  settings.subscribe((change) => {
+    const key = change && change.key;
+    if (key === 'theme' || key === '*') applyThemeFromSettings(true);
+    if (key === 'reduceMotion' || key === '*') applyMotion(settings.get('reduceMotion'));
+    if (key === 'iconDataUrl' || key === '*') applyIcon(settings.get('iconDataUrl'));
+    if (key === 'onboarded' || key === '*') {
+      const onboarded = settings.get('onboarded');
+      const cur = router.current();
+      if (onboarded && cur.root === 'onboarding') {
+        router.reset('today');
+        askPersistence(); // §10b: right after onboarding
+      } else if (!onboarded && !cur.root) {
+        router.showRoot('onboarding'); // e.g. after "Erase everything"
+      }
+    }
+  });
+  // §10b: and on the first meaningful log.
+  events.subscribe((change) => {
+    if (change && change.op === 'add' && !change.restored && settings.get('persistGranted') !== true) askPersistence();
+  });
+
+  // Quietly drop photos no memory or baby uses any more (left behind when the
+  // app closed while a delete's Undo was showing). At most once a week.
+  setTimeout(sweepPhotos, 15 * 1000);
+
+  // Auto theme follows the clock (night hours) and the system scheme.
+  setInterval(() => applyThemeFromSettings(true), 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) applyThemeFromSettings(true); });
+  if (darkQuery && typeof darkQuery.addEventListener === 'function') darkQuery.addEventListener('change', () => applyThemeFromSettings(true));
+}
+
+boot().catch(showFatal);

@@ -1,0 +1,82 @@
+/* View: Today (js/views/today.js) — DESIGN §6.2, §6.3, §13 Frames 1–2.
+   Built from tokens + components.css (.masthead, .ql-grid/.ql, .sec-hd,
+   .list/.row, .empty-state). Only Today-specific pieces live here; category
+   colour comes from .cat-* → --c-*, never a theme selector. */
+
+/* The cards sit right under the masthead; notes and the list follow. */
+.today .today-cards { margin-top: var(--s-1); }
+.today .today-notes:not(:empty) { margin-top: var(--s-3); }
+.today .today-cards > .empty-state { padding: var(--s-6) var(--s-4); }
+.today .today-list > .empty-state { padding: var(--s-6) var(--s-4) var(--s-4); }
+
+/* An odd card out spans the full width (components.css); lay it out wide
+   (value left, details right) so it costs ~110px instead of 152. */
+.today .ql-grid > .ql:last-child:nth-child(odd) {
+  min-height: 0; display: grid; grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "top top" "val l1" "val l2"; column-gap: var(--s-5); align-items: end;
+}
+.today .ql-grid > .ql:last-child:nth-child(odd) > .ql-top { grid-area: top; }
+.today .ql-grid > .ql:last-child:nth-child(odd) > .ql-val { grid-area: val; margin-top: 6px; align-self: center; }
+.today .ql-grid > .ql:last-child:nth-child(odd) > :nth-child(3) { grid-area: l1; }
+.today .ql-grid > .ql:last-child:nth-child(odd) > :nth-child(4) { grid-area: l2; align-self: start; margin-top: 0; }
+
+/* Baby switcher eyebrow (2+ babies): a real 44px button that reads as the eyebrow. */
+.today .baby-switch { gap: 4px; border-radius: var(--r-sm); padding-right: var(--s-1); }
+.today .baby-switch .ic { width: 18px; height: 18px; color: var(--text-2); }
+
+/* Card value cross-fades when a log changes it (motion #9: "Just now"). */
+.today .ql-val.is-fresh { animation: today-val-fresh var(--dur-fast) var(--ease-out); }
+@keyframes today-val-fresh { from { opacity: 0; } to { opacity: 1; } }
+
+/* Weekly backup nudge + install hint: a calm dismissible card, never a modal. */
+.note-card {
+  display: flex; align-items: flex-start; gap: var(--s-3);
+  padding: 14px var(--s-4) var(--s-2) 14px;
+  background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow-1);
+  overflow: hidden; max-height: var(--note-h, none);
+}
+.note-card .chip-ic { margin-top: 2px; }
+.note-main { flex: 1; min-width: 0; }
+.note-title { font-weight: var(--fw-heavy); font-size: var(--fs-body); line-height: 1.3; }
+.note-text { font-size: var(--fs-subhead); line-height: 19px; color: var(--text-2); font-weight: var(--fw-body); margin-top: 2px; }
+.note-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin-top: var(--s-2); margin-left: -2px; }
+.note-actions .btn-ghost { padding: 0 var(--s-3); }
+.note-actions .btn .ic { width: 20px; height: 20px; }
+/* FLOW-08: the backup nudge's actions sit under the icon and text, across the
+   card's full width, so "Save a backup to Files" + "Not now" share one row on
+   a 390 px phone; narrower, the label drops "to Files"; and a button can
+   never run past the card edge (it wraps its text instead). */
+.note-card { flex-wrap: wrap; row-gap: 0; }
+.note-card > .note-actions.is-wide { flex: 1 1 100%; min-width: 0; }
+.note-actions .btn { min-width: 0; max-width: 100%; white-space: normal; text-align: center; }
+@media (max-width: 379px) { .note-files { display: none; } }
+@media (max-width: 340px) { .note-actions.is-wide { column-gap: var(--s-1); } .note-actions.is-wide .btn-ghost { padding: 0 10px; } }
+/* Leaving: collapse to nothing so what's below slides up instead of jumping. */
+.note-card.is-leaving {
+  transition: max-height var(--dur-fast) var(--ease-in), opacity var(--dur-fast) var(--ease-in),
+    padding var(--dur-fast) var(--ease-in);
+  max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0;
+}
+
+/* Baby picker sheet (opened from the switcher). */
+.sheet-babies .list { margin-bottom: var(--s-4); }
+.sheet-babies .baby-row { min-height: 64px; }
+.sheet-babies .baby-row .avatar-sm { margin: 0 2px 0 4px; flex: none; }
+.sheet-babies .baby-check { color: var(--accent); display: grid; place-items: center; flex: none; }
+.sheet-babies .baby-check .ic { width: 22px; height: 22px; }
+.sheet-babies .baby-row[aria-pressed="true"] .row-title { color: var(--text); }
+
+/* Stale card value ("—"): calm, not a heavy bar. */
+.today .ql-val.is-dash { color: var(--text-3); font-weight: var(--fw-body); }
+
+/* A live card whose label + chip don't fit (narrow phones): the label's icon
+   steps aside (set by fitTop in views/today.js), and as a last resort the
+   label clips rather than pushing the chip out of the card. */
+/* MAV-7: a live card's top row runs a little tighter, so the most common
+   running state ("☾ Asleep ● Nap") keeps its icon on a 390 px phone; only
+   longer labels (Pumping, Feeding) fall back to is-tight. */
+.today .ql.is-live .ql-top { gap: 6px; }
+.today .ql.is-live .ql-label { gap: 5px; }
+.today .ql.is-tight .ql-label .ic { display: none; }
+.today .ql-top > .ql-label { min-width: 0; overflow: hidden; white-space: nowrap; }
+.today .ql-top > .live-chip { flex: none; }

@@ -1,0 +1,97 @@
+/* =====================================================================
+   Memory sheet (js/sheets/memory.js): add / view / edit a memory.
+   DESIGN §6.6 Sheet, §6.8 MemoryCover / Field / Chip / Segmented, §8.6
+   (photos at --photo-filter at night). Tokens + components.css only;
+   category colour via .cat-mem → --c-*. No theme selectors.
+   ===================================================================== */
+
+.sheet-memory .mem-sheet { display: flex; flex-direction: column; gap: var(--s-4); }
+.sheet-memory .mem-sheet > .sheet-footer { margin-top: 0; }
+.sheet-memory .mem-block { display: flex; flex-direction: column; gap: var(--s-2); }
+.sheet-memory .mem-lbl { font-size: var(--fs-callout); font-weight: var(--fw-heavy); color: var(--text); line-height: 1.3; }
+.sheet-memory .mem-back { align-self: flex-start; margin: calc(-1 * var(--s-2)) 0 calc(-1 * var(--s-2)) calc(-1 * var(--s-2)); padding-left: var(--s-1); }
+.sheet-memory .field-error:not([hidden]) { justify-content: center; text-align: center; }
+.sheet-memory .field-error .ic, .sheet-memory .note .ic { flex: none; }
+.sheet-memory .mem-loading { padding: var(--s-6) 0 var(--s-8); text-align: center; }
+.sheet-memory .mem-gone { padding-bottom: var(--s-6); }
+
+/* ---------- Firsts chips: one quiet row that scrolls sideways ---------- */
+.sheet-memory .mem-chips {
+  display: flex; gap: var(--s-1); overflow-x: auto; overscroll-behavior-x: contain;
+  margin: 0 calc(-1 * var(--gutter)); padding: 0 var(--gutter);
+  scroll-padding: 0 var(--gutter); scroll-snap-type: x proximity; scrollbar-width: none;
+}
+.sheet-memory .mem-chips::-webkit-scrollbar { display: none; }
+.sheet-memory .mem-chips .chip { flex: none; scroll-snap-align: start; }
+.sheet-memory .mem-chips .chip-face { font-size: var(--fs-footnote); }
+.sheet-memory .mem-chips .chip:not([aria-pressed="true"]) .ic { color: var(--c-ink); }
+
+/* ---------- Photos: mounted prints + the picker ---------- */
+.sheet-memory .mem-photos { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.sheet-memory .mem-ph-list { display: contents; }
+.sheet-memory .mem-ph-item { position: relative; }
+.sheet-memory .mem-ph { display: grid; place-items: center; width: 80px; height: 80px; overflow: hidden; }
+.sheet-memory .mem-ph img { opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
+.sheet-memory .mem-ph img.is-loaded { opacity: 1; }
+.sheet-memory .mem-ph.is-busy::after { content: "•••"; color: var(--text-3); font-weight: var(--fw-heavy); letter-spacing: .2em; }
+/* 44×44 hit area, a 28 px disc you can see, hanging off the print's corner. */
+.sheet-memory .mem-ph-x {
+  position: absolute; top: -14px; right: -14px; width: 44px; height: 44px;
+  display: grid; place-items: center; border-radius: 50%; color: var(--text);
+}
+.sheet-memory .mem-ph-x::before {
+  content: ""; position: absolute; inset: 8px; border-radius: 50%;
+  background: var(--surface); box-shadow: var(--shadow-1), inset 0 0 0 1.5px var(--line-strong);
+}
+.sheet-memory .mem-ph-x .ic { position: relative; width: 16px; height: 16px; }
+.sheet-memory .mem-ph-x:active::before { background: var(--surface-2); }
+.sheet-memory .mem-ph-x:focus-visible { box-shadow: none; }
+.sheet-memory .mem-ph-x:focus-visible::before { box-shadow: var(--focus-ring); }
+
+.sheet-memory .mem-pick {
+  position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  min-width: 80px; height: 80px; padding: 0 var(--s-3); border-radius: var(--r-sm);
+  background: var(--accent-soft); color: var(--accent-ink);
+  font-size: var(--fs-footnote); font-weight: var(--fw-heavy); cursor: pointer;
+  transition: transform var(--dur-press) var(--ease-std);
+}
+.sheet-memory .mem-pick:active { transform: scale(var(--press-scale)); }
+.sheet-memory .mem-pick:focus-within { box-shadow: var(--focus-ring); }
+.sheet-memory .mem-pick-ic .ic { width: 24px; height: 24px; }
+.sheet-memory .mem-pick-txt { color: var(--text); }
+/* The real <input type=file> covers the tile, invisible: taps and keys reach it. */
+.sheet-memory .mem-pick-input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 0; }
+.sheet-memory .mem-pick-input:focus-visible { box-shadow: none; }
+
+.sheet-memory .mem-age { margin-top: 0; padding: 0 2px; font-family: var(--font-display); font-style: italic; font-weight: 400; font-size: var(--fs-callout); }
+
+/* ---------- Segmented (who) ---------- */
+.sheet-memory .mem-seg > button { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- View: the photo viewer ---------- */
+.sheet-memory .mem-viewer { margin: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.sheet-memory .mem-viewer-mat {
+  padding: 10px; background: var(--surface); border-radius: 6px;
+  box-shadow: var(--shadow-1), 0 0 0 1px var(--line); touch-action: pan-y;
+}
+.sheet-memory .mem-viewer-mat:focus-visible { box-shadow: var(--focus-ring), var(--shadow-1); }
+.sheet-memory .mem-viewer-img {
+  display: block; width: 100%; min-height: 180px; max-height: min(52dvh, 440px); object-fit: contain;
+  border-radius: var(--r-print); background: var(--surface-2); filter: var(--photo-filter);
+  opacity: 0; transition: opacity var(--dur-fast) var(--ease-out);
+}
+.sheet-memory .mem-viewer-img.is-loaded { opacity: 1; min-height: 0; }
+.sheet-memory .mem-viewer-nav { display: flex; align-items: center; justify-content: center; gap: var(--s-4); }
+.sheet-memory .mem-viewer-count { min-width: 5ch; text-align: center; font-size: var(--fs-subhead); font-weight: var(--fw-strong); color: var(--text-2); }
+
+.sheet-memory .mem-view-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2);
+  font-size: var(--fs-subhead); font-weight: var(--fw-strong); color: var(--text-2);
+}
+.sheet-memory .mem-view-note { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sheet-memory .mem-use-cover { align-self: flex-start; margin: calc(-1 * var(--s-2)) 0 calc(-1 * var(--s-2)) calc(-1 * var(--s-3)); }
+.sheet-memory .mem-use-cover .ic { width: 20px; height: 20px; }
+.sheet-memory .mem-cover-note { align-items: center; min-height: 28px; color: var(--ok-ink); font-weight: var(--fw-heavy); }
+.sheet-memory .mem-cover-note.is-entering { animation: mem-note-in var(--dur-fast) var(--ease-out) both; }
+@keyframes mem-note-in { from { opacity: 0; } to { opacity: 1; } }
+.sheet-memory .mem-view-btns { display: grid; grid-template-columns: 1fr 1.25fr; gap: 10px; }

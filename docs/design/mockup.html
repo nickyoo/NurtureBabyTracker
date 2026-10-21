@@ -1,0 +1,621 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nurture · Final design</title>
+<link rel="stylesheet" href="../../css/tokens.css">
+<style>
+/* =====================================================================
+   Nurture final mockup. Every color, size, radius, shadow and duration
+   comes from css/tokens.css. The only raw colors below are the review
+   board backdrop (.board-*) and placeholder "photo" content (.ph-*),
+   neither of which ships in the app.
+   ===================================================================== */
+*{box-sizing:border-box;margin:0;padding:0}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:inherit;-webkit-tap-highlight-color:transparent}
+ul{list-style:none}
+svg{display:block}
+body{background:#CFC7BB;font-family:var(--font-ui);padding:40px 48px 64px;color:#2B2420}
+.board-hd{margin-bottom:24px;max-width:1700px}
+.board-hd h1{font-family:var(--font-display);font-weight:560;font-size:30px;letter-spacing:-.01em}
+.board-hd p{font-size:15px;font-weight:600;color:#4B4038;margin-top:4px}
+.board-row{display:flex;gap:40px;align-items:flex-start;width:max-content;margin-bottom:48px}
+.board-row-hd{font:800 13px/1 var(--font-ui);letter-spacing:.08em;text-transform:uppercase;color:#4B4038;margin:8px 0 16px}
+.shot{display:flex;flex-direction:column;gap:12px;width:390px}
+.cap{font:600 14px/1.35 var(--font-ui);color:#3D342D;min-height:40px;display:flex;gap:8px;align-items:flex-start}
+.cap b{flex:none;display:inline-grid;place-items:center;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#2B2420;color:#F6F1E8;font-size:12px;font-weight:800}
+
+/* ===== Frame ===== */
+.frame{width:390px;height:844px;position:relative;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:var(--font-ui);font-size:var(--fs-body);line-height:var(--lh-ui);font-weight:var(--fw-body);
+  -webkit-font-smoothing:antialiased;box-shadow:0 30px 60px -24px rgba(43,36,32,.45),0 0 0 1px rgba(43,36,32,.10)}
+.disp{font-family:var(--font-display);font-weight:var(--fw-title);letter-spacing:var(--tracking-display);font-optical-sizing:auto}
+.it{font-family:var(--font-display);font-style:italic;font-weight:400}
+.num{font-variant-numeric:var(--numeric)}
+.ic{width:var(--icon);height:var(--icon);flex:none}
+.ic-s{width:18px;height:18px;flex:none}
+.ic-xs{width:14px;height:14px;flex:none}
+.cat-feed,.cat-sleep,.cat-diaper,.cat-pump,.cat-mem{}
+
+/* status bar + home indicator */
+.sb{position:absolute;top:0;left:0;right:0;height:47px;display:flex;justify-content:space-between;align-items:center;padding:12px 26px 0 38px;font-weight:var(--fw-heavy);font-size:16px;z-index:95;color:var(--text)}
+.sb-r{display:flex;gap:6px;align-items:center}
+.hi{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:var(--text);opacity:.8;z-index:96}
+.screen{position:absolute;top:47px;left:0;right:0;bottom:176px;padding:0 var(--gutter);overflow:hidden;
+  -webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 24px),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 24px),transparent)}
+.screen.no-pill{bottom:98px}
+.screen.full{bottom:0;-webkit-mask-image:none;mask-image:none}
+
+/* ===== Masthead (Today) ===== */
+.mast{display:flex;align-items:center;justify-content:space-between;gap:12px;height:var(--header-h);padding-top:4px}
+.eyebrow{font-size:var(--fs-caption);font-weight:var(--fw-heavy);letter-spacing:var(--tracking-caps);text-transform:uppercase;color:var(--text-2)}
+.mast h1{display:flex;align-items:baseline;gap:10px;margin-top:2px;white-space:nowrap}
+.mast .name{font-size:var(--fs-name);line-height:1.05}
+.mast .age{font-size:var(--fs-age);color:var(--text-2)}
+.avatar-btn{position:relative;width:56px;height:56px;border-radius:50%;display:grid;place-items:center;flex:none}
+.avatar{width:52px;height:52px;border-radius:50%;display:block;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--accent-soft);filter:var(--avatar-filter)}
+.gear{position:absolute;right:-1px;bottom:0;width:24px;height:24px;border-radius:50%;background:var(--surface);color:var(--text-2);display:grid;place-items:center;box-shadow:0 0 0 2px var(--bg)}
+.gear .ic{width:15px;height:15px}
+
+/* ===== QuickLogCard (since-last) ===== */
+.ql-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-3)}
+.ql{position:relative;background:var(--c-card);border-radius:var(--r-xl);padding:14px 14px 14px 16px;height:var(--card-h);display:flex;flex-direction:column;box-shadow:var(--shadow-0,none)}
+.ql-top{display:flex;justify-content:space-between;align-items:center;height:32px}
+.ql-label{display:flex;align-items:center;gap:7px;font-weight:var(--fw-heavy);font-size:var(--fs-callout);color:var(--c-ink)}
+.ql-label .ic{width:20px;height:20px}
+.ql-well{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--c-well);color:var(--c-ink)}
+.ql-well .ic{width:18px;height:18px}
+.ql-val{font-size:var(--fs-numeral);line-height:44px;margin-top:10px;font-weight:var(--fw-numeral);letter-spacing:var(--tracking-numeral);color:var(--text);white-space:nowrap}
+.ql-val small{font-size:var(--fs-unit);font-weight:var(--fw-strong);color:var(--text-2);letter-spacing:0;margin:0 4px 0 2px}
+.ql-sub{font-size:var(--fs-subhead);font-weight:var(--fw-body);color:var(--text-2);white-space:nowrap;line-height:19px}
+.ql-sub b{color:var(--text);font-weight:var(--fw-heavy)}
+.ql.is-live{background:var(--c-tint);box-shadow:inset 0 0 0 1.5px var(--c-mid)}
+.live-chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px 0 8px;border-radius:var(--r-pill);background:var(--c-well);color:var(--c-ink);font-weight:var(--fw-heavy);font-size:var(--fs-footnote)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.goal{display:flex;align-items:center;gap:8px;margin-top:auto}
+.goal-bar{flex:1;height:6px;border-radius:3px;background:var(--track-on-card);overflow:hidden}
+.goal-bar i{display:block;height:100%;background:var(--c-mid);border-radius:3px}
+.goal-txt{font-size:var(--fs-footnote);font-weight:var(--fw-heavy);color:var(--text);white-space:nowrap}
+.goal-txt small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-strong)}
+
+/* ===== Section header ===== */
+.sec-hd{display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px;min-height:44px}
+.sec-hd h2{font-size:var(--fs-title-2);line-height:1.1}
+.sec-hd .meta{font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-strong)}
+.link{display:flex;align-items:center;gap:2px;height:44px;padding:0 0 0 12px;color:var(--accent-ink);font-weight:var(--fw-heavy);font-size:var(--fs-callout)}
+.link .ic{width:18px;height:18px}
+
+/* ===== ListRow ===== */
+.list{background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-1);overflow:hidden}
+.row{position:relative;display:flex;align-items:center;gap:12px;width:100%;min-height:var(--row-h);padding:10px 16px 10px 12px}
+.list li+li .row::before{content:"";position:absolute;top:0;left:72px;right:16px;height:1px;background:var(--line)}
+.row-time{width:46px;flex:none;font-weight:var(--fw-heavy);font-size:var(--fs-callout);line-height:1.1;display:flex;flex-direction:column;align-items:flex-end}
+.row-time small{font-size:var(--fs-caption);font-weight:var(--fw-strong);color:var(--text-3)}
+.chip-ic{width:40px;height:40px;border-radius:var(--r-sm);display:grid;place-items:center;background:var(--c-tint);color:var(--c-ink);flex:none}
+.chip-ic .ic{width:22px;height:22px}
+.row-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.row-main b{font-weight:var(--fw-heavy);font-size:var(--fs-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-main small{font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-body);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.amt{font-weight:var(--fw-heavy);font-size:var(--fs-headline);white-space:nowrap}
+.amt small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-strong)}
+.badge{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:var(--r-pill);background:var(--c-tint);color:var(--c-ink);font-weight:var(--fw-heavy);font-size:var(--fs-footnote);white-space:nowrap}
+.badge.warn{background:var(--warn-tint);color:var(--warn-ink)}
+.badge.ok{background:var(--ok-tint);color:var(--ok-ink)}
+.badge.next{background:var(--accent-soft);color:var(--accent-ink)}
+.row .ring-live{box-shadow:0 0 0 2px var(--surface),0 0 0 3.5px var(--c-mid)}
+
+/* ===== Live pill (dark in both themes) ===== */
+.lpill{position:absolute;left:var(--pill-inset);right:var(--pill-inset);bottom:104px;height:var(--pill-h);border-radius:var(--r-pill);background:var(--pill-bg);color:var(--pill-text);
+  display:flex;align-items:center;gap:10px;padding:0 8px 0 8px;box-shadow:var(--shadow-2),inset 0 0 0 1px var(--pill-ring);z-index:var(--z-pill)}
+.lpill.docked{bottom:46px}
+.live-well{position:relative;width:44px;height:44px;border-radius:50%;background:var(--pill-well);color:var(--pill-feed);display:grid;place-items:center;flex:none}
+.live-well .ic{width:22px;height:22px}
+.live-well svg.ring{position:absolute;inset:0;width:44px;height:44px;transform:rotate(-90deg)}
+.live-dot{position:absolute;top:0;right:0;width:12px;height:12px;border-radius:50%;background:var(--pill-feed);border:2.5px solid var(--pill-bg)}
+.live-txt{flex:1;min-width:0;display:flex;flex-direction:column;line-height:1.2}
+.live-txt b{font-weight:var(--fw-heavy);font-size:var(--fs-body)}
+.live-txt small{font-size:var(--fs-footnote);color:var(--pill-text-2);font-weight:var(--fw-body);white-space:nowrap}
+.live-time{font-weight:var(--fw-heavy);font-size:var(--fs-timer);letter-spacing:-.01em;white-space:nowrap}
+.finish{height:44px;padding:0 16px;border-radius:var(--r-pill);background:var(--pill-btn-bg);color:var(--pill-btn-text);font-weight:var(--fw-heavy);font-size:var(--fs-callout);flex:none}
+
+/* ===== Bottom nav ===== */
+.nav{position:absolute;left:0;right:0;bottom:0;height:90px;padding:0 6px 34px;background:var(--nav-bg);border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr 84px 1fr 1fr;z-index:var(--z-nav)}
+.tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--text-3);font-weight:var(--fw-strong);font-size:var(--fs-caption);min-height:56px}
+.tab .ic{width:26px;height:26px}
+.tab.on{color:var(--text);font-weight:var(--fw-heavy)}
+.tab.on .ic{color:var(--accent)}
+.nav-slot{position:relative}
+.fab{position:absolute;left:50%;top:calc(-1 * var(--fab-raise));transform:translateX(-50%);width:var(--fab-size);height:var(--fab-size);border-radius:50%;background:var(--fab-bg);color:var(--on-fab);display:grid;place-items:center;
+  box-shadow:var(--shadow-fab),0 0 0 4px var(--nav-bg)}
+.fab .ic{width:30px;height:30px}
+.fab .ic use{stroke-width:2.25}
+
+/* ===== Sheet ===== */
+.scrim{position:absolute;inset:0;background:var(--scrim);z-index:var(--z-scrim)}
+.behind{position:absolute;inset:0;transform:scale(var(--page-behind-scale));transform-origin:50% 0}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sheet-bg);border-radius:var(--r-sheet) var(--r-sheet) 0 0;z-index:var(--z-sheet);padding:26px var(--gutter) 0;box-shadow:var(--shadow-sheet)}
+.grabber{position:absolute;top:8px;left:50%;transform:translateX(-50%);width:40px;height:5px;border-radius:3px;background:var(--line-strong);opacity:.5}
+.sheet-hd{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+.sheet-hd h2{font-size:var(--fs-title-1);line-height:1.1}
+.time-chip{height:44px;padding:0 12px 0 10px;border-radius:var(--r-pill);background:var(--surface-2);display:flex;align-items:center;gap:6px;font-weight:var(--fw-heavy);font-size:var(--fs-callout);white-space:nowrap;flex:none;color:var(--text)}
+.time-chip .num{color:var(--text-2);font-weight:var(--fw-strong)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.tile{min-height:96px;border-radius:var(--r-lg);background:var(--c-card);padding:12px 12px 12px 14px;display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.tile.is-live{background:var(--c-tint);box-shadow:inset 0 0 0 1.5px var(--c-mid)}
+.tile-ic{width:36px;height:36px;border-radius:50%;background:var(--c-well);color:var(--c-ink);display:grid;place-items:center}
+.tile-ic .ic{width:20px;height:20px}
+.tile b{font-weight:var(--fw-heavy);font-size:var(--fs-headline);color:var(--text);line-height:1.15}
+.tile small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-body);white-space:nowrap;display:block}
+.tile small b{font-size:var(--fs-footnote);font-weight:var(--fw-heavy)}
+.tile small .dot{color:var(--c-mid);width:7px;height:7px;margin:0 5px 1px 0;vertical-align:middle}
+.tile.row-tile{flex-direction:row;align-items:center;min-height:68px;gap:10px}
+.tile.row-tile span{display:flex;flex-direction:column}
+.diaper-row{display:flex;align-items:center;gap:10px;min-height:76px;border-radius:var(--r-lg);background:var(--c-card);padding:10px 10px 10px 14px;margin:10px 0}
+.diaper-row .lbl{display:flex;flex-direction:column;margin-right:auto}
+.diaper-row .lbl b{font-weight:var(--fw-heavy);font-size:var(--fs-headline);line-height:1.15}
+.diaper-row .lbl small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-body)}
+.dbtn{height:52px;padding:0 12px 0 10px;border-radius:var(--r-pill);background:var(--c-well);color:var(--text);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:var(--fw-heavy);font-size:var(--fs-callout);box-shadow:inset 0 0 0 1px var(--line)}
+.dbtn svg{color:var(--c-ink)}
+.hint{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-body);text-align:center;margin-top:12px}
+.hint b{color:var(--accent-ink);font-weight:var(--fw-heavy)}
+.fab-x{position:absolute;left:50%;bottom:44px;transform:translateX(-50%) rotate(var(--fab-rotate));width:var(--fab-size);height:var(--fab-size);border-radius:50%;background:var(--fab-bg);color:var(--on-fab);display:grid;place-items:center;z-index:var(--z-fab-over-sheet);box-shadow:var(--shadow-fab),0 0 0 4px var(--sheet-bg)}
+.fab-x .ic{width:30px;height:30px}
+
+/* ===== Page header (eyebrow + large title) ===== */
+.page-hd{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;min-height:92px;padding:8px 0 10px}
+.page-hd h1{font-size:var(--fs-title-l);line-height:1.08;margin-top:4px}
+.page-hd .sub{font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-strong);margin-top:2px}
+.hd-actions{display:flex;gap:8px;padding-bottom:2px}
+.round-btn{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--surface);color:var(--text);box-shadow:var(--shadow-1)}
+.round-btn[aria-disabled="true"]{color:var(--text-3);opacity:.6}
+.btn-outline{height:44px;padding:0 16px 0 12px;border-radius:var(--r-pill);display:inline-flex;align-items:center;gap:6px;font-weight:var(--fw-heavy);font-size:var(--fs-callout);color:var(--text);background:transparent;box-shadow:inset 0 0 0 1.5px var(--line-strong);white-space:nowrap}
+.btn-outline .ic{width:20px;height:20px}
+
+/* ===== Timeline ===== */
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:12px}
+.day{height:60px;border-radius:var(--r-md);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;position:relative}
+.day small{font-size:var(--fs-caption);font-weight:var(--fw-strong);color:var(--text-3)}
+.day b{font-size:var(--fs-headline);font-weight:var(--fw-heavy)}
+.day.sel{background:var(--surface);box-shadow:inset 0 0 0 2px var(--text)}
+.day .today-dot{position:absolute;bottom:5px;width:5px;height:5px;border-radius:50%;background:var(--accent)}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.stat{background:var(--c-card);border-radius:var(--r-md);padding:10px 8px 10px 11px;display:flex;flex-direction:column;min-height:82px;box-shadow:var(--stat-shadow,none)}
+.stat .ic{color:var(--c-ink);width:20px;height:20px;margin-bottom:auto}
+.stat b{font-size:var(--fs-stat);font-weight:var(--fw-heavy);line-height:1.15;white-space:nowrap;margin-top:6px}
+.stat b small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-strong)}
+.stat > small{font-size:var(--fs-caption);color:var(--text-2);font-weight:var(--fw-strong);line-height:1.2}
+.strip{margin-top:12px;padding:12px 14px 12px;background:var(--surface);border-radius:var(--r-lg);box-shadow:var(--shadow-1)}
+.strip-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.strip-hd b{font-weight:var(--fw-heavy);font-size:var(--fs-callout)}
+.strip-hd small{font-size:var(--fs-caption);color:var(--text-2);font-weight:var(--fw-strong)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:6px;font-size:var(--fs-caption);color:var(--text-2);font-weight:var(--fw-strong)}
+.legend span{display:flex;align-items:center;gap:5px}
+.s-track{fill:var(--surface-2)} .s-band{fill:var(--band)}
+.s-sleep{fill:var(--sleep-mid)} .s-nap{fill:none;stroke:var(--sleep-mid);stroke-width:2}
+.s-feed{fill:var(--feed-mid)} .s-bf{fill:none;stroke:var(--feed-mid);stroke-width:1.6}
+.s-dia-ring{fill:none;stroke:var(--diaper-mid);stroke-width:2} .s-dia-dot{fill:var(--diaper-mid)}
+.s-pump{fill:var(--pump-mid)}
+.s-now{stroke:var(--accent);stroke-width:2} .s-hatch{stroke:var(--line-strong);stroke-width:1;opacity:.35}
+.s-axis{fill:var(--text-3);font:var(--fw-strong) 12px var(--font-ui)}
+.s-icon{color:var(--text-2)}
+.s-flag-bg{fill:var(--accent-soft)} .s-flag{fill:var(--accent-ink);font:var(--fw-heavy) 12px var(--font-ui)}
+
+/* ===== Stash ===== */
+.total{display:flex;align-items:baseline;gap:6px}
+.total b{font-size:var(--fs-display);line-height:1;font-weight:var(--fw-numeral);letter-spacing:var(--tracking-numeral)}
+.total small{font-size:24px;font-weight:var(--fw-strong);color:var(--text-2)}
+.split{display:flex;gap:3px;height:12px;margin:14px 0 10px}
+.split i{display:block;border-radius:6px}
+.split .fr{background:var(--pump-mid)}
+.split .fz{background:repeating-linear-gradient(135deg,var(--pump-mid) 0 3px,var(--pump-tint) 3px 7px);box-shadow:inset 0 0 0 1.5px var(--pump-mid)}
+.split-legend{display:flex;justify-content:space-between;font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-strong)}
+.split-legend span{display:flex;align-items:center;gap:6px}
+.split-legend b{color:var(--text);font-weight:var(--fw-heavy)}
+.sw{display:inline-block;width:12px;height:12px;border-radius:3px}
+.sw.fr{background:var(--pump-mid)} .sw.fz{background:repeating-linear-gradient(135deg,var(--pump-mid) 0 2px,var(--pump-tint) 2px 4.5px);box-shadow:inset 0 0 0 1.25px var(--pump-mid)}
+.hero{background:var(--c-card);border-radius:var(--r-xl);padding:16px;margin-top:16px;box-shadow:var(--hero-shadow,none)}
+.hero-top{display:flex;justify-content:space-between;align-items:center}
+.hero-mid{display:flex;gap:14px;align-items:center;margin:10px 0 14px}
+.hero-amt{font-size:var(--fs-amount);line-height:1;font-weight:var(--fw-numeral);letter-spacing:var(--tracking-numeral)}
+.hero-amt small{font-size:22px;color:var(--text-2);font-weight:var(--fw-strong);letter-spacing:0}
+.hero-meta{font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-body);line-height:1.45}
+.hero-meta b{color:var(--text);font-weight:var(--fw-heavy)}
+.btns{display:grid;grid-template-columns:1fr 1.25fr;gap:10px}
+.btn{height:52px;border-radius:var(--r-pill);display:flex;align-items:center;justify-content:center;gap:8px;font-weight:var(--fw-heavy);font-size:var(--fs-headline);white-space:nowrap}
+.btn .ic{width:22px;height:22px}
+.btn.primary{background:var(--primary-bg);color:var(--on-primary)}
+.btn.secondary{background:var(--surface);color:var(--text);box-shadow:inset 0 0 0 1px var(--line)}
+.btn.block{width:100%;height:56px}
+
+/* ===== Memories ===== */
+.cover{margin-top:4px;padding:10px;background:var(--surface);border-radius:6px;box-shadow:var(--shadow-1),0 0 0 1px var(--line)}
+.cover .photo{height:138px;border-radius:var(--r-print);position:relative;overflow:hidden;filter:var(--photo-filter)}
+.cover figcaption{display:flex;justify-content:space-between;align-items:baseline;padding:10px 4px 2px}
+.cover figcaption .it{font-size:20px;color:var(--text)}
+.cover figcaption small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-strong)}
+.firsts li{display:flex;align-items:center;gap:12px;min-height:62px;border-top:1px solid var(--line)}
+.firsts li:first-child{border-top:0}
+.firsts .spark{width:40px;height:40px;border-radius:var(--r-sm);background:var(--mem-tint);color:var(--mem-ink);display:grid;place-items:center;flex:none}
+.firsts .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.firsts .t b{font-weight:var(--fw-heavy);font-size:var(--fs-body)}
+.firsts .t small{font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-body)}
+.firsts .t .it{font-size:18px;color:var(--text)}
+.print{width:52px;height:52px;padding:3px;background:var(--surface);border-radius:var(--r-print);box-shadow:var(--shadow-1),0 0 0 1px var(--line);flex:none}
+.print i{display:block;width:100%;height:100%;border-radius:2px;filter:var(--photo-filter)}
+.firsts .suggest .spark{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line-strong);color:var(--text-2)}
+.btn-outline.sm{height:44px;padding:0 14px 0 10px}
+
+/* placeholder photos (mockup content only) */
+.ph-smile{background:radial-gradient(ellipse 13% 31% at 50% 47%,#F6DCC9 0 92%,transparent 100%),radial-gradient(ellipse 30% 46% at 50% 112%,#C9917A 0 88%,transparent 92%),radial-gradient(ellipse 60% 80% at 20% 0%,#F1D3BE,transparent 70%),linear-gradient(170deg,#E7C2AA,#B88A73 70%,#A47864)}
+.ph-1{background:radial-gradient(circle at 50% 42%,#F4D9C6 0 22%,transparent 23%),radial-gradient(ellipse 60% 40% at 50% 100%,#C99883 0 70%,transparent 72%),linear-gradient(160deg,#EBC9B5,#D9A991)}
+.ph-2{background:radial-gradient(circle at 50% 42%,#F3E2D2 0 22%,transparent 23%),radial-gradient(ellipse 60% 40% at 50% 100%,#8EA787 0 70%,transparent 72%),linear-gradient(160deg,#DCE6D6,#B5C8AD)}
+.ph-3{background:radial-gradient(circle at 50% 42%,#F1E0D2 0 22%,transparent 23%),radial-gradient(ellipse 60% 40% at 50% 100%,#8E9BB8 0 70%,transparent 72%),linear-gradient(160deg,#DCE1EC,#B9C2D8)}
+.ph-4{background:radial-gradient(circle at 50% 46%,#F6E2D3 0 20%,transparent 21%),radial-gradient(ellipse 60% 40% at 50% 100%,#D2A47E 0 70%,transparent 72%),linear-gradient(160deg,#F2DCC2,#E3BE98)}
+.ph-5{background:radial-gradient(circle at 50% 46%,#F4E0D6 0 20%,transparent 21%),radial-gradient(ellipse 60% 40% at 50% 100%,#B58BA0 0 70%,transparent 72%),linear-gradient(160deg,#EAD6E0,#D4B3C3)}
+.ph-6{background:radial-gradient(circle at 50% 46%,#F2E4D4 0 20%,transparent 21%),radial-gradient(ellipse 60% 40% at 50% 100%,#A9A07A 0 70%,transparent 72%),linear-gradient(160deg,#ECE5CF,#D6CBA6)}
+.ph-av{background:radial-gradient(circle at 50% 44%,#F3D6C2 0 27%,transparent 28%),radial-gradient(ellipse 70% 45% at 50% 108%,#D9A68C 0 70%,transparent 72%),linear-gradient(160deg,#F2DCCB,#E2B79D)}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.grid3 i{display:block;aspect-ratio:1;border-radius:var(--r-print);filter:var(--photo-filter)}
+
+/* ===== Settings / Customize ===== */
+.navbar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;height:52px}
+.back{display:flex;align-items:center;gap:2px;height:44px;color:var(--accent-ink);font-weight:var(--fw-heavy);font-size:var(--fs-headline);margin-left:-6px}
+.navbar h1{font-size:var(--fs-headline);font-weight:var(--fw-heavy)}
+.intro{font-size:var(--fs-callout);color:var(--text-2);font-weight:var(--fw-body);line-height:1.4;margin:0 2px 4px}
+.grp-lbl{font-size:var(--fs-footnote);font-weight:var(--fw-heavy);color:var(--text-2);text-transform:uppercase;letter-spacing:var(--tracking-caps);margin:12px 4px 6px}
+.set-row{position:relative;display:flex;align-items:center;gap:10px;min-height:56px;padding:4px 8px 4px 4px;background:var(--surface)}
+.list li:first-child .set-row{border-radius:var(--r-lg) var(--r-lg) 0 0}
+.list li:last-child .set-row{border-radius:0 0 var(--r-lg) var(--r-lg)}
+.list li:only-child .set-row{border-radius:var(--r-lg)}
+.list.has-drag{box-shadow:none;background:transparent}
+.list.has-drag li .set-row:not(.drag){box-shadow:none}
+.list .set-row{border-top:1px solid var(--line)}
+.list li:first-child .set-row{border-top:0}
+.grip{width:36px;height:44px;display:grid;place-items:center;color:var(--text-3);flex:none;margin-right:-6px}
+.grip .ic{width:20px;height:20px}
+.set-row .chip-ic{width:36px;height:36px;border-radius:12px}
+.set-row .chip-ic .ic{width:20px;height:20px}
+.set-row .t{flex:1;min-width:0;display:flex;flex-direction:column}
+.set-row .t b{font-weight:var(--fw-heavy);font-size:var(--fs-body);line-height:1.2}
+.set-row .t small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-body)}
+.set-row.drag{z-index:2;border-radius:var(--r-sm) !important;box-shadow:var(--shadow-2);transform:translate(6px,-3px)}
+.set-row.drag + .gap{height:0}
+.list.has-drag{overflow:visible}
+.toggle{width:56px;height:44px;position:relative;flex:none}
+.toggle::before{content:"";position:absolute;left:2px;top:6px;width:52px;height:32px;border-radius:var(--r-pill);background:var(--toggle-on)}
+.toggle::after{content:"";position:absolute;top:9px;left:25px;width:26px;height:26px;border-radius:50%;background:var(--knob)}
+.toggle.off::before{background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--line-strong)}
+.toggle.off::after{left:5px;background:var(--line-strong)}
+.chev{color:var(--text-3)}
+.proof{display:inline-flex;align-items:center;gap:6px;color:var(--ok-ink);font-weight:var(--fw-heavy)}
+
+/* ===== Onboarding ===== */
+.ob{padding:0 var(--gutter-onboarding)}
+.ob-top{display:flex;justify-content:space-between;align-items:center;height:60px}
+.wordmark{font-family:var(--font-display);font-weight:var(--fw-title);font-size:26px;color:var(--accent-ink);letter-spacing:-.01em}
+.steps{display:flex;gap:6px}
+.steps i{display:block;width:8px;height:8px;border-radius:4px;background:var(--line-strong);opacity:.45}
+.steps i.on{width:28px;background:var(--accent);opacity:1}
+.ob h1{font-size:var(--fs-hero);line-height:1.08;margin-top:14px}
+.ob h1 .it{display:block;color:var(--accent-ink);font-weight:400}
+.promises{margin-top:18px;border-top:1px solid var(--line)}
+.promises li{display:flex;align-items:center;gap:14px;min-height:52px;border-bottom:1px solid var(--line);font-size:var(--fs-callout);color:var(--text-2);font-weight:var(--fw-body)}
+.promises li b{color:var(--text);font-weight:var(--fw-heavy)}
+.promises .ic{color:var(--accent-ink);width:22px;height:22px}
+.ob h2{font-size:var(--fs-title-2);margin:22px 0 12px}
+.who{display:flex;gap:16px;align-items:center}
+.picker{position:relative;width:104px;height:104px;border-radius:50%;background:var(--accent-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--accent-ink);font-weight:var(--fw-heavy);font-size:var(--fs-footnote);flex:none;
+  background-image:radial-gradient(circle,transparent 0 50.5px,var(--accent) 50.5px 52px);}
+.picker::before{content:"";position:absolute;inset:0;border-radius:50%;border:1.5px dashed var(--accent);opacity:.9}
+.picker{background-image:none}
+.picker{padding-bottom:12px}
+.picker .plus{position:absolute;right:-6px;bottom:-2px;width:30px;height:30px;border-radius:50%;background:var(--primary-bg);color:var(--on-primary);display:grid;place-items:center;box-shadow:0 0 0 3px var(--bg)}
+.fields{flex:1;display:flex;flex-direction:column;gap:10px}
+.field{min-height:58px;border-radius:var(--r-sm);background:var(--surface-2);padding:7px 14px;display:flex;flex-direction:column;justify-content:center}
+.field small{font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-strong)}
+.field b{font-size:var(--fs-headline);font-weight:var(--fw-heavy);display:flex;align-items:center;justify-content:space-between}
+.field b.val{display:block}
+.field .caret{display:inline-block;width:2px;height:20px;background:var(--accent);margin-left:1px;vertical-align:-3px}
+.note{display:flex;gap:8px;align-items:flex-start;font-size:var(--fs-footnote);color:var(--text-2);font-weight:var(--fw-body);margin-top:12px;line-height:1.4}
+.note .ic{width:16px;height:16px;margin-top:1px}
+.ob-foot{position:absolute;left:var(--gutter-onboarding);right:var(--gutter-onboarding);bottom:42px;display:flex;flex-direction:column;gap:6px;align-items:center}
+.ghost{height:44px;padding:0 12px;color:var(--accent-ink);font-weight:var(--fw-heavy);font-size:var(--fs-callout)}
+</style>
+</head>
+<body>
+<header class="board-hd">
+  <h1>Nurture · final design system</h1>
+  <p>Calm Oat base · Night First night rules + tabular numerals · Editorial Soft masthead, keepsake Memories, pill Finish. Every value comes from css/tokens.css. 390 × 844.</p>
+</header>
+<div id="board"></div>
+
+<!-- ===== Icon sprite: 24px grid, 1.75 stroke, round caps, currentColor ===== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<defs>
+<symbol id="i-bottle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.6 5.2c0-1.7.5-2.7 1.4-2.7s1.4 1 1.4 2.7"/><rect x="8.5" y="5.2" width="7" height="2.6" rx="1"/><path d="M9.2 7.8h5.6l1.2 3v8.4a2.3 2.3 0 0 1-2.3 2.3h-3.4A2.3 2.3 0 0 1 8 19.2v-8.4z"/><path d="M10.6 13.2h2.2M10.6 16.2h2.2"/></symbol>
+<symbol id="i-breast" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 9.5c0 5 3.4 9 7.5 9s7.5-4 7.5-9"/><circle cx="12" cy="13" r="1.9"/><path d="M4.5 9.5c1.6-2.6 4.4-4 7.5-4s5.9 1.4 7.5 4"/></symbol>
+<symbol id="i-pump" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 3.75h15l-5 6.25h-5z"/><path d="M9.5 10v8.5A2.5 2.5 0 0 0 12 21a2.5 2.5 0 0 0 2.5-2.5V10"/><path d="M9.5 14.5h2"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 14.6A7.8 7.8 0 1 1 9.4 4.5a6.2 6.2 0 0 0 10.1 10.1z"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.8"/><path d="M12 2.8v1.8M12 19.4v1.8M2.8 12h1.8M19.4 12h1.8M5.5 5.5l1.3 1.3M17.2 17.2l1.3 1.3M5.5 18.5l1.3-1.3M17.2 6.8l1.3-1.3"/></symbol>
+<symbol id="i-diaper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7h17v3c0 5.2-3.9 8.8-8.5 8.8S3.5 15.2 3.5 10z"/><path d="M8.6 18.2c.4-2.6 1.6-4 3.4-4s3 1.4 3.4 4"/><path d="M3.5 10.2h2.6M17.9 10.2h2.6"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l1.8 5.1 5.2 1.8-5.2 1.8L12 17l-1.8-5.1L5 10.1l5.2-1.8z"/><path d="M18.5 15.5l.7 1.9 1.9.7-1.9.7-.7 1.9-.7-1.9-1.9-.7 1.9-.7z"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-plus-b" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 6l6 6-6 6"/></symbol>
+<symbol id="i-chev-l" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6l-6 6 6 6"/></symbol>
+<symbol id="i-chev-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9.5l6 6 6-6"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10.4L12 4l8 6.4v8.4a1.7 1.7 0 0 1-1.7 1.7H5.7A1.7 1.7 0 0 1 4 18.8z"/><path d="M9.5 20.5v-5.2h5v5.2"/></symbol>
+<symbol id="i-timeline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.8" cy="6.5" r="1.3"/><circle cx="4.8" cy="12" r="1.3"/><circle cx="4.8" cy="17.5" r="1.3"/></symbol>
+<symbol id="i-pouch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10v3.2l1.6 2.6v9.9a1.8 1.8 0 0 1-1.8 1.8H7.2a1.8 1.8 0 0 1-1.8-1.8V9.3L7 6.7z"/><path d="M7 6.7h10"/><path d="M9 13.5h3"/></symbol>
+<symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 19.5V4.6A1.6 1.6 0 0 1 6.6 3H19v15H6.6A1.6 1.6 0 0 0 5 19.5a1.6 1.6 0 0 0 1.6 1.5H19"/><path d="M10 3v6.2l2-1.4 2 1.4V3"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 8.2h3l1.6-2.4h5.8l1.6 2.4h3a1.5 1.5 0 0 1 1.5 1.5v8.3a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V9.7a1.5 1.5 0 0 1 1.5-1.5z"/><circle cx="12" cy="13.4" r="3.4"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l7 2.8v5.6c0 4.4-3 7.9-7 9.2-4-1.3-7-4.8-7-9.2V6z"/><path d="M9 12.2l2.1 2.1 4-4.1"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="10" rx="2.2"/><path d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.8" width="10" height="18.4" rx="2.4"/><path d="M11 18h2"/></symbol>
+<symbol id="i-export" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3.8M7.8 7.6L12 3.5l4.2 4.1"/><path d="M8 11H6.5A1.5 1.5 0 0 0 5 12.5v6.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5v-6.5a1.5 1.5 0 0 0-1.5-1.5H16"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></symbol>
+<symbol id="i-snow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M4.2 7.5l15.6 9M4.2 16.5l15.6-9"/><path d="M9.8 4.8L12 6.7l2.2-1.9M9.8 19.2L12 17.3l2.2 1.9"/></symbol>
+<symbol id="i-fridge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="12" height="18" rx="2.5"/><path d="M6 10h12M9 6v1.5M9 13v2.5"/></symbol>
+<symbol id="i-thaw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5s5 5.4 5 9a5 5 0 0 1-10 0c0-3.6 5-9 5-9z"/><path d="M4 20.5c1.3-.9 2.7-.9 4 0s2.7.9 4 0 2.7-.9 4 0 2.7.9 4 0"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 12.5l4.2 4.2 8.8-9"/></symbol>
+<symbol id="i-grip" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6.5" r="1.35"/><circle cx="15" cy="6.5" r="1.35"/><circle cx="9" cy="12" r="1.35"/><circle cx="15" cy="12" r="1.35"/><circle cx="9" cy="17.5" r="1.35"/><circle cx="15" cy="17.5" r="1.35"/></symbol>
+<symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.5h3.4l.5 2.3 1.6.9 2.2-.8 1.7 2.9-1.7 1.6v1.8l1.7 1.6-1.7 2.9-2.2-.8-1.6.9-.5 2.3h-3.4l-.5-2.3-1.6-.9-2.2.8-1.7-2.9 1.7-1.6v-1.8L4.3 8.8 6 5.9l2.2.8 1.6-.9z"/><circle cx="12" cy="12" r="2.6"/></symbol>
+<symbol id="i-motion" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="12" r="5"/><path d="M3.5 9h4M2.5 12h5M3.5 15h4"/></symbol>
+<symbol id="i-noads" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2l7 2.8v5.6c0 4.4-3 7.9-7 9.2-4-1.3-7-4.8-7-9.2V6z"/><path d="M9 12.2l2.1 2.1 4-4.1"/></symbol>
+<symbol id="i-wet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="5.5"/></symbol>
+<symbol id="i-dirty" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5.5"/></symbol>
+<symbol id="i-both" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></symbol>
+</defs>
+</svg>
+
+<script>
+/* Builds the board from small templates so the night set is the SAME markup
+   with data-theme="dark": proof that theming is tokens-only. */
+const I = (id, cls = 'ic') => `<svg class="${cls}" aria-hidden="true"><use href="#i-${id}"/></svg>`;
+const sb = (t = '9:50') => `<div class="sb"><span class="num">${t}</span><span class="sb-r">
+ <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+ <svg width="16" height="12" viewBox="0 0 16 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M1.5 4.2a9.5 9.5 0 0 1 13 0M4 7a6 6 0 0 1 8 0"/><circle cx="8" cy="10" r="1.2" fill="currentColor" stroke="none"/></svg>
+ <svg width="26" height="12" viewBox="0 0 26 12" fill="none"><rect x=".75" y=".75" width="21.5" height="10.5" rx="3" stroke="currentColor" stroke-opacity=".45" stroke-width="1.5"/><rect x="2.5" y="2.5" width="15" height="7" rx="1.6" fill="currentColor"/><path d="M24 4v4" stroke="currentColor" stroke-opacity=".45" stroke-width="1.6" stroke-linecap="round"/></svg></span></div>`;
+const hi = `<div class="hi"></div>`;
+
+const nav = (on) => {
+  const t = (k, ic, label) => `<button class="tab ${on === k ? 'on' : ''}" ${on === k ? 'aria-current="page"' : ''}>${I(ic)}<span>${label}</span></button>`;
+  return `<nav class="nav" aria-label="Main">${t('today', 'home', 'Today')}${t('timeline', 'timeline', 'Timeline')}
+  <div class="nav-slot"><button class="fab" aria-label="Log something. Hold to log a bottle">${I('plus-b')}</button></div>
+  ${t('stash', 'pouch', 'Stash')}${t('mem', 'book', 'Memories')}</nav>`;
+};
+
+// progress ring for the pill: 12m04s of a 2h window
+const ring = (frac) => { const r = 20, c = 2 * Math.PI * r; return `<svg class="ring" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="${r}" fill="none" stroke="var(--pill-ring)" stroke-width="2.5"/><circle cx="22" cy="22" r="${r}" fill="none" stroke="var(--pill-feed)" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="${(c * frac).toFixed(1)} ${c.toFixed(1)}"/></svg>`; };
+const pill = (docked = false) => `<div class="lpill${docked ? ' docked' : ''}" role="group" aria-label="Bottle running, 12 minutes 4 seconds, good for 1 hour 48 minutes">
+  <button class="live-well" aria-label="Open bottle timer">${ring(0.10)}${I('bottle')}<span class="live-dot"></span></button>
+  <span class="live-txt"><b>Bottle</b><small>good for 1h 48m</small></span>
+  <span class="live-time num" aria-hidden="true">12:04</span>
+  <button class="finish">Finish</button></div>`;
+
+const masthead = `<header class="mast">
+  <div><p class="eyebrow">Wednesday · October 14</p>
+  <h1><span class="name disp">Clara</span><span class="age it">6 weeks</span></h1></div>
+  <button class="avatar-btn" aria-label="Clara's profile and settings"><span class="avatar ph-av"></span><span class="gear">${I('gear')}</span></button>
+</header>`;
+
+const cards = `<div class="ql-grid">
+  <button class="ql cat-feed" aria-label="Fed 2 hours 10 minutes ago, 4 ounces formula at 7:40 AM. Log a feed">
+    <span class="ql-top"><span class="ql-label">${I('bottle')}Fed</span><span class="ql-well">${I('plus')}</span></span>
+    <span class="ql-val num">2<small>h</small>10<small>m</small></span>
+    <span class="ql-sub">ago · <b>4 oz</b> formula</span><span class="ql-sub">at 7:40 AM</span></button>
+  <button class="ql cat-sleep is-live" aria-label="Asleep 55 minutes, nap since 8:55 AM. Tap to log wake-up">
+    <span class="ql-top"><span class="ql-label">${I('moon')}Asleep</span><span class="live-chip"><span class="dot"></span>Nap</span></span>
+    <span class="ql-val num">55<small>m</small></span>
+    <span class="ql-sub">since <b>8:55 AM</b></span><span class="ql-sub">Tap to wake</span></button>
+  <button class="ql cat-diaper" aria-label="Diaper 3 hours ago, wet, at 6:50 AM, 3 today. Log a diaper">
+    <span class="ql-top"><span class="ql-label">${I('diaper')}Diaper</span><span class="ql-well">${I('plus')}</span></span>
+    <span class="ql-val num">3<small>h</small>00<small>m</small></span>
+    <span class="ql-sub">ago · <b>wet</b></span><span class="ql-sub">at 6:50 AM · 3 today</span></button>
+  <button class="ql cat-pump" aria-label="Pumped 2 hours 40 minutes ago, 3.5 ounces. 12.5 of 24 ounces today. Log a pump">
+    <span class="ql-top"><span class="ql-label">${I('pump')}Pumped</span><span class="ql-well">${I('plus')}</span></span>
+    <span class="ql-val num">2<small>h</small>40<small>m</small></span>
+    <span class="ql-sub">ago · <b>3.5 oz</b> · 7:10</span>
+    <span class="goal"><span class="goal-bar"><i style="width:52%"></i></span><span class="goal-txt num">12.5<small> / 24 oz</small></span></span></button>
+</div>`;
+
+const rowsToday = `<ul class="list">
+  <li><button class="row cat-sleep"><span class="row-time num">8:55<small>AM</small></span><span class="chip-ic ring-live">${I('moon')}</span>
+    <span class="row-main"><b>Nap</b><small>Asleep · 55m so far</small></span><span class="badge"><span class="dot"></span>Now</span></button></li>
+  <li><button class="row cat-feed"><span class="row-time num">7:40<small>AM</small></span><span class="chip-ic">${I('bottle')}</span>
+    <span class="row-main"><b>Bottle · formula</b><small>Finished in 18 min</small></span><span class="amt num">4 <small>oz</small></span></button></li>
+  <li><button class="row cat-pump"><span class="row-time num">7:10<small>AM</small></span><span class="chip-ic">${I('pump')}</span>
+    <span class="row-main"><b>Pumped</b><small>16 min · to fridge</small></span><span class="amt num">3.5 <small>oz</small></span></button></li>
+  <li><button class="row cat-diaper"><span class="row-time num">6:50<small>AM</small></span><span class="chip-ic">${I('diaper')}</span>
+    <span class="row-main"><b>Diaper</b><small>Wet</small></span>${I('wet', 'ic-s')}</button></li>
+</ul>`;
+
+const today = () => `${sb()}<main class="screen">${masthead}${cards}
+  <div class="sec-hd"><h2 class="disp">Today</h2><button class="link">Timeline${I('chev-r')}</button></div>${rowsToday}</main>
+  ${pill()}${nav('today')}${hi}`;
+
+/* ---- Frame 3: quick-log sheet grown from the + ---- */
+const quick = () => `${sb()}<div class="behind"><main class="screen">${masthead}${cards}</main>${nav('today')}</div>
+  <div class="scrim"></div>
+  <section class="sheet" style="top:214px" role="dialog" aria-modal="true" aria-labelledby="ql-title">
+    <span class="grabber"></span>
+    <div class="sheet-hd"><h2 class="disp" id="ql-title">Log for Clara</h2>
+      <button class="time-chip" aria-label="Time: now, 9:50 AM. Change">${I('clock', 'ic-s')}Now <span class="num">9:50</span>${I('chev-d', 'ic-s')}</button></div>
+    <div class="tiles">
+      <button class="tile cat-feed is-live"><span class="tile-ic">${I('bottle')}</span><b>Bottle</b><small><span class="dot"></span>Running <b class="num">12:04</b></small></button>
+      <button class="tile cat-feed"><span class="tile-ic">${I('breast')}</span><b>Breastfeed</b><small>Start on <b>left</b> · last was R</small></button>
+      <button class="tile cat-pump"><span class="tile-ic">${I('pump')}</span><b>Pump</b><small><b class="num">12.5</b> of 24 oz today</small></button>
+      <button class="tile cat-sleep is-live"><span class="tile-ic">${I('sun')}</span><b>End nap</b><small>Asleep <b class="num">55m</b></small></button>
+    </div>
+    <div class="diaper-row cat-diaper" role="group" aria-label="Log a diaper in one tap">
+      <span class="lbl"><b>Diaper</b><small>One tap</small></span>
+      <button class="dbtn">${I('wet', 'ic-s')}Wet</button><button class="dbtn">${I('dirty', 'ic-s')}Dirty</button><button class="dbtn">${I('both', 'ic-s')}Both</button>
+    </div>
+    <div class="tiles">
+      <button class="tile row-tile cat-mem"><span class="tile-ic">${I('spark')}</span><span><b>Memory</b><small>Photo or first</small></span></button>
+      <button class="tile row-tile cat-pump"><span class="tile-ic">${I('pouch')}</span><span><b>Stash milk</b><small>Fridge or freezer</small></span></button>
+    </div>
+    <p class="hint">Tip: hold <b>+</b> to log a bottle in one move.</p>
+  </section>
+  <button class="fab-x" aria-label="Close">${I('plus-b')}</button>${hi}`;
+
+/* ---- Frame 4: Timeline ---- */
+function strip() {
+  const x0 = 30, W = 288, X = h => x0 + W * h / 24, lanes = [6, 34, 62, 90], LH = 22;
+  const hm = s => { const [h, m] = s.split(':').map(Number); return h + m / 60; };
+  let g = `<defs><pattern id="hatch-PID" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="s-hatch"/></pattern>`;
+  lanes.forEach((y, i) => g += `<clipPath id="lane${i}-PID"><rect x="${x0}" y="${y}" width="${W}" height="${LH}" rx="7"/></clipPath>`);
+  g += `</defs>`;
+  const icons = ['moon', 'bottle', 'diaper', 'pump'], now = hm('9:50');
+  lanes.forEach((y, i) => {
+    g += `<use href="#i-${icons[i]}" x="0" y="${y + 1}" width="20" height="20" class="s-icon"/>`;
+    g += `<g clip-path="url(#lane${i}-PID)"><rect x="${x0}" y="${y}" width="${W}" height="${LH}" class="s-track"/>
+      <rect x="${X(0)}" y="${y}" width="${X(7) - X(0)}" height="${LH}" class="s-band"/><rect x="${X(19)}" y="${y}" width="${X(24) - X(19)}" height="${LH}" class="s-band"/>
+      <rect x="${X(now)}" y="${y}" width="${X(24) - X(now)}" height="${LH}" fill="url(#hatch-PID)"/></g>`;
+  });
+  const sy = lanes[0] + 4, sh = LH - 8;
+  [['0:00', '2:00'], ['2:40', '6:30']].forEach(([a, b]) => g += `<rect x="${X(hm(a))}" y="${sy}" width="${X(hm(b)) - X(hm(a))}" height="${sh}" rx="4" class="s-sleep"/>`);
+  g += `<rect x="${X(hm('8:55')) + 1}" y="${sy + 1}" width="${X(now) - X(hm('8:55')) - 2}" height="${sh - 2}" rx="3.5" class="s-nap"/>`;
+  const fy = lanes[1] + 3;
+  ['2:10', '7:40'].forEach(t => g += `<rect x="${X(hm(t)) - 2}" y="${fy}" width="4" height="16" rx="2" class="s-feed"/>`);
+  g += `<rect x="${X(hm('5:05')) - 2.5}" y="${fy + .8}" width="5" height="14.4" rx="2.5" class="s-bf"/>`;
+  const dy = lanes[2] + LH / 2;
+  g += `<circle cx="${X(hm('2:25'))}" cy="${dy}" r="5" class="s-dia-dot"/>`;
+  ['5:20', '6:50'].forEach(t => g += `<circle cx="${X(hm(t))}" cy="${dy}" r="4.6" class="s-dia-ring"/>`);
+  const py = lanes[3] + LH / 2;
+  ['0:50', '4:20', '7:10'].forEach(t => g += `<rect x="${X(hm(t)) - 4.5}" y="${py - 4.5}" width="9" height="9" rx="1.5" transform="rotate(45 ${X(hm(t))} ${py})" class="s-pump"/>`);
+  g += `<line x1="${X(now)}" y1="2" x2="${X(now)}" y2="116" class="s-now"/>`;
+  [[0, '12a'], [6, '6a'], [12, '12p'], [18, '6p'], [24, '12a']].forEach(([h, l]) => g += `<text x="${X(h)}" y="134" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}" class="s-axis">${l}</text>`);
+  return g;
+}
+const sw = (svg) => `<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true">${svg}</svg>`;
+let pidN = 0;
+const timeline = () => { const pid = 'p' + (++pidN); return `${sb()}<main class="screen">
+  <header class="page-hd"><div><p class="eyebrow">Timeline</p><h1 class="disp">Today</h1><p class="sub">Wednesday, October 14</p></div>
+    <div class="hd-actions"><button class="round-btn" aria-label="Previous day">${I('chev-l')}</button><button class="round-btn" aria-label="Next day" aria-disabled="true">${I('chev-r')}</button></div></header>
+  <div class="days" role="tablist" aria-label="This week">${[['Th', 8], ['Fr', 9], ['Sa', 10], ['Su', 11], ['Mo', 12], ['Tu', 13], ['We', 14]].map(([d, n]) => `<button class="day ${n === 14 ? 'sel' : ''}" role="tab" ${n === 14 ? 'aria-selected="true"' : ''}><small>${d}</small><b class="num">${n}</b>${n === 14 ? '<span class="today-dot"></span>' : ''}</button>`).join('')}</div>
+  <div class="stats">
+    <div class="stat cat-feed">${I('bottle')}<b class="num">7 <small>oz</small></b><small>3 feeds</small></div>
+    <div class="stat cat-sleep">${I('moon')}<b class="num">6h 45m</b><small>slept</small></div>
+    <div class="stat cat-diaper">${I('diaper')}<b class="num">3</b><small>diapers</small></div>
+    <div class="stat cat-pump">${I('pump')}<b class="num">12.5 <small>oz</small></b><small>pumped</small></div>
+  </div>
+  <section class="strip" aria-label="24 hour activity">
+    <div class="strip-hd"><b>24 hours</b><small>shaded = 7 PM – 7 AM</small></div>
+    <svg width="322" height="140" viewBox="0 0 322 140" role="img" aria-label="Night sleep midnight to 2 AM and 2:40 to 6:30 AM, nap since 8:55 AM, 3 feeds, 3 diapers, 3 pumps">${strip().replaceAll('PID', pid)}</svg>
+    <div class="legend">
+      <span>${sw('<rect x="1" y="2" width="16" height="8" rx="3" class="s-sleep"/>')}Night sleep</span>
+      <span>${sw('<rect x="2" y="3" width="14" height="6" rx="2.5" class="s-nap"/>')}Nap</span>
+      <span>${sw('<rect x="7" y="0" width="4" height="12" rx="2" class="s-feed"/>')}Bottle</span>
+      <span>${sw('<rect x="6.5" y=".8" width="5" height="10.4" rx="2.5" class="s-bf"/>')}Breast</span>
+      <span>${sw('<rect x="5" y="2" width="8" height="8" rx="1.5" transform="rotate(45 9 6)" class="s-pump"/>')}Pump</span>
+      <span>${sw('<circle cx="9" cy="6" r="4.2" class="s-dia-ring"/>')}Wet</span>
+      <span>${sw('<circle cx="9" cy="6" r="4.6" class="s-dia-dot"/>')}Dirty</span>
+      <span>${sw('<circle cx="9" cy="6" r="5" class="s-dia-ring"/><circle cx="9" cy="6" r="2" class="s-dia-dot"/>')}Both</span>
+    </div>
+  </section>
+  <div class="sec-hd" style="margin-top:8px"><h2 class="disp">The day</h2><span class="meta">10 entries · newest first</span></div>
+  ${rowsToday}
+  </main>${pill()}${nav('timeline')}${hi}`; };
+
+/* ---- Frame 5: Stash ---- */
+const pouchArt = `<svg width="64" height="76" viewBox="0 0 64 76" aria-hidden="true"><path d="M12 6h40v10l6 9v40a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V25l6-9z" fill="var(--surface)" stroke="var(--pump-mid)" stroke-width="2.5" stroke-linejoin="round"/><path d="M8.5 40h47v25a4 4 0 0 1-4 4h-39a4 4 0 0 1-4-4z" fill="var(--pump-tint)"/><path d="M12 16h40" stroke="var(--pump-mid)" stroke-width="2.5"/><path d="M20 30h12" stroke="var(--pump-mid)" stroke-width="2.5" stroke-linecap="round"/></svg>`;
+const stash = () => `${sb()}<main class="screen">
+  <header class="page-hd" style="min-height:76px"><div><p class="eyebrow">Milk stash</p>
+    <div class="total num"><b>46</b><small>oz</small></div></div>
+    <div class="hd-actions"><button class="btn-outline">${I('plus')}Add pouch</button></div></header>
+  <p class="sub" style="font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-strong)">About 11 bottles of 4 oz</p>
+  <div class="split" role="img" aria-label="Fridge 9 ounces, freezer 37 ounces"><i class="fr" style="flex:9"></i><i class="fz" style="flex:37"></i></div>
+  <div class="split-legend"><span><i class="sw fr"></i>${I('fridge', 'ic-s')}Fridge <b class="num">9 oz</b> · 2</span><span><i class="sw fz"></i>${I('snow', 'ic-s')}Freezer <b class="num">37 oz</b> · 8</span></div>
+  <section class="hero cat-pump" aria-label="Use next">
+    <div class="hero-top"><span class="badge next">${I('spark', 'ic-xs')}Use next</span><span class="meta" style="font-size:var(--fs-subhead);color:var(--text-2);font-weight:var(--fw-strong);display:flex;gap:6px;align-items:center">${I('snow', 'ic-s')}Oldest in freezer</span></div>
+    <div class="hero-mid">${pouchArt}<div><div class="hero-amt num">4<small> oz</small></div>
+      <p class="hero-meta">Pumped <b>Sep 2</b> · frozen 6 weeks<br>${'Best by <b>Mar 2</b> · 4½ months left'}</p></div></div>
+    <div class="btns"><button class="btn primary">${I('thaw')}Thaw</button><button class="btn secondary">${I('bottle')}Thaw &amp; feed</button></div>
+  </section>
+  <div class="sec-hd"><h2 class="disp" style="display:flex;gap:8px;align-items:center">${I('fridge')}Fridge <span class="num" style="font-family:var(--font-ui);font-weight:var(--fw-heavy);font-size:var(--fs-headline);color:var(--text-2)">9 oz</span></h2><span class="meta">Keeps 4 days</span></div>
+  <ul class="list">
+    <li><button class="row cat-pump"><span class="chip-ic">${I('pouch')}</span><span class="row-main"><b class="num">5.5 oz</b><small>Yesterday, 8:20 PM</small></span><span class="badge ok">${I('clock', 'ic-xs')}3 days left</span></button></li>
+    <li><button class="row cat-pump"><span class="chip-ic">${I('pouch')}</span><span class="row-main"><b class="num">3.5 oz</b><small>Today, 7:10 AM</small></span><span class="badge ok">${I('clock', 'ic-xs')}4 days left</span></button></li>
+  </ul>
+  </main>${pill()}${nav('stash')}${hi}`;
+
+/* ---- Frame 6: Memories (keepsake book) ---- */
+const memories = () => `${sb()}<main class="screen">
+  <header class="page-hd" style="min-height:78px;padding-bottom:8px"><div><p class="eyebrow">Clara's book</p><h1 class="disp">Memories</h1></div>
+    <div class="hd-actions"><button class="btn-outline">${I('camera')}Add</button></div></header>
+  <figure class="cover"><div class="photo ph-smile" role="img" aria-label="Photo: Clara smiling"></div>
+    <figcaption><span class="it">The first real smile</span><small class="num">Fri, Oct 9 · 5 weeks</small></figcaption></figure>
+  <div class="sec-hd" style="margin:8px 0 0"><h2 class="disp">Firsts</h2><span class="meta num">3 of 12 kept</span></div>
+  <ul class="firsts">
+    <li><span class="spark">${I('spark')}</span><span class="t"><b>First real smile</b><small class="num">Fri, Oct 9 · 5 weeks, 2 days</small></span><span class="print"><i class="ph-1"></i></span></li>
+    <li><span class="spark">${I('spark')}</span><span class="t"><b>Head up in tummy time</b><small class="num">Mon, Sep 28 · 3 weeks, 5 days</small></span><span class="print"><i class="ph-2"></i></span></li>
+    <li><span class="spark">${I('spark')}</span><span class="t"><b>First bath at home</b><small class="num">Sun, Sep 6 · 4 days</small></span><span class="print"><i class="ph-3"></i></span></li>
+    <li class="suggest"><span class="spark">${I('spark')}</span><span class="t"><span class="it">Laughs out loud</span><small>Usually 3–4 months</small></span><button class="btn-outline sm">${I('plus')}Add</button></li>
+  </ul>
+  </main>${pill()}${nav('mem')}${hi}`;
+
+/* ---- Frame 7: Settings > Customize ---- */
+const trk = (cat, ic, t, s, opts = {}) => `<li><div class="set-row ${opts.drag ? 'drag' : ''}"><span class="grip" aria-label="Reorder ${t}">${I('grip')}</span><span class="chip-ic ${cat}">${I(ic)}</span>
+  <span class="t"><b>${t}</b><small>${s}</small></span><button class="toggle ${opts.off ? 'off' : ''}" role="switch" aria-checked="${opts.off ? 'false' : 'true'}" aria-label="Show ${t}"></button></div></li>`;
+const customize = () => `${sb()}<main class="screen full">
+  <div class="navbar"><button class="back">${I('chev-l')}Settings</button><h1>Customize</h1><span></span></div>
+  <p class="intro">Choose what shows on Today and in +. Drag to reorder. Hidden trackers keep their data.</p>
+  <p class="grp-lbl">Trackers</p>
+  <ul class="list has-drag">
+    ${trk('cat-feed', 'bottle', 'Bottle feeds', 'Formula &amp; breast milk')}
+    ${trk('cat-feed', 'breast', 'Breastfeeding', 'Left / right timer')}
+    ${trk('cat-sleep', 'moon', 'Sleep', 'Naps, nights, wake windows', { drag: true })}
+    ${trk('cat-pump', 'pump', 'Pumping', 'Goal 24 oz a day')}
+    ${trk('cat-pump', 'pouch', 'Milk stash', 'Fridge &amp; freezer')}
+    ${trk('cat-diaper', 'diaper', 'Diapers', 'Wet, dirty, both')}
+    ${trk('cat-mem', 'spark', 'Milestones &amp; memories', 'Hidden · photos kept', { off: true })}
+  </ul>
+  <p class="grp-lbl">Comfort &amp; privacy</p>
+  <ul class="list">
+    <li><div class="set-row" style="padding-left:12px"><span class="chip-ic cat-neutral">${I('motion')}</span><span class="t"><b>Reduce motion</b><small>Fades instead of slides</small></span><button class="toggle off" role="switch" aria-checked="false" aria-label="Reduce motion"></button></div></li>
+    <li><button class="set-row" style="padding-left:12px;width:100%"><span class="chip-ic cat-accent">${I('shield')}</span><span class="t"><b>Privacy &amp; your data</b><small><span class="proof">${I('check', 'ic-xs')}0 network requests</span> · 14.2 MB</small></span>${I('chev-r', 'ic chev')}</button></li>
+  </ul>
+  </main>${pill(true)}${hi}`;
+
+/* ---- Frame 8: Onboarding ---- */
+const onboarding = () => `${sb()}<main class="screen full ob">
+  <div class="ob-top"><span class="wordmark">Nurture</span><span class="steps" aria-label="Step 1 of 4"><i class="on"></i><i></i><i></i><i></i></span></div>
+  <h1 class="disp">Free. Private.<span class="it">Everything stays on this phone.</span></h1>
+  <ul class="promises">
+    <li>${I('noads')}<span><b>No account.</b> No ads, no analytics.</span></li>
+    <li>${I('phone')}<span><b>Works offline,</b> even at 3am.</span></li>
+    <li>${I('export')}<span><b>Yours to keep.</b> Export or erase any time.</span></li>
+  </ul>
+  <h2 class="disp">Who are we caring for?</h2>
+  <div class="who"><button class="picker" aria-label="Add a photo of your baby">${I('camera')}<span>Add photo</span><span class="plus">${I('plus')}</span></button>
+    <div class="fields"><label class="field"><small>Baby's name</small><b class="val">Clara<span class="caret"></span></b></label>
+      <label class="field"><small>Born</small><b class="num">Wed, Sep 2, 2026 ${I('chev-d', 'ic-s')}</b></label></div></div>
+  <p class="note">${I('lock')}<span>Her photo and name never leave this phone. On iPhone, her photo can become the app icon.</span></p>
+  <div class="ob-foot"><button class="btn primary block">Continue</button><button class="ghost">I have a backup file</button></div>
+  </main>${hi}`;
+
+const frames = [
+  ['1', 'light', today, 'Today. Masthead (avatar + gear opens Settings), tinted since-last cards with tabular numerals and clock-time detail, timeline newest first, live pill with Finish.'],
+  ['2', 'dark', today, 'Today at night. Same markup, data-theme="dark": neutral cards, color only in icons and wells, the + is the only accent fill.'],
+  ['3', 'light', quick, 'Quick log. Sheet grows out of the + (which turns into × and stays put). Context-aware tiles and one-tap Wet / Dirty / Both.'],
+  ['4', 'light', timeline, 'Timeline. Day pager, summary tiles, 24h strip: night = solid, nap = outline, shaded night hours, Now line, hatched future, full legend.'],
+  ['5', 'light', stash, 'Stash. Total, fridge/freezer split (solid vs striped plus icon and word), Use-next hero with Thaw, labelled "Add pouch" action.'],
+  ['6', 'light', memories, 'Memories as a keepsake book: mounted cover print, Firsts with prints and "3 of 12 kept", suggested next first. Live pill persists.'],
+  ['7', 'light', customize, 'Settings → Customize. All trackers on by default (one shown off), a row mid-drag, Reduce motion, Privacy with live proof.'],
+  ['8', 'light', onboarding, 'Onboarding, screen 1. The promise, then the baby. Restore from a backup is visible on day one.'],
+];
+const night = [
+  ['3', quick, 'Quick log at night'], ['4', timeline, 'Timeline at night'], ['5', stash, 'Stash at night: Thaw is soft ember, only the + is lit'],
+  ['6', memories, 'Memories at night: photos at 78% brightness'], ['7', customize, 'Customize at night'], ['8', onboarding, 'Onboarding at night'],
+];
+const board = document.getElementById('board');
+const row = (title, items) => `<p class="board-row-hd">${title}</p><div class="board-row">${items}</div>`;
+board.innerHTML =
+  row('Primary frames', frames.map(([n, th, fn, cap]) => `<div class="shot"><p class="cap"><b>${n}</b>${cap}</p><section class="frame" data-theme="${th}" id="frame-${n}">${fn()}</section></div>`).join('')) +
+  row('Night set (same markup, data-theme="dark")', night.map(([n, fn, cap]) => `<div class="shot"><p class="cap"><b>${n}N</b>${cap}</p><section class="frame" data-theme="dark" id="frame-${n}-night">${fn()}</section></div>`).join(''));
+</script>
+</body>
+</html>

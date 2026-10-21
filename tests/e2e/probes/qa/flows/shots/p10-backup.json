@@ -1,0 +1,77 @@
+{
+  "app": "nurture",
+  "schema": 2,
+  "exportedAt": "2026-10-20T15:30:15.496Z",
+  "events": [
+    {
+      "id": "evt_2458f2c9-37cf-4b2a-b5ab-f3f2a7db72cf",
+      "type": "feed",
+      "startTime": 1792506600000,
+      "endTime": 1792507200000,
+      "note": "",
+      "data": {
+        "method": "bottle",
+        "milk": "formula",
+        "amount": 4,
+        "unit": "oz"
+      },
+      "createdAt": 1792510204662,
+      "updatedAt": 1792510204662,
+      "babyId": "baby_12e2f984-a954-4d94-af3f-1721bb1c407f",
+      "deviceId": "dev_1c4ad4bf-0f0c-4dca-88a6-b0ad225adbc8"
+    }
+  ],
+  "inventory": [],
+  "settings": {
+    "babies": [
+      {
+        "id": "baby_12e2f984-a954-4d94-af3f-1721bb1c407f",
+        "name": "Robin",
+        "birthDate": "2026-09-02",
+        "photoId": null,
+        "createdAt": 1792510202171
+      },
+      {
+        "id": "baby_4a52a07b-9752-47c2-8804-5d247113560a",
+        "name": "Sam",
+        "birthDate": null,
+        "photoId": null,
+        "createdAt": 1792510206833
+      }
+    ],
+    "activeBabyId": "baby_4a52a07b-9752-47c2-8804-5d247113560a",
+    "parentName": "",
+    "units": "oz",
+    "theme": "light",
+    "trackers": {
+      "bottle": true,
+      "formula": true,
+      "breastfeeding": true,
+      "pump": true,
+      "stash": true,
+      "sleep": true,
+      "diaper": true,
+      "memories": true
+    },
+    "todayOrder": [
+      "feed",
+      "sleep",
+      "diaper",
+      "pump",
+      "stash"
+    ],
+    "pumpGoalOz": 24,
+    "pumpIntervalMinutes": 180,
+    "storageWindows": {
+      "roomTempHours": 4,
+      "fridgeDays": 4,
+      "freezerMonths": 6,
+      "deepFreezerMonths": 12,
+      "thawedBottleHours": 24,
+      "startedBottleHours": 2
+    },
+    "sound": "night-off",
+    "onboarded": true,
+    "memoryCovers": {}
+  }
+}

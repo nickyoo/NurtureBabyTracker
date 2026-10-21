@@ -1,0 +1,153 @@
+/* =====================================================================
+   Pump sheet (js/sheets/pump.js) — and the .nb-* pieces the pump, sleep and
+   diaper sheets share (layout, segmented hit areas, live timer hero, amount
+   stepper, keypad, time picker). index.html loads pump.css, sleep.css and
+   diaper.css together, so sleep.css / diaper.css rely on this section.
+   Tokens + components.css only; category color via .cat-* → --c-*.
+   No theme selectors (night is tokens only).
+   ===================================================================== */
+
+/* ===================== Shared by pump / sleep / diaper ===================== */
+
+.sheet-pump .nb, .sheet-sleep .nb, .sheet-diaper .nb { display: flex; flex-direction: column; gap: var(--s-4); }
+.nb > .sheet-footer { margin-top: 0; }
+/* A step that ends in its footer sits flush on the sheet's bottom edge, so
+   the primary lands where the live pill was (a pill tap grows the sheet out
+   of the pill, #6). The + keeps its room for the × (components .is-fab). */
+.sheet-layer.sheet-pump:not(.is-fab) .sheet-viewport,
+.sheet-layer.sheet-sleep:not(.is-fab) .sheet-viewport { padding-bottom: 0; }
+.sheet-layer.sheet-pump:not(.is-fab) .nb > .sheet-footer,
+.sheet-layer.sheet-sleep:not(.is-fab) .nb > .sheet-footer { bottom: 0; }
+.sheet-layer.sheet-pump:not(.is-fab) .sheet-step > .empty-state,
+.sheet-layer.sheet-sleep:not(.is-fab) .sheet-step > .empty-state { padding-bottom: calc(var(--safe-bottom) + var(--s-8)); }
+
+.nb-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: var(--fs-callout); font-weight: var(--fw-heavy); color: var(--text); line-height: 1.3;
+}
+.nb-label .ic { color: var(--text-2); }
+.nb-label-c { justify-content: center; text-align: center; }
+.nb-block { display: flex; flex-direction: column; gap: var(--s-2); }
+.nb .field-error:not([hidden]) { justify-content: center; text-align: center; }
+.nb .field-error .ic { flex: none; }
+
+/* Segmented controls: icon + word; each segment's hit area spans the 44px track. */
+.nb-seg > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.nb-seg > button::after { content: ""; position: absolute; inset: -3px 0; }
+.nb-seg > button .ic { color: var(--c-ink, var(--text-2)); }
+
+.nb-back { align-self: flex-start; margin: calc(-1 * var(--s-2)) 0 calc(-1 * var(--s-2)) calc(-1 * var(--s-2)); padding-left: var(--s-1); }
+.nb-mistake { align-self: center; color: var(--text-2); }
+
+/* Live timer hero (pump, sleep). */
+.nb-hero { display: flex; flex-direction: column; align-items: center; gap: 6px; padding-top: var(--s-1); }
+.nb-timer {
+  display: inline-block;
+  font-size: var(--fs-display); line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); color: var(--text);
+}
+.nb-hero-sub { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-strong); }
+.nb-hero-sub b { color: var(--text); font-weight: var(--fw-heavy); }
+.nb-hero-sub .dot { color: var(--c-mid); }
+
+/* Amount stepper: the value is a read-only spinbutton input in a FIXED box,
+   so the − / + never move under a thumb that is holding one of them. */
+.nb-amount { display: flex; flex-direction: column; gap: var(--s-2); }
+.nb-stepper .quick-chips { margin-top: var(--s-2); gap: 6px; }
+.nb-stepper .quick-chip { padding: 0 var(--s-3); }
+.nb-value {
+  display: inline-flex; align-items: baseline; justify-content: center; gap: 4px;
+  width: 3.3em; flex: none; min-height: 64px; padding: 4px 6px; border-radius: var(--r-md);
+  font-size: var(--fs-amount); line-height: 1; cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-std);
+}
+.nb-value:active { background: var(--surface-2); }
+.nb-value:has(.nb-value-input:focus-visible) { box-shadow: var(--focus-ring); }
+.nb-value-input {
+  width: var(--w, 0.7em); min-width: 0.66em;
+  padding: 0; border: 0; background: transparent; color: var(--text);
+  font-size: 1em; line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); text-align: center;
+  caret-color: transparent; cursor: pointer; user-select: none; -webkit-user-select: none;
+}
+.nb-value-input:focus-visible { box-shadow: none; }
+.nb-value-unit { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); }
+.sheet-pump .quick-chip[aria-pressed="true"] { background: var(--pump-tint); color: var(--pump-ink); box-shadow: inset 0 0 0 1.5px var(--pump-mid); }
+
+/* Keypad sheet. */
+.nb-kp-display {
+  display: flex; align-items: baseline; justify-content: center; gap: 6px;
+  min-height: 64px; font-size: var(--fs-amount); line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); color: var(--text);
+}
+.nb-kp-display small { font-size: 22px; color: var(--text-2); font-weight: var(--fw-strong); letter-spacing: 0; }
+.nb-kp-help { min-height: 18px; text-align: center; font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-strong); margin-top: calc(-1 * var(--s-3)); }
+.nb-kp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s-2); }
+.nb-key {
+  min-height: 56px; border-radius: var(--r-md); background: var(--surface-2); color: var(--text);
+  display: grid; place-items: center; font-size: 24px; font-weight: var(--fw-heavy);
+  transition: transform var(--dur-press) var(--ease-std), background-color var(--dur-press) var(--ease-std);
+}
+.nb-key:active { transform: scale(var(--press-scale)); background: var(--line); }
+.nb-key-del { color: var(--text-2); }
+
+/* Time picker sheet (behind the header time chip). */
+.nb-when-quick { justify-content: center; }
+.nb-when-custom { display: flex; flex-direction: column; gap: var(--s-2); }
+.nb-when-field .field-input { min-height: 32px; }
+.nb-when-note { min-height: 19px; margin-top: calc(-1 * var(--s-2)); text-align: center; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); font-variant-numeric: var(--numeric); }
+
+/* "Not now" under the sheet buttons. */
+.nb .sheet-footer > .btn-ghost { align-self: center; color: var(--text-2); }
+
+/* ===================== Pump ===================== */
+
+/* Today's goal (home, live). */
+.pm-goal {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 14px 16px; border-radius: var(--r-xl); background: var(--c-card);
+}
+.pm-goal-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-2); }
+.pm-goal-val { white-space: nowrap; }
+.pm-goal-val b {
+  font-size: var(--fs-numeral); line-height: 1; font-weight: var(--fw-numeral);
+  letter-spacing: var(--tracking-numeral); color: var(--text);
+}
+.pm-goal-val small { font-size: var(--fs-unit); font-weight: var(--fw-strong); color: var(--text-2); }
+.pm-goal-word { display: inline-flex; align-items: center; gap: 4px; font-size: var(--fs-callout); font-weight: var(--fw-heavy); color: var(--c-ink); }
+.pm-goal-bar { flex: none; height: 8px; border-radius: 4px; }
+.pm-goal-bar > i { border-radius: 4px; }
+.pm-goal-meta { font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); line-height: 19px; }
+.pm-goal-meta b { color: var(--text); font-weight: var(--fw-heavy); }
+.pm-goal.is-compact { padding: 12px 14px; gap: 8px; border-radius: var(--r-lg); }
+.pm-goal.is-compact .pm-goal-val b { font-size: var(--fs-title-3); }
+.pm-goal.is-compact .pm-goal-val small { font-size: var(--fs-callout); }
+.pm-goal.is-compact .pm-goal-meta { display: none; }
+
+/* "How much?" step. */
+.pm-dur { text-align: center; font-size: var(--fs-callout); color: var(--text-2); font-weight: var(--fw-body); }
+.pm-dur b { color: var(--text); font-weight: var(--fw-heavy); }
+.pm-today { min-height: 19px; text-align: center; font-size: var(--fs-subhead); color: var(--text-2); font-weight: var(--fw-body); }
+.pm-today b { color: var(--text); font-weight: var(--fw-heavy); }
+
+/* Store it: Fridge / Freezer / Deep freezer / Don't store. */
+.pm-places { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-2); }
+.pm-place {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  min-height: 64px; padding: 8px 10px 8px 8px; border-radius: var(--r-lg);
+  background: var(--surface-2); color: var(--text); text-align: left;
+  transition: background-color var(--dur-press) var(--ease-std), box-shadow var(--dur-press) var(--ease-std), transform var(--dur-press) var(--ease-std);
+}
+.pm-place:active { transform: scale(var(--press-scale)); }
+.pm-place[aria-checked="true"] { background: var(--c-tint); box-shadow: inset 0 0 0 1.5px var(--c-mid); }
+.pm-place[disabled] { opacity: .38; }
+.pm-place-ic { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--c-well); color: var(--c-ink); }
+.pm-place[aria-checked="true"] .pm-place-ic { background: var(--surface); }
+.pm-place-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.pm-place-text b { font-size: var(--fs-callout); font-weight: var(--fw-heavy); }
+.pm-place-text small { font-size: var(--fs-footnote); color: var(--text-2); font-weight: var(--fw-body); }
+
+/* Past pump. */
+.pm-durs { gap: 2px; }
+.pm-durs .chip-face { padding: 0 12px; }
+.pm-span { justify-content: center; font-variant-numeric: var(--numeric); }
