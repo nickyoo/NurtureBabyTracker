@@ -147,6 +147,8 @@ export default {
     let stopped = false;
     let painted = false;
     let est = null;               // persist.estimate()
+    let lastPumpAt;               // undefined = not looked up yet; null = no pump on record
+    let safetyInfo = null;        // the copy kept by the last Replace import (DI-01)
     let photoUse = null;          // photos.usage()
     const urls = new Map();       // photoId → object URL (or null while loading)
     const drafts = {};            // stepper name → pending display value
@@ -257,10 +259,17 @@ export default {
         ${label ? html`<button type="button" class="btn btn-primary" data-action="${action}" data-arg="${arg}">${label}</button>` : ''}
       </div>`;
 
-    const feedbackHref = () => {
-      const to = S.get('feedbackEmail') || '';
-      return `mailto:${to}?subject=${encodeURIComponent('Nurture feedback')}`;
-    };
+    // FLOW-06: no recipient → no mailto (it would open a blank, address-less
+    // compose). The owner fills feedbackEmail; until then the row says so.
+    const feedbackTo = () => S.get('feedbackEmail') || '';
+    const feedbackHref = () => `mailto:${feedbackTo()}?subject=${encodeURIComponent('Nurture feedback')}`;
+    const feedbackRow = () => (feedbackTo()
+      ? html`<li data-key="feedback"><a class="set-row" href="${feedbackHref()}">
+            <span class="chip-ic cat-neutral">${I('edit')}</span>
+            <span class="set-text"><b>Send feedback</b><small>Opens your email. Nothing is attached.</small></span>
+            ${chev}
+          </a></li>`
+      : infoRow({ key: 'feedback', icon: 'edit', title: 'Send feedback', sub: 'Feedback email not set up yet' }));
 
     function proofText() {
       const n = foreignRequests();
@@ -416,11 +425,7 @@ export default {
         <p class="grp-lbl">About</p>
         <ul class="set-list">
           ${navRow({ key: 'about', arg: 'about', icon: 'info', title: 'About Nurture', sub: `Version ${APP_VERSION} · free and open source` })}
-          <li data-key="feedback"><a class="set-row" href="${feedbackHref()}">
-            <span class="chip-ic cat-neutral">${I('edit')}</span>
-            <span class="set-text"><b>Send feedback</b><small>Opens your email. Nothing is attached.</small></span>
-            ${chev}
-          </a></li>
+          ${feedbackRow()}
         </ul>
         <p class="st-foot">Free. Private. Everything stays on this phone.</p>`;
     }
@@ -490,6 +495,15 @@ export default {
 
     // ---- Feeding & pumping
 
+    // FLOW-12: the schedule starts from the last pump only when there is one;
+    // with none on record it starts one interval from now (core/ics.js).
+    function calHelp() {
+      const every = intervalText(drafts.interval ?? S.get('pumpIntervalMinutes'));
+      return lastPumpAt === undefined || lastPumpAt === null
+        ? `The next 7 days, every ${every}, starting ${every} from now.`
+        : `The next 7 days, every ${every} from your last pump.`;
+    }
+
     function feedingPage() {
       const t = trackers();
       const bottle = t.bottle !== false;
@@ -513,7 +527,7 @@ export default {
           <div class="st-card cat-pump" data-key="cal">
             <p class="note">${I('bell', 16)}<span>Web apps can’t alert you while they’re closed. Add your pump schedule to Calendar instead: your phone reminds you, and nothing leaves it.</span></p>
             <button type="button" class="btn btn-secondary btn-block" data-action="calendar" ${busyAction === 'calendar' ? html`aria-busy="true"` : ''}>${I('calendar', 22)}Add pump schedule to Calendar</button>
-            <p class="st-help">${`The next 7 days, every ${intervalText(drafts.interval ?? S.get('pumpIntervalMinutes'))} from your last pump.`}</p>
+            <p class="st-help" data-cal-help>${calHelp()}</p>
           </div>` : ''}`;
     }
 
@@ -576,6 +590,9 @@ export default {
           </label>
           <p class="st-help">Merge a partner’s backup into this phone, or restore everything from a file.</p>
         </div>
+        ${safetyInfo ? html`<ul class="set-list st-gap">
+            ${navRow({ key: 'undo-replace', action: 'undo-replace', icon: 'upload', cat: 'cat-accent', title: 'Put back what was here before', sub: `Kept from before the import · ${F.dayLabel(safetyInfo.createdAt)}` })}
+          </ul>` : ''}
 
         <p class="grp-lbl">Start over</p>
         <div class="st-actions" data-key="erase">
@@ -605,9 +622,9 @@ export default {
           <h3>Check for yourself</h3>
           <p>Nurture is open source, so anyone can read exactly what it does.</p>
           <a class="btn btn-outline" href="${SOURCE_URL}" target="_blank" rel="noopener noreferrer">${I('info', 20)}View the source code</a>
-          <h3>Send feedback</h3>
-          <p>Feedback opens your email app with a blank message. Nothing from your log is attached, only what you type.</p>
-          <a class="btn btn-outline" href="${feedbackHref()}">${I('edit', 20)}Send feedback</a>
+          ${feedbackTo() ? html`<h3>Send feedback</h3>
+          <p>Feedback opens your email app with only the subject filled in. Nothing from your log is attached, only what you type.</p>
+          <a class="btn btn-outline" href="${feedbackHref()}">${I('edit', 20)}Send feedback</a>` : ''}
         </div>`;
     }
 
@@ -664,10 +681,7 @@ export default {
             <span class="chip-ic cat-neutral">${I('info')}</span>
             <span class="set-text"><b>Source code</b><small>${SOURCE_LABEL}</small></span>${chev}
           </a></li>
-          <li data-key="feedback"><a class="set-row" href="${feedbackHref()}">
-            <span class="chip-ic cat-neutral">${I('edit')}</span>
-            <span class="set-text"><b>Send feedback</b><small>Opens your email. Nothing is attached.</small></span>${chev}
-          </a></li>
+          ${feedbackRow()}
         </ul>
         <p class="grp-lbl">Licenses</p>
         <ul class="set-list">
@@ -732,6 +746,10 @@ export default {
             ${b.id === activeId()
               ? html`<p class="st-on-today"><span class="badge badge-next">${I('check', 14)}On Today</span>${`Today, Timeline and the + are showing ${name || 'this baby'}.`}</p>`
               : html`<button type="button" class="btn btn-secondary btn-block" data-action="make-active">${I('home', 22)}${`Show ${name || 'this baby'} on Today`}</button>`}
+          </div>` : ''}
+        ${!isNewBaby && multi ? html`<div class="st-actions" data-key="remove-baby">
+            <button type="button" class="btn btn-danger-soft btn-block" data-action="remove-baby" ${busyAction === 'remove-baby' ? html`aria-busy="true"` : ''}>${I('trash', 22)}${`Remove ${name || 'this baby'}`}</button>
+            <p class="st-help">${`Deletes ${name ? `${F.possessive(name)}` : 'this baby’s'} entries and photos from this phone. A safety backup is saved first.`}</p>
           </div>` : ''}
         ${isNewBaby ? html`<div class="st-actions" data-key="add">
             <button type="button" class="btn btn-primary btn-block" data-action="save-baby" ${busyAction === 'save-baby' ? html`aria-busy="true"` : ''}>${I('plus', 22)}Add baby</button>
@@ -1006,7 +1024,8 @@ export default {
 
     function importSummary(res) {
       if (res.mode === 'replace') {
-        return res.safetyBackup ? 'Replaced with the backup. A safety copy was saved first.' : 'Replaced with the backup';
+        // DI-01: only claim what is confirmed — the copy kept on this phone.
+        return res.safetyKept ? 'Replaced with the backup. What was here is kept on this phone.' : 'Replaced with the backup';
       }
       const s = res.stats || {};
       const ev = (s.events ? s.events.added + s.events.updated : 0);
@@ -1016,7 +1035,45 @@ export default {
       if (ev) parts.push(F.plural(ev, 'entry', 'entries'));
       if (inv) parts.push(F.plural(inv, 'pouch', 'pouches'));
       if (ph) parts.push(F.plural(ph, 'photo'));
-      return parts.length ? `Merged · ${parts.join(', ')} added` : 'Already up to date · nothing new in that file';
+      let msg = parts.length ? `Merged · ${parts.join(', ')} added` : 'Already up to date · nothing new in that file';
+      // DI-04: a baby the merge added is named, never silent.
+      const born = ((s.babies && s.babies.addedBabies) || []).map((b) => b.name).filter(Boolean);
+      if (born.length) msg += ` · new baby: ${born.join(', ')}`;
+      // DI-11: what couldn't be read is said, not hidden.
+      const rej = s.rejected || {};
+      const skipped = (rej.events || 0) + (rej.inventory || 0);
+      if (skipped) msg += ` · ${F.plural(skipped, 'entry', 'entries')} skipped`;
+      return msg;
+    }
+
+    async function undoReplace(origin) {
+      const ok = await ctx.confirmSheet({
+        title: 'Put back what was here before?',
+        body: 'This phone goes back to how it was before the last Replace. The backup file you imported stays in your files.',
+        confirmLabel: 'Put it back',
+        cancelLabel: 'Keep it as it is',
+        destructive: true,
+        origin,
+      });
+      if (!ok) return;
+      try {
+        await backup.restoreSafetyCopy();
+        safetyInfo = null;
+        paint();
+        ctx.toast({ message: 'Put back what was here before' });
+      } catch (ex) {
+        if (!(ex && ex.name === 'BackupError')) console.warn('settings: undo replace failed', ex);
+        ctx.toast({ message: ex && ex.name === 'BackupError' ? ex.message : 'That didn’t work. Nothing was changed.', tone: 'warn' });
+      }
+    }
+
+    async function loadSafetyInfo() {
+      try {
+        const c = await backup.getSafetyCopy();
+        if (stopped) return;
+        safetyInfo = c ? { createdAt: c.createdAt } : null;
+        paint();
+      } catch (err) { console.warn('settings: safety copy unavailable', err); }
     }
 
     function openImport(file, origin) {
@@ -1036,8 +1093,22 @@ export default {
               <button type="button" class="btn btn-primary btn-block" data-choice="merge">${I('download', 22)}Merge into this phone</button>
               <button type="button" class="btn btn-secondary btn-block" data-choice="replace">Replace everything</button>
             </div>`);
-          const err = body.querySelector('[data-error]');
+          let err = body.querySelector('[data-error]');
           let working = false;
+          let question = null; // "Is Clara Rose the same baby as Clara?" (DI-04)
+          const ask = (q) => {
+            api.setTitle(`Is ${q.incoming.name} the same baby as ${q.local.name}?`);
+            render(body, html`
+              <p class="st-choice">The backup’s baby is <b>${q.incoming.name}</b>. This phone has <b>${q.local.name}</b>.</p>
+              <p class="field-error" data-error hidden></p>
+              <div class="sheet-footer">
+                <button type="button" class="btn btn-primary btn-block" data-choice="same">${`Same baby · merge into ${q.local.name}`}</button>
+                <button type="button" class="btn btn-secondary btn-block" data-choice="new">${`Add ${q.incoming.name} as a new baby`}</button>
+              </div>`);
+            err = body.querySelector('[data-error]');
+            const first = body.querySelector('[data-choice="same"]');
+            if (first) first.focus();
+          };
           const onClick = async (e) => {
             const b = e.target.closest('[data-choice]');
             if (!b || working) return;
@@ -1046,7 +1117,14 @@ export default {
             b.setAttribute('aria-busy', 'true');
             err.hidden = true;
             try {
-              const res = await backup.importBackup(file, { mode: 'merge' });
+              let babyMatches = null;
+              if (b.dataset.choice === 'merge') {
+                question = await backup.previewBabyQuestion(file);
+                if (question) { working = false; ask(question); return; }
+              } else if (question) {
+                babyMatches = { [question.incoming.id]: b.dataset.choice === 'same' ? question.local.id : null };
+              }
+              const res = await backup.importBackup(file, { mode: 'merge', babyMatches });
               b.removeAttribute('aria-busy');
               b.classList.add('is-success');
               render(b, html`${I('check', 22)}Merged`);
@@ -1068,7 +1146,7 @@ export default {
           const target = origin && origin.isConnected ? origin : null;
           const ok = await ctx.confirmSheet({
             title: 'Replace everything on this phone?',
-            body: 'First, Nurture saves a safety backup of this phone to your downloads. Then the file’s log, stash and settings replace what’s here.',
+            body: 'First, Nurture keeps a safety backup of this phone, here and in your downloads, so you can undo this. Then the file’s log, stash and settings replace what’s here.',
             confirmLabel: 'Replace everything',
             cancelLabel: 'Keep what’s here',
             destructive: true,
@@ -1077,7 +1155,11 @@ export default {
           if (!ok) return;
           try {
             const res = await backup.importBackup(file, { mode: 'replace' });
-            ctx.toast({ message: importSummary(res) });
+            if (res.safetyKept) safetyInfo = { createdAt: Date.now() };
+            ctx.toast({
+              message: importSummary(res),
+              action: res.safetyKept ? { label: 'Undo', run: () => backup.restoreSafetyCopy().then(() => { safetyInfo = null; if (!stopped) paint(); }) } : undefined,
+            });
           } catch (ex) {
             if (!(ex && ex.name === 'BackupError')) console.warn('settings: replace failed', ex);
             ctx.toast({ message: ex && ex.name === 'BackupError' ? ex.message : 'That file couldn’t be imported. Nothing was changed.', tone: 'warn' });
@@ -1139,7 +1221,7 @@ export default {
       await run('photo', async () => {
         let rec;
         try { rec = await ctx.photos.add(file); } catch (err) {
-          ctx.toast({ message: err && err.name === 'PhotoDecodeError' ? 'That photo couldn’t be read. Try another one.' : 'Couldn’t save that photo. Try another one.', tone: 'warn' });
+          ctx.toast({ message: err && err.name === 'PhotoDecodeError' ? 'That photo couldn’t be read. Try another one.' : ctx.format.saveError(err, 'Couldn’t save that photo. Try another one.'), tone: 'warn' });
           if (!(err && err.name === 'PhotoDecodeError')) console.warn('settings: photo not saved', err);
           return;
         }
@@ -1160,6 +1242,39 @@ export default {
           console.warn('settings: photo not linked', err);
           ctx.photos.remove(rec.id).catch(() => {});
           ctx.toast({ message: 'Couldn’t save that photo. Try again.', tone: 'warn' });
+        }
+      });
+    }
+
+    // FLOW-05: remove a baby (never the last one), behind a confirm sheet,
+    // with a safety backup first (backup.removeBaby) and Undo.
+    async function removeBabyFlow(origin) {
+      const b = pageBaby();
+      if (!b || babies().length < 2 || busyAction) return;
+      const who = F.babyName(b, '') || 'this baby';
+      let entries = 0;
+      try { entries = (await ctx.events.query({ babyId: b.id })).filter((e) => e.babyId === b.id).length; } catch { /* count is only for the wording */ }
+      const ok = await ctx.confirmSheet({
+        title: `Remove ${who} and their entries?`,
+        body: `${entries ? `${F.plural(entries, 'entry', 'entries')} and the photos only ${who} has` : `${who} and their photo`} will be deleted from this phone. A safety backup is saved first, so you can put it back from Backup & data.`,
+        confirmLabel: `Remove ${who}`,
+        cancelLabel: 'Keep',
+        destructive: true,
+        origin,
+      });
+      if (!ok) return;
+      await run('remove-baby', async () => {
+        try {
+          const res = await backup.removeBaby(b.id);
+          safetyInfo = { createdAt: Date.now() };
+          if (!stopped) { try { ctx.router.back(); } catch { /* already gone */ } }
+          ctx.toast({
+            message: `${who === 'this baby' ? 'Baby' : who} removed`,
+            action: res.safetyKept ? { label: 'Undo', run: () => backup.restoreSafetyCopy().then(() => { safetyInfo = null; }) } : undefined,
+          });
+        } catch (ex) {
+          if (!(ex && ex.name === 'BackupError')) console.warn('settings: remove baby failed', ex);
+          ctx.toast({ message: ex && ex.name === 'BackupError' ? ex.message : 'That didn’t work. Nothing was removed.', tone: 'warn' });
         }
       });
     }
@@ -1540,8 +1655,10 @@ export default {
         case 'calendar': addToCalendar(); break;
         case 'persist': askPersist(); break;
         case 'erase': eraseEverything(b); break;
+        case 'undo-replace': undoReplace(b); break;
         case 'reset-windows': resetWindows(); break;
         case 'remove-photo': removePhoto(); break;
+        case 'remove-baby': removeBabyFlow(b); break;
         case 'make-active': { const pb = pageBaby(); if (pb) S.setActiveBaby(pb.id).catch((err) => console.warn('settings: switch failed', err)); break; }
         case 'save-baby': addBaby(b); break;
         case 'move': {
@@ -1687,6 +1804,14 @@ export default {
 
     paint();
     if (['root', 'customize', 'data', 'privacy'].includes(page)) loadEstimate();
+    if (page === 'data') loadSafetyInfo();
+    if (page === 'feeding' && ctx.events && typeof ctx.events.last === 'function') {
+      ctx.events.last('pump').then((e) => {
+        if (stopped) return;
+        lastPumpAt = e ? (e.endTime ?? e.startTime) : null;
+        paint();
+      }).catch((err) => console.warn('settings: last pump unavailable', err));
+    }
 
     return {
       unmount() {

@@ -421,6 +421,32 @@ export function eventVisible(e, t = {}) {
   }
 }
 
+/** What to say when storage is full (DI-05): honest, and says what helps. */
+export const QUOTA_MESSAGE = 'This phone is out of space for Nurture. Free some space, or save a backup and remove old photos.';
+
+/**
+ * Is this the browser saying storage is full? (IndexedDB / Cache quota.)
+ * @param {unknown} err
+ * @returns {boolean}
+ */
+export function isQuotaError(err) {
+  if (!err || typeof err !== 'object') return false;
+  if (err.name === 'QuotaExceededError') return true;
+  const inner = err.cause || err.inner;
+  return !!inner && inner !== err && isQuotaError(inner);
+}
+
+/**
+ * The message for a failed save: the out-of-space one when storage is full
+ * (retrying can't help), else `fallback`.
+ * @param {unknown} err
+ * @param {string} [fallback]
+ * @returns {string}
+ */
+export function saveError(err, fallback = 'That didn’t save. Try again.') {
+  return isQuotaError(err) ? QUOTA_MESSAGE : fallback;
+}
+
 /** Hours/minutes constants re-exported for view math. */
 export { MINUTE, HOUR };
 
@@ -429,4 +455,5 @@ export const format = Object.freeze({
   CATEGORY, categoryOf, categoryClass, amount, amountSplit, spanParts, span, since, spanSpoken,
   clock, clockParts, durationLabel, dayLabel, dateLabel, eyebrowDate, babyAge, babyName, possessive,
   plural, eventTitle, eventSubtitle, eventAmount, eventLabel, isDayOffset, eventVisible,
+  QUOTA_MESSAGE, isQuotaError, saveError,
 });

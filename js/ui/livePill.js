@@ -281,12 +281,21 @@ export function mount(root, ctx) {
     }
     const from = el.getBoundingClientRect();
     if (target && !motionReduced() && typeof el.animate === 'function') {
-      const to = target.getBoundingClientRect();
-      const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
-      const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
-      const s = Math.max(0.08, Math.min(1, to.height / from.height));
+      // Shrink INTO the target's icon (#6, MAV-8): the row's chip, or the
+      // Today tab's icon — scaled to its size around the pill's well, not a
+      // full-width bar sliding off the edge.
+      const icon = target.querySelector('.chip-ic') || target.querySelector('svg, .ic') || target;
+      const to = icon.getBoundingClientRect();
+      const well = el.querySelector('.lpill-well');
+      const w = well ? well.getBoundingClientRect() : from;
+      const ox = (w.left + w.width / 2) - from.left;
+      const oy = (w.top + w.height / 2) - from.top;
+      const dx = (to.left + to.width / 2) - (from.left + ox);
+      const dy = (to.top + to.height / 2) - (from.top + oy);
+      const s = Math.max(0.04, Math.min(1, to.width / from.width, to.height / from.height));
+      el.style.transformOrigin = `${ox}px ${oy}px`;
       const anim = el.animate(
-        [{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: 0 }],
+        [{ transform: 'none', opacity: 1 }, { transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: 0.2, offset: 0.85 }, { transform: `translate(${dx}px, ${dy}px) scale(${s})`, opacity: 0 }],
         { duration: 320, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', fill: 'forwards' },
       );
       anim.onfinish = () => { el.remove(); };

@@ -792,7 +792,7 @@ export function openStashSheet(ctx, { origin = null, preset = null, pouchId = nu
         lock(body, false);
         console.warn('stash sheet: pouch not saved', err);
         showError(body, err instanceof RangeError && /thaw|pumped/i.test(err.message)
-          ? 'That pumped time doesn’t fit this pouch. Check the date.' : 'That didn’t save. Try again.');
+          ? 'That pumped time doesn’t fit this pouch. Check the date.' : ctx.format.saveError(err));
         paint();
         return;
       }
@@ -1002,11 +1002,12 @@ export function openStashSheet(ctx, { origin = null, preset = null, pouchId = nu
         return;
       }
       if (act === 'thaw-feed') {
-        // The feed sheet takes over; Undo would hide under it, and thawing
-        // is what "Thaw & feed" asked for.
-        if (closed) return;
+        // The feed sheet takes over (an Undo toast would hide under it). If
+        // it closes without a bottle from this pouch, the feed sheet puts the
+        // pouch back in the freezer (refreeze) and says so.
+        if (closed) { ctx.stash.restore(before).catch(() => {}); return; }
         api.close('thaw-feed');
-        ctx.sheets.feed({ origin: reopenOrigin(), preset: { method: 'bottle', sourceInventoryId: id } });
+        ctx.sheets.feed({ origin: reopenOrigin(), preset: { method: 'bottle', sourceInventoryId: id }, refreeze: before });
         return;
       }
       await api.close(act);

@@ -5,7 +5,7 @@
 //
 //  - The active baby's last 7 or 14 COMPLETE days (domain/trends
 //    reportSummary): feeds a day + total, bottle amount a day + total,
-//    breastfeeding sessions, wet / dirty diapers a day, sleep a day + the
+//    breastfeeds, wet / dirty diapers a day, sleep a day + the
 //    longest stretch, pumping totals — visible trackers only (hidden trackers
 //    disappear everywhere, their data stays).
 //  - A day-by-day table, oldest first, the way a doctor reads a log.
@@ -148,8 +148,8 @@ export default {
         out.push(tile({
           cat: 'feed', icon: 'breast', word: 'Breastfeeds',
           value: num(s.perDay.breastSessions), unitWord: 'a day',
-          sub: `${F.plural(s.totals.breastSessions, 'session')} in all`,
-          aria: `Breastfeeding: ${num(s.perDay.breastSessions)} ${s.perDay.breastSessions === 1 ? 'session' : 'sessions'} a day, ${s.totals.breastSessions} in all.`,
+          sub: `${F.plural(s.totals.breastSessions, 'breastfeed')} in all`,
+          aria: `Breastfeeds: ${num(s.perDay.breastSessions)} ${s.perDay.breastSessions === 1 ? 'breastfeed' : 'breastfeeds'} a day, ${s.totals.breastSessions} in all.`,
         }));
       }
       if (show.diaper) {
@@ -186,7 +186,7 @@ export default {
       const t = s.totals;
       if (show.feeds) cols.push({ h: 'Feeds', v: (d) => String(d.feed.count) });
       if (show.bottle && (t.bottleAmount > 0 || !show.breast)) cols.push({ h: 'Bottle', sub: u, title: `Bottle ${u === 'oz' ? 'ounces' : 'milliliters'}`, v: (d) => String(d.feed.amount) });
-      if (show.breast && (t.breastSessions > 0 || !show.bottle)) cols.push({ h: 'Breast', sub: 'times', title: 'Breastfeeding sessions', v: (d) => String(d.feed.breastCount) });
+      if (show.breast && (t.breastSessions > 0 || !show.bottle)) cols.push({ h: 'Breast', sub: 'times', title: 'Breastfeeds', v: (d) => String(d.feed.breastCount) });
       if (show.diaper) cols.push({ h: 'Diapers', sub: 'wet · dirty', title: 'Wet and dirty diapers', v: (d) => `${d.diaper.wet} · ${d.diaper.dirty}` });
       if (show.sleep) cols.push({ h: 'Sleep', v: (d) => (d.sleep.totalMs >= 60000 ? F.span(d.sleep.totalMs) : '0m') });
       if (show.pump && (t.pumps > 0 || cols.length < 4)) cols.push({ h: 'Pump', sub: u, title: `Pumped, ${u === 'oz' ? 'ounces' : 'milliliters'}`, v: (d) => String(d.pump.amount) });

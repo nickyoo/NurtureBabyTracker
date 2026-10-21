@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fitWithin, squareCrop, MAX_EDGE, JPEG_QUALITY, PhotoDecodeError, orphanPhotoIds } from '../js/core/photos.js';
-import { sanitizeInventoryItem, StashNotFoundError } from '../js/core/stash.js';
+import { sanitizeInventoryItem, StashNotFoundError, stashTotalsByUnit } from '../js/core/stash.js';
+import { roundForUnit } from '../js/core/units.js';
 
 const NOW = new Date('2026-10-15T12:00:00').getTime();
 
@@ -79,4 +80,17 @@ test('orphanPhotoIds: only unreferenced photos older than a day are dropped', ()
   assert.deepEqual(orphanPhotoIds(recs, new Set(['pho_used', 'pho_old']), { now: NOW }), []);
   assert.deepEqual(orphanPhotoIds(recs, [], { now: NOW, minAgeMs: 0 }).sort(), ['pho_fresh', 'pho_old', 'pho_used']);
   assert.deepEqual(orphanPhotoIds(null, [], { now: NOW }), []);
+});
+
+test('DI-10: Today and the Stash tab total the same pouches the same way (387 vs 386 mL)', () => {
+  const items = [
+    { quantity: 4, unit: 'oz', location: 'thawed' },
+    { quantity: 120, unit: 'mL', location: 'fridge' },
+    { quantity: 5, unit: 'oz', location: 'freezer' },
+  ];
+  const t = stashTotalsByUnit(items);
+  const ml = { total: roundForUnit(t.mL.total, 'mL'), fresh: roundForUnit(t.mL.fresh, 'mL'), frozen: roundForUnit(t.mL.frozen, 'mL') };
+  assert.deepEqual(ml, { total: 386, fresh: 238, frozen: 148 }, 'what the Stash tab shows (rounded once)');
+  assert.equal(roundForUnit(t.oz.total, 'oz'), 13.1);
+  assert.deepEqual(stashTotalsByUnit([{ quantity: 2, unit: 'oz', location: 'room' }, { quantity: NaN, unit: 'oz', location: 'deepFreezer' }]).oz, { total: 2, fresh: 2, frozen: 0 }, 'room counts as fresh; NaN as 0');
 });

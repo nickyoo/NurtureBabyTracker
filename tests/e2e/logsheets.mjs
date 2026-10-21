@@ -387,6 +387,9 @@ try {
     await page.waitForSelector(`${TOP} [data-start]`);
     await settle(page, 600);
     check('Log a past sleep steps forward', (await title(page)) === 'Past sleep');
+    check('FLOW-10: a fresh open never starts on an error (defaults dodge the naps just logged)',
+      !(await page.isDisabled(`${TOP} [data-log]`)) && !/overlaps/.test(await page.textContent(`${TOP} [data-error]`) || '') && /slept/.test(await page.textContent(`${TOP} [data-sum]`)),
+      `${await page.textContent(`${TOP} [data-error]`)} ${await page.inputValue(`${TOP} input[data-start]`)}–${await page.inputValue(`${TOP} input[data-end]`)}`);
     // Wrong order.
     await page.click(`${TOP} [data-seg="startDay"] [data-value="-1"]`);
     await page.fill(`${TOP} input[data-start]`, '03:00');

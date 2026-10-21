@@ -308,6 +308,36 @@ try {
     await settle(page, 400);
     check('Undo → frozen again, back in the freezer (8 rows)', (await getPouch(page, ids[0])).location === 'freezer' && (await rowsIn(page, 'freezer')).length === 8 && !(await page.$('.stx-sec[data-sec="thawed"]:not(.is-leaving)')));
 
+    // FLOW-01: Thaw & feed, then close the feed sheet without feeding → the
+    // pouch goes back in the freezer (no thaw clock from a mis-tap).
+    await page.click('.stx-hero [data-hero-act="thaw-feed"]');
+    await page.waitForSelector('.sheet-layer.sheet-feed[data-state="open"]');
+    await settle(page, 600);
+    check('FLOW-01: Thaw & feed opened → pouch thawed while the sheet is open', (await getPouch(page, ids[0])).location === 'thawed');
+    await page.keyboard.press('Escape');
+    check('FLOW-01: Esc closes the feed sheet', await waitNoLayers(page));
+    await page.waitForFunction(() => /Pouch put back in the freezer/.test((document.querySelector('#toastRoot .toast-msg') || {}).textContent || ''), null, { timeout: 3000 }).catch(() => {});
+    const back = await getPouch(page, ids[0]);
+    check('FLOW-01: closed without feeding → the pouch is frozen again (no thaw clock)', back.location === 'freezer' && back.status === 'active' && !Number.isFinite(back.thawedAt), JSON.stringify(back));
+    check('FLOW-01: …and says so: "Pouch put back in the freezer"', /Pouch put back in the freezer/.test(await text(page, '#toastRoot .toast-msg') || ''));
+    await page.waitForFunction(() => { const h = document.querySelector('.stx-hero'); return h && h.dataset.state === 'frozen'; }, null, { timeout: 3000 });
+    await settle(page, 400);
+    check('FLOW-01: Stash shows it in the freezer again (8 rows, no Thawed)', (await rowsIn(page, 'freezer')).length === 8 && !(await page.$('.stx-sec[data-sec="thawed"]:not(.is-leaving)')));
+    // Same from the pouch detail sheet's Thaw & feed.
+    await openRow(page, 'freezer', 0);
+    const rowId = await page.evaluate(() => document.querySelector('.stx-row.is-sheet-origin') && document.querySelector('.stx-row.is-sheet-origin').dataset.pouch);
+    await page.click('.sheet-stash [data-act="thaw-feed"]');
+    await page.waitForSelector('.sheet-layer.sheet-feed[data-state="open"]');
+    await settle(page, 600);
+    check('FLOW-01: pouch sheet Thaw & feed → feed sheet, pouch thawed', (await getPouch(page, rowId)).location === 'thawed');
+    await page.keyboard.press('Escape');
+    await waitNoLayers(page);
+    await settle(page, 500);
+    check('FLOW-01: pouch sheet path — closed without feeding → frozen again', (await getPouch(page, rowId)).location === 'freezer');
+    await page.waitForFunction(() => { const h = document.querySelector('.stx-hero'); return h && h.dataset.state === 'frozen'; }, null, { timeout: 3000 });
+    await page.evaluate(() => document.querySelectorAll('#toastRoot .toast').forEach((t) => t.remove()));
+    await settle(page, 400);
+
     // Thaw & feed.
     await page.click('.stx-hero [data-hero-act="thaw-feed"]');
     await page.waitForSelector('.sheet-layer.sheet-feed[data-state="open"]');

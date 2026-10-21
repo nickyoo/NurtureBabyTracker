@@ -22,7 +22,7 @@
 //    Keyboard activation is never delayed.
 
 import { html, element } from './html.js';
-import { afterTransition, guardEnterTaps } from './sheet.js';
+import { afterTransition, guardEnterTaps, motionReduced } from './sheet.js';
 
 const EXIT_MS = 160;
 const RESTORED_MS = 1200;
@@ -62,7 +62,9 @@ function toastRoot() {
  * @returns {ToastHandle}
  */
 export function toast({ message, action, secondaryAction, duration = 5000, tone = 'default' } = {}) {
-  if (current) current.leave('replaced', true);
+  // MAV-9: a visible toast being replaced runs its own 160 ms fade-and-drop
+  // UNDER the new one (cross-fade), instead of blinking out between frames.
+  if (current) current.leave('replaced', !current.visible());
   const root = toastRoot();
   const safeTone = ['default', 'success', 'warn'].includes(tone) ? tone : 'default';
   const el = element(html`
@@ -71,7 +73,9 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
       ${action ? html`<button type="button" class="toast-action toast-action-1">${action.label}</button>` : ''}
       ${secondaryAction ? html`<button type="button" class="toast-action toast-action-2">${secondaryAction.label}</button>` : ''}
     </div>`);
-  root.appendChild(el);
+  // First in the region: a replaced toast still fading out (is-replaced) sits
+  // after it in the DOM and under it on screen.
+  root.insertBefore(el, root.firstChild);
   guardEnterTaps(el);
 
   let resolveDone;
@@ -105,6 +109,7 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
     leaving = true;
     clearTimeout(timer);
     if (current && current.el === el) current = null;
+    if (reason === 'replaced' && !fast) { el.classList.add('is-replaced'); el.setAttribute('aria-hidden', 'true'); }
     el.setAttribute('data-state', 'leaving');
     const remove = () => { el.remove(); resolveDone(reason); };
     if (fast) remove(); else afterTransition(el, EXIT_MS + 160, remove, { property: 'opacity' });
@@ -158,7 +163,12 @@ export function toast({ message, action, secondaryAction, duration = 5000, tone 
   el.setAttribute('data-state', 'in');
   start();
 
-  current = { el, leave };
+  current = {
+    el,
+    leave,
+    // Seen right now: entered, on a visible page, and not under reduced motion.
+    visible: () => el.isConnected && el.getAttribute('data-state') === 'in' && !document.hidden && !motionReduced(),
+  };
   return { dismiss: () => leave('dismissed'), done };
 }
 

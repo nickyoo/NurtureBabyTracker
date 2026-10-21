@@ -375,7 +375,7 @@ export function openDiaperSheet(ctx, { origin = null, preset = null, event = nul
         btn.classList.remove('is-done');
         for (const t of tiles) t.removeAttribute('aria-disabled');
         busy = false;
-        ctx.toast({ message: 'That didn’t save. Try again.', tone: 'warn' });
+        ctx.toast({ message: ctx.format.saveError(err), tone: 'warn' });
         return;
       }
       // The tint registers, then the sheet collapses back into its trigger (#18).
@@ -478,7 +478,7 @@ export function openDiaperSheet(ctx, { origin = null, preset = null, event = nul
         busy = false;
         saveBtn.removeAttribute('aria-busy');
         const e = body.querySelector('[data-error]');
-        render(e, html`${I('info', 16)}That didn’t save. Try again.`);
+        render(e, html`${I('info', 16)}${ctx.format.saveError(err)}`);
         e.hidden = false;
       }
     });

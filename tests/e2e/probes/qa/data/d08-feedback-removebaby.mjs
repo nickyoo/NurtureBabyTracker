@@ -1,0 +1,20 @@
+// Known gaps: feedback mailto with no recipient; no way to remove a baby.
+import { chromium, mod, OUT, instrument } from './v1lib.mjs';
+const browser = await chromium.launch();
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+const page = await context.newPage(); instrument(page);
+await page.goto(mod('/')); await page.waitForSelector('[data-action="start"]'); await page.click('[data-action="start"]'); await page.waitForSelector('[data-view="today"]');
+await page.evaluate(async (s) => { const S = await import(s); const b = S.settings.activeBaby(); await S.settings.updateBaby(b.id, { name: 'Robin' }); await S.settings.addBaby({ name: 'Sam' }).catch((e) => console.log('addBaby', e.message)); }, mod('/js/core/settings.js'));
+await page.click('[data-action="settings"], button[aria-label*="ettings"]'); await page.waitForTimeout(800);
+const fb = await page.$$eval('a[href^="mailto:"]', (as) => as.map((a) => `${a.innerText.replace(/\s+/g, ' ')} -> ${a.getAttribute('href')}`));
+console.log('feedback links on settings root:', fb);
+await page.click('[data-arg="privacy"]'); await page.waitForTimeout(700);
+console.log('privacy feedback:', await page.$$eval('a[href^="mailto:"]', (as) => as.map((a) => a.getAttribute('href'))));
+await page.goBack().catch(() => {}); await page.waitForTimeout(700);
+const babyRows = page.locator('#viewport [data-arg^="baby"], #viewport button:has-text("Sam")');
+console.log('baby rows', await babyRows.count());
+await page.locator('#viewport :text("Sam")').first().click(); await page.waitForTimeout(900);
+await page.screenshot({ path: `${OUT}/d08-baby-sam.png`, fullPage: true });
+const txt = await page.$eval('#viewport', (v) => v.innerText.replace(/\s+/g, ' '));
+console.log('baby page:', txt.slice(0, 400), '| has remove/delete:', /remove|delete/i.test(txt));
+await context.close(); await browser.close();

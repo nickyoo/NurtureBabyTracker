@@ -368,6 +368,21 @@ button.row:active, a.row:active { background: var(--surface-2); }
   transition: transform 240ms var(--ease-in), clip-path 240ms var(--ease-in);
 }
 
+/* Shared-element flights (sheet.js flyCopy, #6 + #16): a fixed copy above
+   every layer, transformed from its start rect to its own box. */
+.sheet-flight {
+  position: fixed; margin: 0; z-index: calc(var(--z-fab-over-sheet) + 1);
+  transform-origin: 0 0; pointer-events: none; box-sizing: border-box;
+}
+.sheet-flight.fd-timer, .sheet-flight.nb-timer { display: flex; align-items: center; justify-content: center; white-space: nowrap; }
+/* The header chip a card's sheet carries (#16): the card's icon, kept. */
+.sheet-hd-chip { width: 36px; height: 36px; border-radius: var(--r-sm); }
+.sheet-hd-chip .ic { width: 20px; height: 20px; }
+.sheet-hd-chip + .sheet-title { margin-right: auto; }
+/* The live pill a dismissed timer sheet flies into (#6): hidden until the
+   numeral lands, then it fades in. */
+#livePills .lpill.is-flight-target { opacity: 0; transition: none; }
+
 /* While sheet.js measures and sets the start geometry, nothing transitions
    (otherwise the geometry change itself would animate from unset values). */
 .sheet-layer.is-measuring .sheet, .sheet-layer.is-measuring .fab-x, .sheet-layer.is-measuring .sheet-scrim { transition: none !important; }
@@ -414,6 +429,11 @@ button.row:active, a.row:active { background: var(--surface-2); }
 }
 .sheet-step.is-leaving.is-fwd { transform: translateX(calc(-1 * var(--move-xl))); opacity: 0; }
 .sheet-step.is-leaving.is-back { transform: translateX(var(--move-xl)); opacity: 0; }
+/* A morphing step (#5 Start bottle): no slide — the content cross-fades
+   (--dur-fast) while one element FLIPs across (sheet.js step 'morph'). */
+.sheet-step.is-entering.is-morph { opacity: 0; }
+.sheet-step.is-morph:not(.is-leaving) { transition: opacity var(--dur-fast) var(--ease-out); }
+.sheet-step.is-leaving.is-morph { opacity: 0; }
 /* The primary action stays pinned above the home indicator. */
 .sheet-footer {
   position: sticky; bottom: calc(-1 * (var(--safe-bottom) + var(--s-5)));
@@ -454,6 +474,9 @@ body[data-chrome="bare"] #toastRoot { bottom: calc(var(--safe-bottom) + var(--s-
 }
 .toast[data-state="in"] { opacity: 1; transform: none; }
 .toast[data-state="leaving"] { opacity: 0; transform: translateY(var(--move-sm)); transition: opacity 160ms var(--ease-in), transform 160ms var(--ease-in); }
+/* Replaced while visible (MAV-9): it leaves in place, under the new toast,
+   instead of taking a second slot in the column. */
+.toast.is-replaced { position: absolute; left: 0; right: 0; bottom: 0; z-index: -1; pointer-events: none; }
 .toast-msg { flex: 1; min-width: 0; font-size: var(--fs-callout); font-weight: var(--fw-body); line-height: 1.3; padding: 8px 0; }
 .toast:not(:has(.toast-action)) .toast-msg { padding-right: 12px; }
 .toast-action {

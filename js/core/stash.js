@@ -17,7 +17,7 @@ import {
   buildThawUpdate, summarizeStash, filterInventory, pickUseNext, buildInventoryItem,
   applyInventoryPatch, consumeUpdate, effectiveStatus, maxExpiresAt, isPlausibleThaw, LOCATIONS, STATUSES, POUCH_LIMITS,
 } from '../domain/inventory.js';
-import { normalizeUnit, toFiniteNumber } from './units.js';
+import { normalizeUnit, toFiniteNumber, convertQty } from './units.js';
 
 /** Thrown when a pouch id doesn't exist. */
 export class StashNotFoundError extends Error {
@@ -147,9 +147,32 @@ export async function list({ filter = 'all', now = Date.now() } = {}) {
  */
 export async function summary({ now = Date.now() } = {}) {
   const all = await readAll();
+  const usable = filterInventory(all, 'all', now);
   // everStored lets the UI skip "Low stash" nags for families that never
   // stored milk (AUDIT F12).
-  return { ...summarizeStash(filterInventory(all, 'all', now)), everStored: all.length > 0 };
+  return { ...summarizeStash(usable), byUnit: stashTotalsByUnit(usable), everStored: all.length > 0 };
+}
+
+/**
+ * Unrounded totals in each display unit, split the way the Stash tab splits
+ * them (fresh = fridge + thawed + room; frozen = freezer + deep freezer), so
+ * Today's Stash card and the Stash tab round ONCE, from the same sums, and
+ * always agree (DI-10). Pure.
+ * @param {object[]} items usable pouches
+ * @returns {{ oz: {total:number, fresh:number, frozen:number}, mL: {total:number, fresh:number, frozen:number} }}
+ */
+export function stashTotalsByUnit(items = []) {
+  const out = { oz: { total: 0, fresh: 0, frozen: 0 }, mL: { total: 0, fresh: 0, frozen: 0 } };
+  for (const i of items || []) {
+    const frozen = i.location === 'freezer' || i.location === 'deepFreezer';
+    for (const u of ['oz', 'mL']) {
+      const q = convertQty(i.quantity, i.unit, u);
+      const n = Number.isFinite(q) ? q : 0;
+      out[u].total += n;
+      out[u][frozen ? 'frozen' : 'fresh'] += n;
+    }
+  }
+  return out;
 }
 
 /**

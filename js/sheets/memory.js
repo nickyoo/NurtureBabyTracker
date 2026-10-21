@@ -497,6 +497,7 @@ export function openMemorySheet(ctx, { origin, preset, event, id, mode = 'view',
       paintPhotos();
       const work = (async () => {
         let failed = 0;
+        let full = false;
         for (const f of files) {
           try {
             const rec = await ctx.photos.add(f);
@@ -505,6 +506,7 @@ export function openMemorySheet(ctx, { origin, preset, event, id, mode = 'view',
             st.photos.push(rec.id);
           } catch (err) {
             failed += 1;
+            if (ctx.format.isQuotaError(err)) full = true;
             console.warn('memory sheet: photo not added', err);
           } finally {
             st.pending -= 1;
@@ -512,7 +514,8 @@ export function openMemorySheet(ctx, { origin, preset, event, id, mode = 'view',
           }
         }
         if (failed && api.isOpen() && body.isConnected) {
-          showError(body, failed === files.length && files.length === 1
+          // DI-05: a full phone is not a bad JPEG.
+          showError(body, full ? ctx.format.QUOTA_MESSAGE : failed === files.length && files.length === 1
             ? 'That photo can’t be opened on this phone. Try a JPEG or PNG.'
             : 'Some photos can’t be opened on this phone. Try JPEG or PNG.');
         }

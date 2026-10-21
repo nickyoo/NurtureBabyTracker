@@ -180,3 +180,15 @@ test('eventVisible: hidden trackers disappear everywhere; bottle and breastfeed 
   assert.equal(eventVisible({ type: 'weird' }, all), false);
   assert.equal(eventVisible(null, all), false);
 });
+
+test('DI-05: saveError says "out of space" for a full phone, else the fallback', async () => {
+  const F = await import('../js/ui/format.js');
+  const quota = Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' });
+  assert.equal(F.isQuotaError(quota), true);
+  assert.equal(F.isQuotaError({ name: 'AbortError', cause: quota }), true, 'wrapped');
+  assert.equal(F.isQuotaError(new Error('x')), false);
+  assert.equal(F.isQuotaError(null), false);
+  assert.match(F.saveError(quota), /out of space for Nurture/);
+  assert.equal(F.saveError(new Error('x')), 'That didn’t save. Try again.');
+  assert.equal(F.saveError(new TypeError('x'), 'Couldn’t save that photo.'), 'Couldn’t save that photo.');
+});

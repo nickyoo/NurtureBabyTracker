@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import {
   validateBackup, mergeBackup, planBabyMerge, detectFormat, buildCsv, csvCell, bytesToBase64, base64ToBytes,
   BACKUP_APP, BACKUP_SCHEMA, MAX_RECORDS, V1_IMPORT_BABY_ID, BackupError,
+  isPristineProfile, babyQuestion, clampExpiryToWindows, mergeCovers, STALE_RUNNING_MS,
 } from '../js/core/backup.js';
 import { LIMITS } from '../js/core/store.js';
 import { pickUseNext, latestThawAt } from '../js/domain/inventory.js';
@@ -248,7 +249,7 @@ test('mergeBackup: by id; newer updatedAt wins; tie keeps local (no write)', () 
   const incoming = [feed({ id: 'evt_a', note: 'incoming', updatedAt: 150 }), feed({ id: 'evt_b', note: 'incoming', updatedAt: 200 }), feed({ id: 'evt_c', note: 'incoming', updatedAt: 250 }), feed({ id: 'evt_d', note: 'new' })];
   const { toPut, stats } = mergeBackup({ events: local, babies }, { events: incoming, babies });
   assert.deepEqual(toPut.events.map(e => [e.id, e.note]), [['evt_a', 'incoming'], ['evt_d', 'new']]);
-  assert.deepEqual(stats.events, { added: 1, updated: 1, unchanged: 2, stoppedRunning: 0 });
+  assert.deepEqual(stats.events, { added: 1, updated: 1, unchanged: 2, stoppedRunning: 0, stoppedStale: 0 });
   assert.equal(toPut.babies, null, 'same babies → nothing to write');
 });
 
@@ -276,7 +277,7 @@ test('mergeBackup: one running activity per type per baby survives a merge', () 
   const incomingNap = feed({ id: 'evt_nap_in', type: 'sleep', startTime: NOW - 2 * HOUR, endTime: null, data: { kind: 'nap' } });
   const twinNap = feed({ id: 'evt_nap_max', type: 'sleep', endTime: null, babyId: MAX, data: { kind: 'nap' } });
   const both = [...babies, { id: MAX, name: 'Max', birthDate: null, photoId: null, createdAt: null }];
-  const { toPut, stats } = mergeBackup({ events: [localNap], babies: both }, { events: [incomingNap, twinNap], babies: both });
+  const { toPut, stats } = mergeBackup({ events: [localNap], babies: both }, { events: [incomingNap, twinNap], babies: both }, { now: NOW });
   const nap = toPut.events.find(e => e.id === 'evt_nap_in');
   assert.equal(nap.endTime, nap.startTime, 'second running nap for Clara stopped at its start');
   assert.equal(toPut.events.find(e => e.id === 'evt_nap_max').endTime, null, 'Max can nap at the same time');
@@ -285,7 +286,7 @@ test('mergeBackup: one running activity per type per baby survives a merge', () 
   // the slot frees up for an incoming running nap.
   const finished = { ...localNap, endTime: NOW, updatedAt: NOW + 1 };
   const freshNap = feed({ id: 'evt_nap_new', type: 'sleep', startTime: NOW - 60000, endTime: null, data: { kind: 'nap' } });
-  const r2 = mergeBackup({ events: [localNap], babies }, { events: [finished, freshNap], babies });
+  const r2 = mergeBackup({ events: [localNap], babies }, { events: [finished, freshNap], babies }, { now: NOW });
   assert.equal(r2.toPut.events.find(e => e.id === 'evt_nap_new').endTime, null);
   assert.equal(r2.stats.events.stoppedRunning, 0);
 });
@@ -305,7 +306,7 @@ test('planBabyMerge: id → name → only-child matching, local wins, gaps fille
 
   const differentKids = planBabyMerge(local, [{ id: 'baby_x', name: 'Max' }]);
   assert.deepEqual(differentKids.babies.map(b => b.name), ['Clara', 'Max'], 'both named, different → sibling added');
-  assert.deepEqual(differentKids.stats, { added: 1, matched: 0 });
+  assert.deepEqual(differentKids.stats, { added: 1, matched: 0, addedBabies: [{ id: 'baby_x', name: 'Max' }] });
 
   const twins = planBabyMerge([{ id: 'baby_a', name: 'Ava' }, { id: 'baby_b', name: 'Bea' }], [{ id: 'baby_1', name: 'bea' }, { id: 'baby_2', name: 'ava' }]);
   assert.deepEqual([twins.remap.get('baby_1'), twins.remap.get('baby_2'), twins.babies.length], ['baby_b', 'baby_a', 2]);
@@ -322,7 +323,7 @@ test('mergeBackup: events remapped to the local baby; orphan ids get a placehold
   const { toPut, stats } = mergeBackup({ events: [], babies: local }, { events, babies: incomingBabies });
   assert.deepEqual(toPut.events.map(e => [e.id, e.babyId]), [['evt_1', CLARA], ['evt_2', 'baby_orphan'], ['evt_p', null]]);
   assert.deepEqual(toPut.babies.map(b => [b.id, b.name, b.birthDate]), [[CLARA, 'Clara', '2026-08-01'], ['baby_orphan', '', null]]);
-  assert.deepEqual(stats.babies, { added: 0, matched: 1, placeholders: 1 });
+  assert.deepEqual(stats.babies, { added: 0, matched: 1, placeholders: 1, addedBabies: [] });
 });
 
 test('mergeBackup is pure: inputs are not mutated', () => {
@@ -491,4 +492,74 @@ test('regression (R2): numbers in a file are parsed in linear time (a 100 KB fil
   }), { now: NOW });
   assert.ok(performance.now() - t0 < 200, `records: ${(performance.now() - t0).toFixed(0)} ms`);
   assert.deepEqual([v.stats.events.rejected, v.stats.inventory.rejected], [5, 5]);
+});
+
+// ------------------------------------------------------- QA fixes ----
+
+test('DI-12: an incoming timer "running" for 300 days is imported stopped, a fresh one keeps running', () => {
+  const stale = feed({ id: 'evt_stale', type: 'sleep', startTime: NOW - 300 * 24 * HOUR, endTime: null, data: { kind: 'nap' } });
+  const fresh = feed({ id: 'evt_fresh', type: 'pump', startTime: NOW - HOUR, endTime: null, babyId: null, data: {} });
+  const { toPut, stats } = mergeBackup({ events: [], babies }, { events: [stale, fresh], babies }, { now: NOW });
+  const s1 = toPut.events.find(e => e.id === 'evt_stale');
+  assert.equal(s1.endTime, s1.startTime, 'stopped at its start');
+  assert.equal(toPut.events.find(e => e.id === 'evt_fresh').endTime, null);
+  assert.equal(stats.events.stoppedStale, 1);
+  assert.equal(STALE_RUNNING_MS, 24 * HOUR);
+});
+
+test('DI-03: isPristineProfile — only the untouched default baby with no entries', () => {
+  assert.equal(isPristineProfile([{ id: 'baby_auto', name: '' }], []), true);
+  assert.equal(isPristineProfile([{ id: 'baby_auto', name: '' }], [feed({ babyId: 'baby_auto' })]), false, 'has entries');
+  assert.equal(isPristineProfile([{ id: 'baby_auto', name: '' }], [{ id: 'evt_p', type: 'pump', babyId: null }]), true, 'parent pumps are not the baby\'s');
+  assert.equal(isPristineProfile([{ id: 'baby_auto', name: 'Ava' }], []), false, 'named');
+  assert.equal(isPristineProfile([{ id: 'baby_auto', name: '', birthDate: '2026-09-01' }], []), false, 'born');
+  assert.equal(isPristineProfile([{ id: 'a', name: '' }, { id: 'b', name: '' }], []), false, 'two babies');
+});
+
+test('DI-04: babyQuestion asks only for one named baby on each side that didn\'t match; force answers it', () => {
+  const local = [{ id: CLARA, name: 'Clara' }];
+  const theirs = [{ id: 'baby_rose', name: 'Clara Rose', birthDate: '2026-09-08' }];
+  assert.deepEqual(babyQuestion(local, theirs), { local: { id: CLARA, name: 'Clara' }, incoming: { id: 'baby_rose', name: 'Clara Rose' } });
+  assert.equal(babyQuestion(local, [{ id: 'baby_x', name: 'clara' }]), null, 'same name: matched already');
+  assert.equal(babyQuestion(local, [{ id: CLARA, name: 'Other' }]), null, 'same id');
+  assert.equal(babyQuestion([{ id: 'a', name: '' }], theirs), null, 'unnamed local: only-child rule');
+  assert.equal(babyQuestion([...local, { id: MAX, name: 'Max' }], theirs), null, 'twins: no guessing');
+  const same = planBabyMerge(local, theirs, { force: { baby_rose: CLARA } });
+  assert.deepEqual([same.babies.length, same.remap.get('baby_rose'), same.babies[0].name], [1, CLARA, 'Clara'], 'same baby: remapped, local name kept');
+  const sibling = planBabyMerge(local, theirs, { force: { baby_rose: null } });
+  assert.deepEqual([sibling.babies.map(b => b.name), sibling.stats.addedBabies], [['Clara', 'Clara Rose'], [{ id: 'baby_rose', name: 'Clara Rose' }]]);
+  // force null also overrides the only-child rule.
+  const forcedNew = planBabyMerge([{ id: 'baby_auto', name: '' }], [{ id: 'baby_t', name: 'Clara' }], { force: { baby_t: null } });
+  assert.equal(forcedNew.babies.length, 2);
+});
+
+test('DI-02: imported pouches get this phone\'s storage windows (the earlier expiry wins)', () => {
+  const DAY = 24 * HOUR;
+  const fridge = pouch({ id: 'inv_old', location: 'fridge', pumpedAt: NOW - 10 * DAY, expiresAt: NOW + 4 * DAY });
+  const w = { roomTempHours: 4, fridgeDays: 4, freezerMonths: 6, deepFreezerMonths: 12, thawedBottleHours: 24, startedBottleHours: 2 };
+  assert.equal(clampExpiryToWindows(fridge, w).expiresAt, NOW - 6 * DAY, '10-day-old fridge milk is expired here');
+  const thawed = pouch({ id: 'inv_t', location: 'thawed', pumpedAt: NOW - 20 * DAY, thawedAt: NOW - 60 * HOUR, expiresAt: NOW + 12 * HOUR });
+  assert.equal(clampExpiryToWindows(thawed, w).expiresAt, NOW - 36 * HOUR, 'thawed 60 h ago, 24 h window → expired');
+  const early = pouch({ location: 'fridge', pumpedAt: NOW - DAY, expiresAt: NOW + DAY });
+  assert.equal(clampExpiryToWindows(early, w), early, 'an earlier file expiry is kept as is');
+  const noThaw = pouch({ location: 'thawed', expiresAt: NOW + HOUR });
+  assert.equal(clampExpiryToWindows(noThaw, w), noThaw, 'no thaw time: the bounded file value stays');
+  assert.equal(clampExpiryToWindows(fridge, undefined).expiresAt, NOW - 6 * DAY, 'default windows');
+});
+
+test('FLOW-07: mergeCovers adds the file\'s covers (remapped) only where none is set here', () => {
+  const events = new Map([
+    ['evt_m1', { id: 'evt_m1', type: 'milestone', babyId: CLARA }],
+    ['evt_m2', { id: 'evt_m2', type: 'milestone', babyId: MAX }],
+    ['evt_f', { id: 'evt_f', type: 'feed', babyId: CLARA }],
+  ]);
+  const babyIds = new Set([CLARA, MAX]);
+  const remap = new Map([['baby_theirs', CLARA]]);
+  assert.deepEqual(mergeCovers({}, { baby_theirs: 'evt_m1' }, { remap, babyIds, events }), { [CLARA]: 'evt_m1' }, 'remapped onto our baby');
+  assert.equal(mergeCovers({ [CLARA]: 'evt_local' }, { baby_theirs: 'evt_m1' }, { remap, babyIds, events }), null, 'local cover wins');
+  assert.equal(mergeCovers({}, { [CLARA]: 'evt_missing' }, { remap, babyIds, events }), null, 'cover must exist after the merge');
+  assert.equal(mergeCovers({}, { [CLARA]: 'evt_f' }, { remap, babyIds, events }), null, 'only a memory');
+  assert.equal(mergeCovers({}, { [CLARA]: 'evt_m2' }, { remap, babyIds, events }), null, 'only that baby\'s memory');
+  assert.equal(mergeCovers({}, { baby_unknown: 'evt_m1' }, { remap, babyIds, events }), null, 'unknown baby');
+  assert.deepEqual(mergeCovers({ [CLARA]: 'evt_m1' }, { [MAX]: 'evt_m2' }, { babyIds, events }), { [CLARA]: 'evt_m1', [MAX]: 'evt_m2' });
 });

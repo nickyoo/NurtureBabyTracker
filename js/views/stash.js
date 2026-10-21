@@ -637,10 +637,12 @@ export default {
           const next = await ctx.stash.thaw(id);
           if (!next) { ctx.toast({ message: 'That pouch isn’t frozen any more.' }); return; }
           if (opensSheet) {
-            if (stopped) return;
+            if (stopped) { ctx.stash.restore(before).catch(() => {}); return; }
             // The feed sheet fetches a pouch its cache hasn't seen yet and
-            // keeps it selected meanwhile, so no settle wait is needed.
-            ctx.sheets.feed({ origin: btn, preset: { method: 'bottle', sourceInventoryId: id } });
+            // keeps it selected meanwhile, so no settle wait is needed. If it
+            // closes without a bottle from this pouch, the pouch goes back in
+            // the freezer (refreeze) — a mis-tap never starts the thaw clock.
+            ctx.sheets.feed({ origin: btn, preset: { method: 'bottle', sourceInventoryId: id }, refreeze: before });
           } else {
             ctx.toast({ message: `Thawed · use within ${windows().thawedBottleHours}h`, action: { label: 'Undo', run: () => ctx.stash.restore(before) } });
           }

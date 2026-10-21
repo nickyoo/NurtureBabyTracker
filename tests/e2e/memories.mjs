@@ -367,6 +367,21 @@ try {
     await page.keyboard.press('Escape');
     await waitNoLayers(page);
 
+    // DI-05: a full phone (every IndexedDB write throws QuotaExceededError) is
+    // not "can't be opened … Try a JPEG or PNG".
+    await page.evaluate(() => {
+      const quota = () => { throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); };
+      window.__realPut = IDBObjectStore.prototype.put; window.__realAdd = IDBObjectStore.prototype.add;
+      IDBObjectStore.prototype.put = quota; IDBObjectStore.prototype.add = quota;
+    });
+    await openSheetFrom(page, `${V} .page-hd [data-action="add"]`);
+    await page.setInputFiles('.sheet-memory [data-pick]', { name: 'ok.png', mimeType: 'image/png', buffer: await pngBytes(page, 60) });
+    await page.waitForSelector('.sheet-memory [data-error]:not([hidden])', { timeout: 6000 }).catch(() => {});
+    check('DI-05: storage full → "out of space", not "Try a JPEG or PNG"', /out of space for Nurture/.test(await text(page, '.sheet-memory [data-error]') || '') && !/JPEG/.test(await text(page, '.sheet-memory [data-error]') || ''), await text(page, '.sheet-memory [data-error]'));
+    await page.evaluate(() => { IDBObjectStore.prototype.put = window.__realPut; IDBObjectStore.prototype.add = window.__realAdd; });
+    await page.keyboard.press('Escape');
+    await waitNoLayers(page);
+
     // ---- suggested "+ Add" ----
     const sugKey = await page.getAttribute(`${V} [data-suggest]`, 'data-suggest');
     await openSheetFrom(page, `${V} [data-suggest]`);

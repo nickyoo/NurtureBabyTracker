@@ -561,11 +561,16 @@ try {
   check('…"Clara’s last 7 days", Oct 7 – Oct 13', /Clara’s last 7 days/.test(await page.textContent(`${RP} .rp-title`)) && /Oct 7 – Oct 13/.test(await page.textContent(`${RP} .rp-hd`)));
   const tiles = await page.evaluate((sel) => [...document.querySelectorAll(`${sel} .rp-tile`)].map((t) => t.getAttribute('aria-label')), RP);
   check('summary: feeds/day + total, bottle amount, breastfeeds, wet/dirty, sleep + longest, pump', tiles.length === 6
-    && /Feeds: 9 a day, 63 in 7 days/.test(tiles[0]) && /Bottles: 28 ounces a day, 196 ounces in all/.test(tiles[1]) && /Breastfeeding: 1 session a day, 7 in all/.test(tiles[2])
+    && /Feeds: 9 a day, 63 in 7 days/.test(tiles[0]) && /Bottles: 28 ounces a day, 196 ounces in all/.test(tiles[1]) && /Breastfeeds: 1 breastfeed a day, 7 in all/.test(tiles[2])
     && /Diapers: 4 wet and 1 dirty a day/.test(tiles[3]) && /Longest stretch 3 hours 40 minutes/.test(tiles[4]) && /Pumped: 5 ounces a day from 1 pump; 35 ounces in all/.test(tiles[5]), tiles.join(' | '));
   check('day-by-day table: 7 rows, oldest first', await page.evaluate((sel) => { const r = [...document.querySelectorAll(`${sel} .rp-table tbody tr`)]; return r.length === 7 && /7/.test(r[0].querySelector('th').textContent) && /13/.test(r[6].querySelector('th').textContent); }, RP));
   check('the table fits the phone (no sideways scroll)', await page.evaluate((sel) => { const w = document.querySelector(`${sel} .rp-table-wrap`); return w.scrollWidth <= w.clientWidth + 1; }, RP));
   check('report: no pronoun for the baby', !PRONOUN.test(await page.textContent(RP)));
+  check('FLOW-09: report copy never says "session" (DESIGN §10): "7 breastfeeds in all"', await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    const all = el.textContent + [...el.querySelectorAll('[aria-label],[title]')].map((x) => `${x.getAttribute('aria-label') || ''} ${x.getAttribute('title') || ''}`).join(' ');
+    return !/session/i.test(all) && /7 breastfeeds in all/.test(el.textContent);
+  }, RP));
   await page.screenshot({ path: `${SHOTS}report-light.png` });
   const rpAudit = await targetAudit(page, RP);
   check('report: every control ≥ 44×44 with a name', rpAudit.length === 0, rpAudit.join('; '));

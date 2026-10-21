@@ -79,24 +79,26 @@ export function tabDirection(from, to) {
 }
 
 /**
- * What one Back press should do.
- * @param {{ sheets: number, screens: number, tab: string, root?: boolean }} state
- * @returns {'sheet'|'screen'|'tab'|'none'}
+ * What one Back press should do. `rootStep`: the root (onboarding) is past
+ * its first step and takes Back itself (one step back, FLOW-02).
+ * @param {{ sheets: number, screens: number, tab: string, root?: boolean, rootStep?: boolean }} state
+ * @returns {'sheet'|'screen'|'root'|'tab'|'none'}
  */
-export function backAction({ sheets = 0, screens = 0, tab = 'today', root = false } = {}) {
+export function backAction({ sheets = 0, screens = 0, tab = 'today', root = false, rootStep = false } = {}) {
   if (sheets > 0) return 'sheet';
   if (screens > 0) return 'screen';
+  if (root && rootStep) return 'root';
   if (!root && tab !== 'today') return 'tab';
   return 'none';
 }
 
 /**
  * How many Back presses the app can absorb right now (0 = Back leaves).
- * @param {{ sheets: number, screens: number, tab: string, root?: boolean }} state
+ * @param {{ sheets: number, screens: number, tab: string, root?: boolean, rootStep?: boolean }} state
  * @returns {number}
  */
-export function backDepth({ sheets = 0, screens = 0, tab = 'today', root = false } = {}) {
-  return sheets + screens + (!root && tab !== 'today' ? 1 : 0);
+export function backDepth({ sheets = 0, screens = 0, tab = 'today', root = false, rootStep = false } = {}) {
+  return sheets + screens + (!root && tab !== 'today' ? 1 : 0) + (root && rootStep ? 1 : 0);
 }
 
 const GUARD = Object.freeze({ nurture: 'guard' });
@@ -127,6 +129,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
   let tabView = null;      // { id, section, handle }
   const screens = [];      // pushed screens, bottom → top
   let rootView = null;     // onboarding
+  let rootBack = null;     // the root's own Back (a step back), or null on its first step
   let ignorePops = 0;
   let fab = null;
 
@@ -309,8 +312,12 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
 
   // --------------------------------------------------------- history
 
+  function backState() {
+    return { sheets: openSheetCount(), screens: screens.length, tab: tab || 'today', root: !!rootView, rootStep: !!(rootView && rootBack) };
+  }
+
   function depth() {
-    return backDepth({ sheets: openSheetCount(), screens: screens.length, tab: tab || 'today', root: !!rootView });
+    return backDepth(backState());
   }
 
   function syncHistory() {
@@ -329,9 +336,10 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
   }
 
   function handleBack() {
-    switch (backAction({ sheets: openSheetCount(), screens: screens.length, tab: tab || 'today', root: !!rootView })) {
+    switch (backAction(backState())) {
       case 'sheet': closeTopSheet(); break; // a non-dismissible sheet stays; the guard is re-armed
       case 'screen': popScreen(); break;
+      case 'root': try { rootBack(); } catch (err) { console.error('root back failed', err); } break;
       case 'tab': api.go('today'); break;
       default: break;
     }
@@ -397,7 +405,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
     go(id, { animate = true } = {}) {
       const prevFocus = document.activeElement;
       const next = resolveTab(id, trackers());
-      if (rootView) { unmountView(rootView); rootView = null; renderNav(); }
+      if (rootView) { unmountView(rootView); rootView = null; rootBack = null; renderNav(); }
       while (screens.length) unmountView(screens.pop());
       if (next === tab && tabView) {
         // Tapping the active tab scrolls it back to the top.
@@ -467,6 +475,19 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
     pop() { popScreen(); },
 
     /**
+     * Let the root (onboarding) take system Back while it has somewhere to go
+     * back to (FLOW-02): `fn` runs on Back (one step back, same as its in-page
+     * Back); null on its first step, where Back leaves the app as before.
+     * @param {(() => void)|null} fn
+     */
+    setRootBack(fn) {
+      const next = typeof fn === 'function' ? fn : null;
+      if (!!next === !!rootBack) { rootBack = next; return; }
+      rootBack = next;
+      syncHistory();
+    },
+
+    /**
      * Show a full-screen root (onboarding): no nav, no live pill, and Back
      * leaves the app rather than skipping onboarding.
      * @param {string} id
@@ -477,6 +498,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
       while (screens.length) unmountView(screens.pop());
       if (tabView) { scrollMemory.set(tabView.id, tabView.section.scrollTop); unmountView(tabView); tabView = null; }
       if (rootView) unmountView(rootView);
+      rootBack = null;
       rootView = mountView(id, params, 'root');
       tab = null;
       renderNav();
@@ -493,7 +515,7 @@ export function createRouter({ viewport, nav, views, getCtx, settings, onFab, ro
     reset(id = 'today') {
       const prevFocus = document.activeElement;
       const hadRoot = !!rootView;
-      if (rootView) { unmountView(rootView, { animateOut: 'is-fading-out' }); rootView = null; }
+      if (rootView) { unmountView(rootView, { animateOut: 'is-fading-out' }); rootView = null; rootBack = null; }
       while (screens.length) unmountView(screens.pop());
       if (hadRoot || !tabView) {
         tab = null;

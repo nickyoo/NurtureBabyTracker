@@ -192,6 +192,15 @@ try {
     check('Back → step 1 with everything kept', await page.inputValue('[data-field="name"]') === 'Clara');
     await clickIn(page, '[data-action="next"]');
     await waitStep(page, 'feeding');
+    // FLOW-02: system / Android Back goes one step back instead of leaving.
+    check('FLOW-02: a step past the first arms a Back guard', await page.evaluate(() => !!(history.state && history.state.nurture === 'guard')));
+    await page.evaluate(() => history.back());
+    const backedUp = await page.waitForFunction(() => { const s = document.querySelector('.ob-step:not(.is-leaving)'); return s && s.dataset.step === 'baby'; }, null, { timeout: 3000 }).then(() => true, () => false);
+    check('FLOW-02: system Back on step 2 → step 1 (still in the app, name kept)', backedUp && page.url().startsWith(BASE_URL) && await page.inputValue('[data-field="name"]') === 'Clara', page.url());
+    await waitStep(page, 'baby');
+    check('FLOW-02: back on step 1 the guard is released (Back would leave, as before)', await page.evaluate(() => !(history.state && history.state.nurture === 'guard')));
+    await clickIn(page, '[data-action="next"]');
+    await waitStep(page, 'feeding');
 
     // Units: mL.
     await clickIn(page, '[data-unit="mL"]');

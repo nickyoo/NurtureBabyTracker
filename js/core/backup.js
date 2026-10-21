@@ -28,7 +28,7 @@ import {
 import { sessionToEvent, mapV1Settings } from './migrate.js';
 import { notifyPhotosBulk } from './photos.js';
 import { markBackedUp } from './persist.js';
-import { inventoryUpdatedAt } from '../domain/inventory.js';
+import { inventoryUpdatedAt, calculateExpiration, DEFAULT_STORAGE_WINDOWS, THAWED_LOCATION } from '../domain/inventory.js';
 import { breastSideTotals } from '../domain/safety.js';
 import { convertQty, normalizeUnit, roundForUnit, toFiniteNumber } from './units.js';
 import { dayKey } from './time.js';
@@ -47,6 +47,13 @@ export const MAX_PHOTO_BASE64 = 20 * 1024 * 1024;
  * use. Deterministic, so importing the same v1 file twice is idempotent. */
 export const V1_IMPORT_BABY_ID = 'baby_v1import';
 const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+/** An incoming timer that has been "running" longer than this is a timer
+ * someone forgot to stop, not a live activity: it is imported stopped (DI-12). */
+export const STALE_RUNNING_MS = 24 * 60 * 60 * 1000;
+/** Settings-store key of the copy of this phone's data kept by the last
+ * Replace import (DI-01): written in the same transaction as the replace, so
+ * Replace can always be undone — whatever happened to the downloaded copy. */
+export const SAFETY_COPY_KEY = 'safetyCopy';
 
 /** User-facing import/export failure. `message` is safe to show. */
 export class BackupError extends Error {
@@ -273,19 +280,32 @@ const normName = n => (typeof n === 'string' ? n.trim().toLocaleLowerCase() : ''
  * babies get their EMPTY fields (name, birthDate, photoId) filled from the
  * file; local values always win otherwise. Unmatched incoming babies are
  * appended. `remap` maps incoming ids → local ids for the events.
+ * `force` (the parent's answer to "Is Clara Rose the same baby as Clara?",
+ * DI-04): incoming id → a local id (same baby) or null (a new baby).
  * @param {object[]} [local]
  * @param {object[]} [incoming]
- * @returns {{ babies: object[], remap: Map<string, string>, stats: { added: number, matched: number } }}
+ * @param {{ force?: Record<string, string|null>|null }} [opts]
+ * @returns {{ babies: object[], remap: Map<string, string>, stats: { added: number, matched: number, addedBabies: Array<{id:string, name:string}> } }}
  */
-export function planBabyMerge(local = [], incoming = []) {
+export function planBabyMerge(local = [], incoming = [], { force = null } = {}) {
   const babies = (local || []).map(b => ({ ...b }));
   const remap = new Map();
   const claimed = new Set();
-  const stats = { added: 0, matched: 0 };
+  const stats = { added: 0, matched: 0, addedBabies: [] };
   const inc = incoming || [];
   const onlyChildren = babies.length === 1 && inc.length === 1;
+  const forced = id => (isPlainObject(force) && Object.prototype.hasOwnProperty.call(force, id) ? force[id] : undefined);
   for (const b of inc) {
     let target = babies.find(x => x.id === b.id);
+    const want = forced(b.id);
+    if (!target && typeof want === 'string') target = babies.find(x => x.id === want && !claimed.has(x.id));
+    if (!target && want === null) {
+      babies.push({ ...b });
+      claimed.add(b.id);
+      stats.added += 1;
+      stats.addedBabies.push({ id: b.id, name: b.name || '' });
+      continue;
+    }
     if (!target && normName(b.name)) {
       target = babies.find(x => !claimed.has(x.id) && normName(x.name) === normName(b.name));
     }
@@ -302,9 +322,91 @@ export function planBabyMerge(local = [], incoming = []) {
       babies.push({ ...b });
       claimed.add(b.id);
       stats.added += 1;
+      stats.addedBabies.push({ id: b.id, name: b.name || '' });
     }
   }
   return { babies, remap, stats };
+}
+
+/**
+ * Is this phone's profile just the untouched default baby (no name, birth
+ * date or photo, no entries)? Then a restore adopts the file's babies instead
+ * of keeping an empty extra "Baby" (DI-03). Pure.
+ * @param {object[]} babies
+ * @param {object[]} events
+ * @returns {boolean}
+ */
+export function isPristineProfile(babies = [], events = []) {
+  if (!Array.isArray(babies) || babies.length !== 1) return false;
+  const b = babies[0] || {};
+  if (b.name || b.birthDate || b.photoId) return false;
+  return !(events || []).some(e => e && e.babyId === b.id);
+}
+
+/**
+ * The one question a partner merge may need answered (DI-04): this phone
+ * has one named baby, the file one named baby, and they don't match by id or
+ * name — the same child spelled differently ("Clara" / "Clara Rose"), or a
+ * sibling? Pure. Returns null when there's nothing to ask.
+ * @param {object[]} local
+ * @param {object[]} incoming
+ * @returns {{ local: {id:string, name:string}, incoming: {id:string, name:string} }|null}
+ */
+export function babyQuestion(local = [], incoming = []) {
+  if (!Array.isArray(local) || !Array.isArray(incoming) || local.length !== 1 || incoming.length !== 1) return null;
+  const [l] = local;
+  const [i] = incoming;
+  if (!l || !i || l.id === i.id || !normName(l.name) || !normName(i.name) || normName(l.name) === normName(i.name)) return null;
+  return { local: { id: l.id, name: l.name }, incoming: { id: i.id, name: i.name } };
+}
+
+/**
+ * A pouch's expiry under THIS phone's storage windows (DI-02): an imported
+ * pouch keeps the earlier of the file's expiresAt and what this phone's rules
+ * give it, so a partner's longer windows (or a doctored file) can't show
+ * 10-day-old fridge milk as "4 days left". Thawed milk without a thaw time
+ * keeps the file's (already bounded) value. Pure.
+ * @param {object} item a sanitized pouch
+ * @param {object} [windows] settings.storageWindows
+ * @returns {object} the pouch (a copy when changed)
+ */
+export function clampExpiryToWindows(item, windows) {
+  if (!item || !Number.isFinite(item.pumpedAt)) return item;
+  const w = { ...DEFAULT_STORAGE_WINDOWS, ...(isPlainObject(windows) ? windows : {}) };
+  let local;
+  if (item.location === THAWED_LOCATION) {
+    if (!Number.isFinite(item.thawedAt)) return item;
+    local = item.thawedAt + w.thawedBottleHours * 60 * 60 * 1000;
+  } else {
+    local = calculateExpiration(item.pumpedAt, item.location, w);
+  }
+  if (!Number.isFinite(local) || !(local < item.expiresAt)) return item;
+  return { ...item, expiresAt: local };
+}
+
+/**
+ * Merge a file's memory covers into this phone's (FLOW-07, pure): baby ids
+ * go through the merge's remap; a cover is added only for a baby that exists
+ * here, that has no cover yet (local wins), and only if it points at a
+ * memory of that baby that exists after the merge. Returns the new map, or
+ * null when nothing changes.
+ * @param {Record<string,string>} local
+ * @param {Record<string,string>} incoming
+ * @param {{ remap?: Map<string,string>, babyIds: Set<string>, events: Map<string, object> }} ctx
+ * @returns {Record<string,string>|null}
+ */
+export function mergeCovers(local, incoming, { remap = new Map(), babyIds, events }) {
+  const out = { ...(isPlainObject(local) ? local : {}) };
+  let changed = false;
+  for (const [bid, eid] of Object.entries(isPlainObject(incoming) ? incoming : {})) {
+    const target = remap.get(bid) || bid;
+    if (!babyIds.has(target) || out[target]) continue;
+    const e = events.get(eid);
+    if (!e || e.type !== 'milestone' || (e.babyId ?? null) !== target) continue;
+    out[target] = eid;
+    changed = true;
+  }
+  return changed ? out : null;
 }
 
 /**
@@ -316,23 +418,27 @@ export function planBabyMerge(local = [], incoming = []) {
  * reachable. Keeps the one-running-per-type-per-baby rule: an incoming
  * running event that would make a second running activity in its slot is
  * stopped at its start time.
+ * An incoming timer running for more than STALE_RUNNING_MS (a partner forgot
+ * to stop it) is imported stopped at its start, too (stoppedStale).
  * @param {{ events?: object[], inventory?: object[], photoIds?: string[], babies?: object[] }} existing
  * @param {{ events?: object[], inventory?: object[], photos?: object[]|null, babies?: object[] }} incoming
- * @returns {{ toPut: { events: object[], inventory: object[], photos: object[], babies: object[]|null }, stats: object }}
+ * @param {{ now?: number, force?: Record<string, string|null>|null }} [opts] force: see planBabyMerge
+ * @returns {{ toPut: { events: object[], inventory: object[], photos: object[], babies: object[]|null }, stats: object, remap: Map<string, string> }}
  */
-export function mergeBackup(existing = {}, incoming = {}) {
+export function mergeBackup(existing = {}, incoming = {}, { now = Date.now(), force = null } = {}) {
   const stats = {
-    events: { added: 0, updated: 0, unchanged: 0, stoppedRunning: 0 },
+    events: { added: 0, updated: 0, unchanged: 0, stoppedRunning: 0, stoppedStale: 0 },
     inventory: { added: 0, updated: 0, unchanged: 0 },
     photos: { added: 0, unchanged: 0 },
-    babies: { added: 0, matched: 0, placeholders: 0 },
+    babies: { added: 0, matched: 0, placeholders: 0, addedBabies: [] },
   };
   const toPut = { events: [], inventory: [], photos: [], babies: null };
 
   const localBabies = existing.babies || [];
-  const plan = planBabyMerge(localBabies, incoming.babies || []);
+  const plan = planBabyMerge(localBabies, incoming.babies || [], { force });
   stats.babies.added = plan.stats.added;
   stats.babies.matched = plan.stats.matched;
+  stats.babies.addedBabies = plan.stats.addedBabies;
 
   const localEvents = new Map((existing.events || []).map(e => [e.id, e]));
   const slot = e => `${e.type}|${e.babyId ?? ''}`;
@@ -351,6 +457,10 @@ export function mergeBackup(existing = {}, incoming = {}) {
     } else {
       stats.events.unchanged += 1;
       continue;
+    }
+    if (candidate.endTime === null && now - candidate.startTime > STALE_RUNNING_MS) {
+      candidate = { ...candidate, endTime: candidate.startTime };
+      stats.events.stoppedStale += 1;
     }
     if (local && local.endTime === null && runningBySlot.get(slot(local)) === local.id
       && (candidate.endTime !== null || slot(candidate) !== slot(local))) {
@@ -394,7 +504,7 @@ export function mergeBackup(existing = {}, incoming = {}) {
     toPut.photos.push(p);
     stats.photos.added += 1;
   }
-  return { toPut, stats };
+  return { toPut, stats, remap: plan.remap };
 }
 
 // ------------------------------------------------------------- CSV (pure)
@@ -657,13 +767,22 @@ async function hasAnyData() {
  * stay — and so do their babies, which the file's are merged into). A file
  * whose events/stash/photos are not a list, or whose entries were ALL
  * rejected, is refused before anything is touched. If the safety backup
- * can't be saved, nothing is replaced.
+ * can't be saved, nothing is replaced. The safety copy is ALSO kept on this
+ * phone (SAFETY_COPY_KEY, written in the replace's own transaction), because
+ * a download can silently fail (a cancelled iOS "Download?" prompt, a
+ * standalone PWA): restoreSafetyCopy() undoes the replace (DI-01).
+ * Merge refuses a file of which nothing at all could be read (DI-11).
+ * Imported pouches get this phone's storage windows (clampExpiryToWindows,
+ * DI-02); `storageWindows` overrides which windows (onboarding restore adopts
+ * the file's). A merge onto an untouched default profile adopts the file's
+ * babies and active baby (DI-03); memory covers are merged (FLOW-07).
  * Throws BackupError with a user-facing message.
  * @param {File|Blob|string|object} file
- * @param {{ mode?: 'merge'|'replace', safetyBackup?: (file: File) => (void|Promise<void>) }} [opts]
- * @returns {Promise<{ mode: string, format: string, stats: object, warnings: string[], safetyBackup: string|null }>}
+ * @param {{ mode?: 'merge'|'replace', safetyBackup?: ((file: File) => (void|Promise<void>))|null,
+ *   keepSafetyCopy?: boolean, babyMatches?: Record<string, string|null>|null, storageWindows?: object|null }} [opts]
+ * @returns {Promise<{ mode: string, format: string, stats: object, warnings: string[], safetyBackup: string|null, safetyKept: boolean }>}
  */
-export async function importBackup(file, { mode = 'merge', safetyBackup = downloadFile } = {}) {
+export async function importBackup(file, { mode = 'merge', safetyBackup = downloadFile, keepSafetyCopy = true, babyMatches = null, storageWindows = null } = {}) {
   if (mode !== 'merge' && mode !== 'replace') throw new BackupError(`Unknown import mode: ${mode}`);
   const parsed = await readInput(file);
   const deviceId = await getDeviceId(); // also loads settings
@@ -671,6 +790,11 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
   const localActive = getSetting('activeBabyId');
   const v = validateBackup(parsed, { deviceId, defaultBabyId: localActive || undefined });
   if (!v.ok) throw new BackupError(v.error);
+  const what = { events: 'log', inventory: 'stash', photos: 'photos' };
+  if (mode === 'merge' && v.damaged.length
+    && v.stats.events.accepted + v.stats.inventory.accepted + v.stats.photos.accepted === 0) {
+    throw new BackupError(`This backup’s ${v.damaged.map(k => what[k]).join(' and ')} couldn’t be read, so nothing was merged. Try another backup file.`);
+  }
 
   let photoRecords;
   try {
@@ -681,7 +805,6 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
 
   const replace = mode === 'replace';
   if (replace && v.damaged.length) {
-    const what = { events: 'log', inventory: 'stash', photos: 'photos' };
     throw new BackupError(`This backup’s ${v.damaged.map(k => what[k]).join(' and ')} couldn’t be read, so nothing was replaced. Try another backup file.`);
   }
   // replace: clear a store only when the file carries a list for it.
@@ -692,14 +815,20 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
   // replace: the file's babies replace ours — unless it lists none (ours
   // stay and its events land on them), or it has no event list (our events
   // stay, so their babies must too: the file's are merged in instead).
-  const existingBabies = replaceEvents && incomingBabies.length ? [] : localBabies;
+  // An untouched default baby (fresh install, onboarding restore) gives way
+  // to the file's babies instead of staying as an empty extra "Baby".
+  const localEvents = replaceEvents ? [] : await getAll(STORES.events);
+  const pristine = incomingBabies.length > 0 && isPristineProfile(localBabies, localEvents);
+  const existingBabies = (replaceEvents && incomingBabies.length) || pristine ? [] : localBabies;
   const existing = {
-    events: replaceEvents ? [] : await getAll(STORES.events),
+    events: localEvents,
     inventory: replaceInventory ? [] : await getAll(STORES.inventory),
     babies: existingBabies,
     photoIds: replacePhotos ? [] : (await getAll(STORES.photos)).map(p => p.id),
   };
-  const { toPut, stats } = mergeBackup(existing, { ...v.data, photos: v.data.photos || [], babies: incomingBabies });
+  const windows = storageWindows || (replace && v.data.settings.storageWindows) || getSetting('storageWindows');
+  const inventory = v.data.inventory.map(i => clampExpiryToWindows(i, windows));
+  const { toPut, stats, remap } = mergeBackup(existing, { ...v.data, inventory, photos: v.data.photos || [], babies: incomingBabies }, { force: babyMatches });
   const finalBabies = toPut.babies || existingBabies;
   if (finalBabies.length > MAX_BABIES) throw new BackupError(`This backup has more than ${MAX_BABIES} babies.`);
   const photosById = new Map(photoRecords.map(p => [p.id, p]));
@@ -714,24 +843,42 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
     if (finalBabies.some(b => b.id === wantActive)) settingsToPut.activeBabyId = wantActive;
   } else {
     if (toPut.babies) settingsToPut.babies = toPut.babies;
+    if (pristine) {
+      const want = v.data.settings.activeBabyId;
+      settingsToPut.activeBabyId = finalBabies.some(b => b.id === want) ? want : finalBabies[0].id;
+    }
     if (!getSetting('parentName') && v.data.settings.parentName) settingsToPut.parentName = v.data.settings.parentName;
+    // Memory covers: the file's, for babies that have none here (FLOW-07).
+    const finalEvents = new Map(existing.events.map(e => [e.id, e]));
+    for (const e of toPut.events) finalEvents.set(e.id, e);
+    const covers = mergeCovers(pristine ? {} : getSetting('memoryCovers'), v.data.settings.memoryCovers, {
+      remap, babyIds: new Set(finalBabies.map(b => b.id)), events: finalEvents,
+    });
+    if (covers) settingsToPut.memoryCovers = covers;
   }
 
   // §10b: never destroy data that exists only on this phone without first
   // saving a copy of it. Done after validation, so a bad file costs nothing.
   let safetyName = null;
+  let safetyRecord = null;
+  const now = Date.now();
   if (replace && await hasAnyData()) {
     const safety = await exportBackupFile({ includePhotos: replacePhotos, name: `nurture-backup-before-import-${stamp()}.json` });
-    try {
-      await safetyBackup(safety);
-    } catch {
-      throw new BackupError('Couldn’t save a safety copy of the current data, so nothing was replaced.');
+    if (typeof safetyBackup === 'function') {
+      try {
+        await safetyBackup(safety);
+      } catch {
+        throw new BackupError('Couldn’t save a safety copy of the current data, so nothing was replaced.');
+      }
     }
     safetyName = safety.name;
+    if (keepSafetyCopy) {
+      safetyRecord = { key: SAFETY_COPY_KEY, value: { name: safety.name, createdAt: now, blob: new Blob([safety], { type: 'application/json' }) }, updatedAt: now };
+    }
   }
 
-  const now = Date.now();
-  await transaction([STORES.events, STORES.inventory, STORES.photos, STORES.settings], 'readwrite', (s) => {
+  try {
+    await transaction([STORES.events, STORES.inventory, STORES.photos, STORES.settings], 'readwrite', (s) => {
     if (replaceEvents) s.events.clear();
     if (replaceInventory) s.inventory.clear();
     if (replacePhotos) s.photos.clear();
@@ -742,7 +889,13 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
       if (rec) s.photos.put(rec);
     }
     for (const [key, value] of Object.entries(settingsToPut)) s.settings.put({ key, value, updatedAt: now });
-  });
+    if (safetyRecord) s.settings.put(safetyRecord);
+    });
+  } catch (err) {
+    // Nothing was written (one transaction). Out of space is the likely cause.
+    if (err && err.name === 'QuotaExceededError') throw new BackupError('This phone is out of space for Nurture, so nothing was changed. Free some space, then try again.');
+    throw err;
+  }
 
   notifyEvents({ op: 'bulk' });
   notifyStash({ op: 'bulk' });
@@ -755,7 +908,111 @@ export async function importBackup(file, { mode = 'merge', safetyBackup = downlo
     stats: { ...stats, rejected: { events: v.stats.events.rejected, inventory: v.stats.inventory.rejected, photos: v.stats.photos.rejected }, settings: Object.keys(settingsToPut) },
     warnings: v.warnings,
     safetyBackup: safetyName,
+    safetyKept: !!safetyRecord,
   };
+}
+
+/**
+ * Remove a baby (a sibling added by mistake, a test name, a duplicate from a
+ * partner merge — FLOW-05): deletes that baby's entries and the photos only
+ * they used, drops their memory cover (and app icon), and moves Today to
+ * another baby. Never the last baby. A safety backup is taken first, as for
+ * Replace: downloaded, AND kept on this phone (SAFETY_COPY_KEY) in the same
+ * transaction, so restoreSafetyCopy() undoes it.
+ * @param {string} id
+ * @param {{ safetyBackup?: ((file: File) => (void|Promise<void>))|null }} [opts]
+ * @returns {Promise<{ name: string, entries: number, photos: number, safetyKept: boolean }>}
+ */
+export async function removeBaby(id, { safetyBackup = downloadFile } = {}) {
+  await loadSettings();
+  const list = getSetting('babies');
+  const baby = list.find(b => b.id === id);
+  if (!baby) throw new BackupError('That baby isn’t here anymore.');
+  if (list.length < 2) throw new BackupError('The only baby can’t be removed.');
+  const all = await getAll(STORES.events);
+  const theirs = all.filter(e => e.babyId === id);
+  const photoIdsOf = e => (e && e.data && Array.isArray(e.data.photoIds) ? e.data.photoIds : []);
+  const keep = new Set();
+  for (const e of all) if (e.babyId !== id) photoIdsOf(e).forEach(p => keep.add(p));
+  for (const b of list) if (b.id !== id && b.photoId) keep.add(b.photoId);
+  const photoIds = [...new Set([baby.photoId, ...theirs.flatMap(photoIdsOf)])].filter(p => p && !keep.has(p));
+
+  const now = Date.now();
+  const safety = await exportBackupFile({ includePhotos: photoIds.length > 0, name: `nurture-backup-before-removing-${stamp()}.json` });
+  if (typeof safetyBackup === 'function') {
+    try { await safetyBackup(safety); } catch { throw new BackupError('Couldn’t save a safety copy first, so nothing was removed.'); }
+  }
+  const rest = list.filter(b => b.id !== id);
+  const active = getSetting('activeBabyId');
+  const covers = { ...(getSetting('memoryCovers') || {}) };
+  delete covers[id];
+  const settingsToPut = { babies: rest, memoryCovers: covers };
+  if (active === id || !rest.some(b => b.id === active)) settingsToPut.activeBabyId = rest[0].id;
+  if (getSetting('iconBabyId') === id) { settingsToPut.iconBabyId = null; settingsToPut.iconDataUrl = null; }
+  try {
+    await transaction([STORES.events, STORES.photos, STORES.settings], 'readwrite', (s) => {
+      for (const e of theirs) s.events.delete(e.id);
+      for (const p of photoIds) s.photos.delete(p);
+      for (const [key, value] of Object.entries(settingsToPut)) s.settings.put({ key, value, updatedAt: now });
+      s.settings.put({ key: SAFETY_COPY_KEY, value: { name: safety.name, createdAt: now, blob: new Blob([safety], { type: 'application/json' }) }, updatedAt: now });
+    });
+  } catch (err) {
+    if (err && err.name === 'QuotaExceededError') throw new BackupError('This phone is out of space for Nurture, so nothing was removed. Free some space, then try again.');
+    throw err;
+  }
+  notifyEvents({ op: 'bulk' });
+  if (photoIds.length) notifyPhotosBulk();
+  await reloadSettings();
+  return { name: baby.name || '', entries: theirs.length, photos: photoIds.length, safetyKept: true };
+}
+
+/**
+ * Before a merge: does the parent need to say whether the file's baby is
+ * this phone's baby (babyQuestion, DI-04)? Reads and validates the file
+ * without writing anything. Null when there's nothing to ask (or the file
+ * is unreadable — importBackup then says why).
+ * @param {File|Blob|string|object} file
+ * @returns {Promise<{ local: {id:string, name:string}, incoming: {id:string, name:string} }|null>}
+ */
+export async function previewBabyQuestion(file) {
+  let parsed;
+  try { parsed = await readInput(file); } catch { return null; }
+  await loadSettings();
+  const v = validateBackup(parsed, { defaultBabyId: getSetting('activeBabyId') || undefined });
+  if (!v.ok) return null;
+  return babyQuestion(getSetting('babies'), v.data.settings.babies || []);
+}
+
+/**
+ * The copy of this phone's data kept by the last Replace import, or null.
+ * @returns {Promise<{ name: string, createdAt: number, blob: Blob }|null>}
+ */
+export async function getSafetyCopy() {
+  const rec = await transaction(STORES.settings, 'readonly', (s, ctx) => {
+    const g = s.settings.get(SAFETY_COPY_KEY);
+    g.onsuccess = () => ctx.done(g.result || null);
+  });
+  const v = rec && rec.value;
+  return v && v.blob instanceof Blob ? { name: String(v.name || ''), createdAt: Number(v.createdAt) || 0, blob: v.blob } : null;
+}
+
+/** Forget the kept safety copy. */
+export async function clearSafetyCopy() {
+  await transaction(STORES.settings, 'readwrite', (s) => { s.settings.delete(SAFETY_COPY_KEY); });
+}
+
+/**
+ * Undo the last Replace import: put back what was on this phone before it
+ * (the kept safety copy), then forget the copy. Throws BackupError when
+ * there is none.
+ * @returns {Promise<object>} importBackup's result
+ */
+export async function restoreSafetyCopy() {
+  const copy = await getSafetyCopy();
+  if (!copy) throw new BackupError('There’s no earlier copy to put back.');
+  const res = await importBackup(copy.blob, { mode: 'replace', safetyBackup: null, keepSafetyCopy: false });
+  await clearSafetyCopy();
+  return res;
 }
 
 /**
@@ -789,5 +1046,6 @@ export async function eraseAll({ storage } = {}) {
 /** The backup API as one object. `share` is ARCHITECTURE §10b's backup.share(). */
 export const backup = Object.freeze({
   exportBackup, exportBackupFile, exportCsvFile, buildCsv, validateBackup, mergeBackup, planBabyMerge, importBackup,
+  getSafetyCopy, clearSafetyCopy, restoreSafetyCopy, babyQuestion, previewBabyQuestion, isPristineProfile, removeBaby,
   share: shareBackup, shareBackup, shareCsv, shareFile, downloadFile, eraseAll,
 });

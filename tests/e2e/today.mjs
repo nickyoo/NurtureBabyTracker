@@ -176,6 +176,10 @@ try {
     const sl = await cardText(page, 'sleep');
     check('Asleep (live): 55m · Nap chip · since 8:55 AM · Tap to wake', /Asleep\s*Nap\s*55m\s*since 8:55 AM\s*Tap to wake/.test(sl), sl);
     check('…and the card is the live one', await page.evaluate(() => document.querySelector('.ql[data-card="sleep"]').classList.contains('is-live')));
+    check('MAV-7: the running Asleep card keeps its moon icon at 390 px (frames 1–2)', await page.evaluate(() => {
+      const c = document.querySelector('.ql[data-card="sleep"]'); const ic = c.querySelector('.ql-label .ic');
+      return !c.classList.contains('is-tight') && !!ic && getComputedStyle(ic).display !== 'none';
+    }));
     const di = await cardText(page, 'diaper');
     check('Diaper: 3h 00m · ago · wet · at 6:50 AM · 3 today', /Diaper.*3h\s*00m.*ago · wet.*at 6:50 AM · 3 today/.test(di), di);
     const pu = await cardText(page, 'pump');
@@ -448,6 +452,20 @@ try {
     check('a week without a backup (and a day of data) shows the nudge card', await page.isVisible('[data-note="backup"] [data-action="backup"]'));
     check('…never a modal', await page.evaluate(() => document.querySelectorAll('.sheet-layer').length === 0));
     check('…copy names the baby', /Baby’s log lives only on this phone/.test(await page.textContent('[data-note="backup"]')));
+    // FLOW-08 / MAV-6 / DI-13: at 320, 360 and 390 the buttons stay inside the
+    // card and "Not now" sits beside "Save a backup" on one row.
+    for (const w of [320, 360, 390]) {
+      await page.setViewportSize({ width: w, height: 844 });
+      await settle(page, 250);
+      const g = await page.evaluate(() => {
+        const R = (s) => document.querySelector(s).getBoundingClientRect();
+        const card = R('[data-note="backup"]'); const save = R('[data-action="backup"]'); const no = R('[data-action="snooze-backup"]');
+        return { inside: save.right <= card.right - 8 && no.right <= card.right - 8 && save.left >= card.left, sameRow: Math.abs(save.top - no.top) < 1, label: document.querySelector('[data-action="backup"]').innerText.trim() };
+      });
+      check(`FLOW-08: nudge at ${w}px: both buttons inside the card, on one row`, g.inside && g.sameRow, JSON.stringify(g));
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await settle(page, 250);
     await page.click('[data-action="snooze-backup"]');
     await page.waitForFunction(() => !document.querySelector('[data-note="backup"]'), null, { timeout: 3000 }).catch(() => {});
     check('"Not now" dismisses it', !(await page.$('[data-note="backup"]')));
@@ -468,6 +486,26 @@ try {
     check('"Save a backup to Files" saves a backup file', !!download && /\.json$/.test(download.suggestedFilename()), download && download.suggestedFilename());
     await page.waitForFunction(() => !document.querySelector('[data-note="backup"]'), null, { timeout: 4000 }).catch(() => {});
     check('…the nudge goes away and lastBackupAt is stamped', !(await page.$('[data-note="backup"]')) && await page.evaluate(async (u) => (await import(u)).settings.get('lastBackupAt') !== null, mod('/js/core/settings.js')));
+    await context.close();
+  }
+
+  // ============================================================ FLOW-11: Fed card after a breastfeed
+  console.log('\nFed card after a breastfeed');
+  {
+    const { context, page } = await freshPage();
+    await page.evaluate(async (u) => {
+      const { events } = await import(u);
+      const now = Date.now();
+      await events.add({ type: 'feed', startTime: now - 40 * 60000, endTime: now - 29 * 60000, data: { method: 'breast', left: 300, right: 360, lastSide: 'right' } });
+    }, mod('/js/core/store.js'));
+    await page.waitForFunction(() => /breastfeed/.test(document.querySelector('.ql[data-card="feed"]').textContent), null, { timeout: 3000 }).catch(() => {});
+    await settle(page, 300);
+    for (const w of [360, 390]) {
+      await page.setViewportSize({ width: w, height: 844 });
+      await settle(page, 500); // the resize re-fits the cards
+      const sub = await page.evaluate(() => { const el = document.querySelector('.ql[data-card="feed"] [data-sub1]'); return { text: el.textContent.trim(), cut: el.scrollWidth > el.clientWidth + 1 }; });
+      check(`FLOW-11: at ${w}px the Fed card's detail is whole ("11 min breastfeed", not "breastf…")`, !sub.cut && /11 min breastfeed$/.test(sub.text), JSON.stringify(sub));
+    }
     await context.close();
   }
 

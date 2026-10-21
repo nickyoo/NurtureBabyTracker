@@ -47,6 +47,9 @@ test('timerClock / fmtClock: mm:ss and h:mm:ss (ported v1 cases)', () => {
   assert.equal(T.fmtClock(3665), '1:01:05');
   assert.equal(T.fmtClock(-5), '00:00');
   assert.equal(T.timerClock(NaN), '00:00');
+  assert.equal(T.timerClock(99 * 3600 + 59 * 60 + 59), '99:59:59');
+  assert.equal(T.timerClock(100 * 3600), '4 days', 'DI-12: over 99 h reads as days');
+  assert.equal(T.timerClock(7200 * 3600 + 10), '300 days');
 });
 
 test('clock: 12h/24h, separate meridiem', () => {

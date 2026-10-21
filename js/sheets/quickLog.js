@@ -309,13 +309,15 @@ export function openQuickLogSheet(ctx, { origin } = {}) {
     busy = true;
     const endTime = chosen === null ? undefined : Math.max(event.startTime, chosen);
     let ok = true;
+    let failure = null;
     const stopping = ctx.events.stop(event.id, endTime === undefined ? {} : { endTime }).catch((err) => {
       ok = false;
+      failure = err;
       console.error('wake-up failed', err);
     });
     api.close();
     await Promise.all([stopping, api.closed]);
-    if (!ok) { ctx.toast({ message: 'That didn’t save. Try again.', tone: 'warn' }); return; }
+    if (!ok) { ctx.toast({ message: ctx.format.saveError(failure), tone: 'warn' }); return; }
     ctx.toast({ message: 'Wake-up logged', action: { label: 'Undo', run: () => ctx.events.update(event.id, { endTime: null }) } });
   }
 
@@ -334,7 +336,7 @@ export function openQuickLogSheet(ctx, { origin } = {}) {
       btn.classList.remove('is-done');
       for (const o of all) o.removeAttribute('aria-disabled');
       busy = false;
-      ctx.toast({ message: 'That didn’t save. Try again.', tone: 'warn' });
+      ctx.toast({ message: ctx.format.saveError(err), tone: 'warn' });
       return;
     }
     // Let the tint flash register (--dur-press), then collapse into the +.

@@ -1275,6 +1275,113 @@ SUITES.tabs = async () => {
   results.push({ name: 'tab helpers ready', ok: true });
 };
 
+// Final-QA fixes against real IndexedDB (DI-01/02/03/04/11/12, FLOW-07).
+SUITES['qa-fixes'] = async () => {
+  const backup = await import('../../../js/core/backup.js');
+  const { events } = await import('../../../js/core/store.js');
+  const { stash } = await import('../../../js/core/stash.js');
+  const settings = await import('../../../js/core/settings.js');
+  await settings.load();
+  const file = over => JSON.stringify({ app: 'nurture', schema: 2, ...over });
+  const t = Date.now() - 2 * HOUR;
+
+  await test('DI-03: onboarding-style restore of a twins backup adopts the file\'s babies + active baby (no phantom "Baby")', async () => {
+    const defaultId = settings.get('activeBabyId');
+    eq(settings.get('babies').length, 1);
+    const twins = file({
+      settings: { babies: [{ id: 'baby_ava', name: 'Ava', birthDate: '2026-09-01' }, { id: 'baby_ben', name: 'Ben', birthDate: '2026-09-01' }], activeBabyId: 'baby_ava' },
+      events: [
+        { id: 'evt_t1', type: 'diaper', startTime: t, endTime: t, babyId: 'baby_ava', data: { kind: 'wet' }, createdAt: t, updatedAt: t },
+        { id: 'evt_t2', type: 'diaper', startTime: t, endTime: t, babyId: 'baby_ben', data: { kind: 'dirty' }, createdAt: t, updatedAt: t },
+      ],
+    });
+    const res = await backup.importBackup(twins, { mode: 'merge' });
+    eq(res.stats.events.added, 2);
+    eq(settings.get('babies').map(b => b.name), ['Ava', 'Ben'], 'the untouched default baby gave way');
+    ok(!settings.get('babies').some(b => b.id === defaultId), 'no phantom baby');
+    eq(settings.get('activeBabyId'), 'baby_ava', 'the file\'s active baby');
+  });
+
+  await test('DI-04: babyMatches answers "Is Clara Rose the same baby as Ava?" — same baby or a new one, named in stats', async () => {
+    const partner = (id, name) => file({
+      settings: { babies: [{ id, name, birthDate: '2026-09-01' }], activeBabyId: id },
+      events: [{ id: `evt_${id}`, type: 'diaper', startTime: t, endTime: t, babyId: id, data: { kind: 'wet' }, createdAt: t, updatedAt: t }],
+    });
+    // Two local babies now: no question (twins never guessed).
+    eq(await backup.previewBabyQuestion(partner('baby_rose', 'Ava Rose')), null);
+    await settings.set('babies', settings.get('babies').slice(0, 1));
+    const q = await backup.previewBabyQuestion(partner('baby_rose', 'Ava Rose'));
+    eq(q, { local: { id: 'baby_ava', name: 'Ava' }, incoming: { id: 'baby_rose', name: 'Ava Rose' } });
+    const same = await backup.importBackup(partner('baby_rose', 'Ava Rose'), { mode: 'merge', babyMatches: { baby_rose: 'baby_ava' } });
+    eq([same.stats.babies.added, (await events.get('evt_baby_rose')).babyId], [0, 'baby_ava'], 'same baby: entries land on Ava');
+    const sib = await backup.importBackup(partner('baby_sib', 'Ava Lee'), { mode: 'merge', babyMatches: { baby_sib: null } });
+    eq(sib.stats.babies.addedBabies, [{ id: 'baby_sib', name: 'Ava Lee' }], 'new baby is named in the result');
+    eq(settings.get('babies').map(b => b.name), ['Ava', 'Ava Lee']);
+  });
+
+  await test('FLOW-07: merge brings the file\'s memory cover for a baby with none here', async () => {
+    const mem = { id: 'evt_mem1', type: 'milestone', startTime: t, endTime: t, babyId: 'baby_ava', note: 'First smile', data: { title: 'First smile' }, createdAt: t, updatedAt: t };
+    eq(settings.get('memoryCovers'), {});
+    const res = await backup.importBackup(file({ settings: { babies: [{ id: 'baby_ava', name: 'Ava' }], memoryCovers: { baby_ava: 'evt_mem1', baby_ghost: 'evt_mem1' } }, events: [mem] }), { mode: 'merge' });
+    eq(settings.get('memoryCovers'), { baby_ava: 'evt_mem1' }, 'cover adopted; unknown baby ignored');
+    ok(res.stats.settings.includes('memoryCovers'), 'listed in stats.settings');
+    await backup.importBackup(file({ settings: { babies: [{ id: 'baby_ava', name: 'Ava' }], memoryCovers: { baby_ava: 'evt_other' } }, events: [{ ...mem, id: 'evt_other' }] }), { mode: 'merge' });
+    eq(settings.get('memoryCovers'), { baby_ava: 'evt_mem1' }, 'local cover wins');
+  });
+
+  await test('DI-02: an imported 10-day-old fridge pouch and a 60 h thawed pouch are expired under this phone\'s windows', async () => {
+    await backup.importBackup(file({
+      inventory: [
+        { id: 'inv_ancient', location: 'fridge', pumpedAt: Date.now() - 10 * DAY, quantity: 4, unit: 'oz', status: 'active', expiresAt: Date.UTC(2100, 0, 1) },
+        { id: 'inv_thawtrick', location: 'thawed', pumpedAt: Date.now() - 20 * DAY, thawedAt: Date.now() - 60 * HOUR, quantity: 4, unit: 'oz', status: 'active', expiresAt: Date.UTC(2100, 0, 1) },
+        { id: 'inv_fine', location: 'fridge', pumpedAt: Date.now() - DAY, quantity: 4, unit: 'oz', status: 'active', expiresAt: Date.now() + 3 * DAY },
+      ],
+    }), { mode: 'merge' });
+    ok((await stash.get('inv_ancient')).expiresAt < Date.now(), 'fridge 4 days here → expired');
+    ok((await stash.get('inv_thawtrick')).expiresAt < Date.now(), 'thawed 24 h here → expired');
+    ok((await stash.get('inv_fine')).expiresAt > Date.now(), 'a good pouch stays good');
+    const next = await stash.useNext();
+    ok(!next || !['inv_ancient', 'inv_thawtrick'].includes(next.id), 'never offered as Use next');
+  });
+
+  await test('DI-12: a merged 300-day-old running sleep comes in stopped', async () => {
+    const res = await backup.importBackup(file({ events: [{ id: 'evt_x6', type: 'sleep', startTime: Date.now() - 300 * DAY, endTime: null, babyId: 'baby_ava', data: { kind: 'nap' }, createdAt: t, updatedAt: t }] }), { mode: 'merge' });
+    const e = await events.get('evt_x6');
+    eq([e.endTime === e.startTime, res.stats.events.stoppedStale], [true, 1]);
+    ok(!(await events.running()).some(r => r.id === 'evt_x6'), 'no 7200-hour pill');
+  });
+
+  await test('DI-11: merging an unreadable file is refused, not "Already up to date"', async () => {
+    const before = (await events.query()).length;
+    for (const bad of [{ events: { a: 1 }, inventory: 'x', photos: 5 }, { events: [[[[1]]]] }]) {
+      const err = await rejects(backup.importBackup(file(bad), { mode: 'merge' }), e => e.name === 'BackupError', JSON.stringify(bad));
+      ok(/couldn’t be read, so nothing was merged/.test(err.message), err.message);
+    }
+    eq((await events.query()).length, before, 'nothing touched');
+    const partly = await backup.importBackup(file({ events: [{ id: 'evt_ok1', type: 'diaper', startTime: t, endTime: t, babyId: 'baby_ava', data: { kind: 'wet' } }, { id: 'evt_bad', type: 'telemetry', startTime: t }] }), { mode: 'merge' });
+    eq([partly.stats.events.added, partly.stats.rejected.events], [1, 1], 'a partly readable file merges and counts what it skipped');
+  });
+
+  await test('DI-01: Replace keeps a copy of this phone in IndexedDB even when the download never lands, and can undo', async () => {
+    const before = (await events.query()).map(e => e.id).sort();
+    const babiesBefore = settings.get('babies').map(b => b.id);
+    ok(before.length > 3);
+    eq(await backup.getSafetyCopy(), null);
+    // The download "succeeds" (a.click) but nothing is saved: modelled by a no-op.
+    const res = await backup.importBackup(file({ events: [{ id: 'evt_only', type: 'diaper', startTime: t, endTime: t, data: { kind: 'wet' } }], inventory: [], settings: { babies: [{ id: 'baby_z', name: 'Zed' }] } }), { mode: 'replace', safetyBackup: () => {} });
+    eq([res.safetyKept, (await events.query()).length], [true, 1], 'replaced, and the copy was kept');
+    const copy = await backup.getSafetyCopy();
+    ok(copy && copy.blob.size > 100 && /before-import/.test(copy.name), 'copy kept on this phone');
+    const exported = await backup.exportBackup();
+    ok(!('safetyCopy' in exported.settings), 'the kept copy never goes into a backup');
+    await backup.restoreSafetyCopy();
+    eq((await events.query()).map(e => e.id).sort(), before, 'Undo puts every entry back');
+    ok(babiesBefore.every(id => settings.get('babies').some(b => b.id === id)) && !settings.get('babies').some(b => b.id === 'baby_z'), 'and the babies');
+    eq(await backup.getSafetyCopy(), null, 'the copy is forgotten after use');
+    await rejects(backup.restoreSafetyCopy(), e => e.name === 'BackupError');
+  });
+};
+
 // ------------------------------------------------------------------- run
 
 (async () => {

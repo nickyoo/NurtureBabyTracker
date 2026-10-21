@@ -7,7 +7,7 @@ process.env.TZ = 'America/New_York';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-const { rangeLabel, pastSleepProblem } = await import('../js/sheets/sleep.js');
+const { rangeLabel, pastSleepProblem, defaultPastWindow } = await import('../js/sheets/sleep.js');
 
 const MIN = 60 * 1000;
 const HOUR = 60 * MIN;
@@ -49,4 +49,24 @@ test('pastSleepProblem: never overlaps a logged sleep; touching edges is fine', 
   assert.equal(pastSleepProblem({ ...base, start: NOW - 4 * HOUR, end: NOW - 3 * HOUR, others }), '');
   const yesterday = [{ id: 'b', startTime: NOW - 14 * HOUR, endTime: NOW - 12 * HOUR, data: { kind: 'night' } }];
   assert.match(pastSleepProblem({ ...base, start: NOW - 13 * HOUR, end: NOW - 11 * HOUR, others: yesterday }), /logged yesterday/);
+});
+
+test('FLOW-10: defaultPastWindow never opens on an overlap', () => {
+  const at = (h, m) => new Date(2026, 9, 14, h, m).getTime();
+  const now = at(12, 10);
+  // No sleeps: woke up now (to the 5 min), asleep an hour before.
+  assert.deepEqual(defaultPastWindow({ now }), { start: at(11, 10), end: at(12, 10) });
+  // The repro: a nap 11:29–12:09 just ended → the hour moves to end where it began.
+  const nap = { startTime: at(11, 29), endTime: at(12, 9) };
+  const w = defaultPastWindow({ now, sleeps: [nap] });
+  assert.deepEqual(w, { start: at(10, 25), end: at(11, 25) });
+  assert.equal(pastSleepProblem({ ...base, now, start: w.start, end: w.end, others: [nap] }), '');
+  // A nap that ended mid-hour with room after it: start right after it.
+  const early = { startTime: at(10, 30), endTime: at(11, 32) };
+  assert.deepEqual(defaultPastWindow({ now, sleeps: [early] }), { start: at(11, 35), end: at(12, 10) });
+  // Two sleeps back to back: keeps moving back until it fits.
+  const a = { startTime: at(10, 0), endTime: at(11, 0) };
+  const w2 = defaultPastWindow({ now: at(11, 40), sleeps: [a, { startTime: at(11, 5), endTime: at(11, 38) }] });
+  assert.equal(pastSleepProblem({ ...base, now: at(11, 40), start: w2.start, end: w2.end, others: [a, { startTime: at(11, 5), endTime: at(11, 38) }] }), '');
+  assert.ok(w2.end <= at(10, 0));
 });

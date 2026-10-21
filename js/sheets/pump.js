@@ -760,7 +760,7 @@ export function openPumpSheet(ctx, { origin = null, preset = null, resume = null
         lock(body, false);
         if (isRunningError(ctx, err) && err.running) { go({ view: 'live', event: err.running }); return; }
         console.warn('pump sheet: pump not started', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     });
     return () => { cacheSubs.delete(sub); };
@@ -776,7 +776,7 @@ export function openPumpSheet(ctx, { origin = null, preset = null, resume = null
     setChip({ mode: 'started', event: ev });
     render(body, html`<div class="nb pm pm-live">
         <div class="nb-hero cat-pump">
-          <span class="nb-timer num" data-timer aria-hidden="true">00:00</span>
+          <span class="nb-timer num" data-timer data-pill-for="${ev.id}" aria-hidden="true">00:00</span>
           <span class="nb-hero-sub"><span class="dot" aria-hidden="true"></span><span data-since></span></span>
         </div>
         <section class="pm-goal cat-pump is-compact" data-goal role="group"></section>
@@ -900,7 +900,7 @@ export function openPumpSheet(ctx, { origin = null, preset = null, resume = null
         setBusy(saveBtn, false);
         lock(body, false);
         console.warn('pump sheet: pump not finished', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
         return;
       }
       let stashFailed = false;
@@ -992,7 +992,7 @@ export function openPumpSheet(ctx, { origin = null, preset = null, resume = null
         setBusy(logBtn, false);
         lock(body, false);
         console.warn('pump sheet: past pump not logged', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
         return;
       }
       let stashFailed = false;

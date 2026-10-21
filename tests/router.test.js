@@ -56,3 +56,13 @@ test('backDepth counts every level Back can absorb', () => {
   assert.equal(backDepth({ sheets: 0, screens: 0, tab: null, root: true }), 0);
   assert.equal(backDepth({ sheets: 1, screens: 0, tab: null, root: true }), 1);
 });
+
+test('FLOW-02: onboarding past its first step takes Back itself (one step back)', () => {
+  assert.equal(backAction({ sheets: 0, screens: 0, tab: null, root: true, rootStep: true }), 'root');
+  assert.equal(backDepth({ sheets: 0, screens: 0, tab: null, root: true, rootStep: true }), 1);
+  assert.equal(backAction({ sheets: 1, root: true, rootStep: true }), 'sheet', 'a sheet over onboarding still closes first');
+  assert.equal(backDepth({ sheets: 1, root: true, rootStep: true }), 2);
+  assert.equal(backAction({ root: true, rootStep: false }), 'none', 'first step: Back leaves');
+  assert.equal(backAction({ tab: 'today', rootStep: true }), 'none', 'rootStep means nothing without a root');
+  assert.equal(backDepth({ tab: 'today', rootStep: true }), 0);
+});

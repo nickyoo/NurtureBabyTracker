@@ -172,6 +172,9 @@ export function timerClock(totalSeconds) {
   const hrs = Math.floor(mins / 60);
   const mm = pad2(mins % 60);
   const ss = pad2(secs);
+  // A timer left running for days (e.g. one merged from a partner's backup)
+  // reads "12 days", not a 10-character "7200:00:10" that squeezes its label.
+  if (hrs > 99) return `${Math.floor(hrs / 24)} days`;
   return hrs > 0 ? `${hrs}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 

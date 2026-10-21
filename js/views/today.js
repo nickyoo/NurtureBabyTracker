@@ -236,22 +236,26 @@ export default {
             };
           }
           const dd = e.data || {};
-          let what; let whatSpoken;
+          let what; let whatSpoken; let whatShort;
           if (dd.method === 'breast') {
             const secs = breastSideTotals(dd, e.endTime ?? now).total;
             what = html`${ago(e.startTime, now)}<b>${F.durationLabel(secs * 1000)}</b> breastfeed`;
+            // FLOW-11: when "ago · 11 min breastfeed" doesn't fit the half-width
+            // card, the key detail stays whole and the "ago ·" goes.
+            whatShort = html`<b>${F.durationLabel(secs * 1000)}</b> breastfeed`;
             whatSpoken = `breastfed ${F.durationLabel(secs * 1000)}`;
           } else {
             const a = F.amountSplit(dd.amount, dd.unit, u);
             const milk = dd.milk === 'formula' ? 'formula' : 'breast milk';
             what = a.missing ? html`${ago(e.startTime, now)}${milk} bottle` : html`${ago(e.startTime, now)}<b>${a.value} ${a.unit}</b> ${milk}`;
+            whatShort = a.missing ? html`${milk} bottle` : html`<b>${a.value} ${a.unit}</b> ${milk}`;
             whatSpoken = a.missing ? `${milk} bottle` : `${spoken(a.value, a.unit)} ${milk}`;
           }
           const method = t.bottle === false ? 'breast' : t.breastfeeding === false ? 'bottle' : (dd.method === 'breast' ? 'breast' : 'bottle');
           return {
             key, cat: 'feed', icon: dd.method === 'breast' ? 'breast' : 'bottle', label: 'Fed',
             value: valueOfSpan(now - e.startTime), anchor: e.startTime,
-            sub1: what, sub2: html`${whenLine(e.startTime, now)}`,
+            sub1: what, sub1Short: whatShort, sub2: html`${whenLine(e.startTime, now)}`,
             aria: `Fed ${F.spanSpoken(now - e.startTime)} ago, ${whatSpoken}, ${whenLine(e.startTime, now)}. Log a feed.`,
             tap: anyRunning ? { kind: 'resume', sheet: 'feed', event: anyRunning } : { kind: 'open', sheet: 'feed', preset: { method } },
           };
@@ -358,10 +362,13 @@ export default {
               aria: 'No milk stored yet. Add a pouch.', tap: { kind: 'open', sheet: 'stash' },
             };
           }
+          // DI-10: round once, from the same unrounded per-unit sums the Stash
+          // tab uses (fresh = fridge + thawed + room), so the two always agree.
+          const by = s.byUnit && s.byUnit[u];
           const conv = (oz) => F.amountSplit(oz, 'oz', u).value;
-          const total = F.amountSplit(totalOz, 'oz', u);
-          const fridge = conv(s.fridgeOz || 0);
-          const frozen = conv((s.freezerOz || 0) + (s.deepFreezerOz || 0));
+          const total = by ? F.amountSplit(by.total, u, u) : F.amountSplit(totalOz, 'oz', u);
+          const fridge = by ? F.amountSplit(by.fresh, u, u).value : conv(s.fridgeOz || 0);
+          const frozen = by ? F.amountSplit(by.frozen, u, u).value : conv((s.freezerOz || 0) + (s.deepFreezerOz || 0));
           const bags = F.plural(s.totalBags || 0, 'pouch', 'pouches');
           return {
             key, cat: 'pump', icon: 'pouch', label: 'Stash',
@@ -391,7 +398,7 @@ export default {
           ${m.live ? html`<span class="live-chip"><span class="dot"></span>${m.chip}</span>` : html`<span class="ql-well">${I('plus', 18)}</span>`}
         </span>
         ${valueTpl(m)}
-        <span class="ql-sub">${m.sub1}</span>
+        <span class="ql-sub" data-sub1>${m.sub1}</span>
         ${m.goal
           ? html`<span class="goal"><span class="goal-bar"><i></i></span><span class="goal-txt">${m.goal.total}<small> / ${m.goal.goal} ${m.goal.unit}</small></span></span>`
           : html`<span class="ql-sub">${m.sub2}</span>`}`;
@@ -400,6 +407,14 @@ export default {
     // A live chip next to a long label ("Pumping ● Now", "Feeding ● Paused")
     // can be wider than a half-width card on a narrow phone: drop the
     // label's icon first (the chip and the words still say it's running).
+    // FLOW-11: the first sub-line's key detail ("11 min breastfeed") must not
+    // be cut to "11 min breastf…": if it doesn't fit, use the short form.
+    function fitSub(el, m) {
+      const sub = el.querySelector('[data-sub1]');
+      if (!sub || !m.sub1Short) return;
+      if (sub.scrollWidth > sub.clientWidth + 1) render(sub, m.sub1Short);
+    }
+
     function fitTop(el) {
       const label = el.querySelector('.ql-top > .ql-label');
       if (!label) return;
@@ -451,6 +466,7 @@ export default {
         el.setAttribute('aria-label', m.aria);
         render(el, cardInner(m));
         fitTop(el);
+        fitSub(el, m);
         const bar = el.querySelector('.goal-bar > i');
         if (bar && m.goal) {
           // Animate the fill only when its value changes (motion #14).
@@ -482,10 +498,10 @@ export default {
           <div class="note-main">
             <p class="note-title">Keep a copy safe</p>
             <p class="note-text">${never ? '' : 'It’s been a week. '}${F.possessive(name)} log lives only on this phone.</p>
-            <div class="note-actions">
-              <button type="button" class="btn btn-secondary btn-sm" data-action="backup">${I('share', 20)}Save a backup to Files</button>
-              <button type="button" class="btn btn-ghost btn-sm" data-action="snooze-backup">Not now</button>
-            </div>
+          </div>
+          <div class="note-actions is-wide">
+            <button type="button" class="btn btn-secondary btn-sm" data-action="backup">${I('share', 20)}<span>Save a backup<span class="note-files"> to Files</span></span></button>
+            <button type="button" class="btn btn-ghost btn-sm" data-action="snooze-backup">Not now</button>
           </div>
         </section>`);
         return;
@@ -755,6 +771,18 @@ export default {
       checkNotes();
     };
     document.addEventListener('visibilitychange', onVisibility);
+    // A rotation / resize changes how much fits on a card's top row and first
+    // sub-line: re-fit them (fitTop, fitSub) from the full text.
+    let resizeTimer = 0;
+    const onResize = () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (stopped || !data) return;
+        for (const slot of cardEls.values()) slot.sig = '';
+        paintCards(Date.now());
+      }, 150);
+    };
+    window.addEventListener('resize', onResize);
 
     // ------------------------------------------------------- actions
     function openCard(card) {
@@ -780,7 +808,7 @@ export default {
         });
       } catch (err) {
         console.error('wake-up failed', err);
-        ctx.toast({ message: 'That didn’t save. Try again.', tone: 'warn' });
+        ctx.toast({ message: ctx.format.saveError(err), tone: 'warn' });
       } finally {
         waking = false;
       }
@@ -883,6 +911,8 @@ export default {
         newRowTimers.clear();
         sheetWatch.disconnect();
         document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('resize', onResize);
+        clearTimeout(resizeTimer);
         root.removeEventListener('click', onClick);
         root.removeEventListener('animationend', onAnimEnd);
         offEvents();

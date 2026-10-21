@@ -374,6 +374,15 @@ try {
     check('…with VALARMs every 2h 45m', /BEGIN:VALARM/.test(text) && (text.match(/BEGIN:VEVENT/g) || []).length > 50);
   }
   check('…and a calm toast', !!(await waitToast(page, /Pump schedule/)));
+  // FLOW-12: no pump on record → the copy doesn't claim "from your last pump".
+  const calHelp = () => page.evaluate(() => document.querySelector('.st-page-feeding [data-cal-help]').textContent.trim());
+  const noPumps = await page.evaluate(async (u) => !(await (await import(u)).events.last('pump')), mod('/js/core/store.js'));
+  check('FLOW-12: no pump yet → "starting 2h 45m from now", not "from your last pump"', noPumps && /starting 2h 45m from now/.test(await calHelp()) && !/last pump/.test(await calHelp()), await calHelp());
+  await back(page);
+  await page.evaluate(async (u) => { const { events } = await import(u); await events.add({ type: 'pump', startTime: Date.now() - 3600e3, endTime: Date.now() - 3000e3, data: { amount: 4, unit: 'oz' } }); }, mod('/js/core/store.js'));
+  await goSub(page, '[data-arg="feeding"]');
+  await page.waitForFunction(() => /last pump/.test((document.querySelector('.st-page-feeding [data-cal-help]') || {}).textContent || ''), null, { timeout: 3000 }).catch(() => {});
+  check('FLOW-12: with a pump logged → "every 2h 45m from your last pump"', /every 2h 45m from your last pump/.test(await calHelp()), await calHelp());
   await back(page);
   await clickTop(page, '[data-seg="units"] [data-v="oz"]');
   await settle(page, 300);
@@ -494,6 +503,47 @@ try {
       return (await events.running('feed')).length === 0 && !(await events.get('evt_partner_1'));
     }, mod('/js/core/store.js')));
     check('…Clara is still here', (await S(page, 'return settings.babies().map(b => b.name).join(",");')).includes('Clara'));
+    // DI-01: the copy of what was here is kept ON this phone, so Replace can be undone.
+    check('DI-01: the replace toast offers Undo', await page.evaluate(() => /Undo/.test((document.querySelector('#toastRoot .toast-action') || {}).textContent || '')));
+    await page.evaluate(() => document.querySelectorAll('#toastRoot .toast').forEach((t) => t.remove()));
+    await page.waitForSelector(`${TOP} [data-action="undo-replace"]`, { timeout: 3000 }).catch(() => {});
+    check('DI-01: Your data shows "Put back what was here before"', await page.isVisible(`${TOP} [data-action="undo-replace"]`));
+    await clickTop(page, '[data-action="undo-replace"]');
+    await page.waitForSelector('.sheet-confirm[data-state="open"]', { timeout: 3000 }).catch(() => {});
+    await settle(page, 400);
+    await page.click('.sheet-confirm [data-confirm]');
+    check('DI-01: …confirm puts it back (toast)', !!(await waitToast(page, /Put back what was here before/)));
+    check('DI-01: …the log is back (partner diaper + running bottle)', await page.evaluate(async (u) => {
+      const { events } = await import(u);
+      return (await events.running('feed')).length === 1 && !!(await events.get('evt_partner_1'));
+    }, mod('/js/core/store.js')));
+    await page.waitForFunction(() => !document.querySelector('[data-view="settings"]:not(.is-leaving-right) [data-action="undo-replace"]'), null, { timeout: 3000 }).catch(() => {});
+    check('DI-01: …and the row goes away', !(await page.$(`${TOP} [data-action="undo-replace"]`)));
+    // DI-04: a partner's backup that spells the baby differently asks first.
+    // (one baby on each side: with twins/siblings here, nothing is guessed or asked)
+    await S(page, 'const c = settings.babies().find((b) => b.name === "Clara"); await settings.setActiveBaby(c.id); await settings.set("babies", [c]);');
+    const renamed = JSON.parse(JSON.stringify(backupJson));
+    renamed.settings.babies = [{ ...renamed.settings.babies[0], id: 'baby_partner_rose', name: 'Clara Rose', photoId: null }];
+    renamed.settings.activeBabyId = 'baby_partner_rose';
+    renamed.events = [{ id: 'evt_rose_1', type: 'diaper', startTime: Date.now() - 7200000, endTime: Date.now() - 7200000, note: '', data: { kind: 'dirty' }, createdAt: Date.now(), updatedAt: Date.now(), babyId: 'baby_partner_rose' }];
+    renamed.inventory = [];
+    delete renamed.photos;
+    await page.setInputFiles(`${TOP} [data-import]`, { name: 'rose.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(renamed)) });
+    await waitSheet(page);
+    await page.click('.sheet-st-import [data-choice="merge"]');
+    await page.waitForSelector('.sheet-st-import [data-choice="same"]', { timeout: 3000 }).catch(() => {});
+    check('DI-04: Merge asks "Is Clara Rose the same baby as Clara?"', await page.evaluate(() => {
+      const l = document.querySelector('.sheet-layer.sheet-st-import');
+      return !!l && /Is Clara Rose the same baby as Clara\?/.test(l.textContent) && !!l.querySelector('[data-choice="new"]');
+    }));
+    await page.click('.sheet-st-import [data-choice="same"]');
+    const roseToast = await waitToast(page, /Merged/);
+    check('DI-04: "Same baby" merges onto Clara (no second baby)', /1 entry added/.test(roseToast || '') && await page.evaluate(async ([u, s]) => {
+      const { events } = await import(u); const { settings } = await import(s);
+      const e = await events.get('evt_rose_1');
+      return !!e && e.babyId === settings.get('babies')[0].id && settings.get('babies').length === 1;
+    }, [mod('/js/core/store.js'), mod('/js/core/settings.js')]), roseToast);
+    await waitNoSheet(page);
   }
   await back(page);
 
@@ -506,10 +556,21 @@ try {
     const a = [...document.querySelectorAll('.st-page-privacy a')].find((x) => /source code/.test(x.textContent));
     return a && a.href === 'https://github.com/nickyoo/NurtureBabyTracker' && a.target === '_blank' && /noopener/.test(a.rel) && /noreferrer/.test(a.rel);
   }));
-  check('…feedback is a mailto with no data attached', await page.evaluate(() => {
-    const a = [...document.querySelectorAll('.st-page-privacy a')].find((x) => /Send feedback/.test(x.textContent));
-    return a && /^mailto:/.test(a.href) && !/body=/.test(a.href);
+  // FLOW-06: feedbackEmail is empty by default → no recipient-less mailto anywhere.
+  check('FLOW-06: no feedback email set → no mailto link on any Settings page', await page.evaluate(() => ![...document.querySelectorAll('#viewport a[href^="mailto:"]')].length));
+  check('FLOW-06: …the root row says "Feedback email not set up yet" (not a link)', await page.evaluate(() => {
+    const li = [...document.querySelectorAll('#viewport [data-view="settings"] li[data-key="feedback"]')][0];
+    return !!li && !li.querySelector('a') && /Feedback email not set up yet/.test(li.textContent);
   }));
+  await S(page, 'await settings.set("feedbackEmail", "hello@example.com");');
+  await settle(page, 300);
+  await back(page);
+  await goSub(page, '[data-arg="privacy"]');
+  check('…with an owner email set: feedback is a mailto TO it, with no data attached', await page.evaluate(() => {
+    const a = [...document.querySelectorAll('.st-page-privacy a')].find((x) => /Send feedback/.test(x.textContent));
+    return a && /^mailto:hello@example\.com\?/.test(a.href) && !/body=/.test(a.href);
+  }));
+  await S(page, 'await settings.set("feedbackEmail", "");');
   await auditTargets(page, 'privacy');
   await shotTop(page, 'privacy-light');
   await goSub(page, '[data-arg="data"]');
@@ -528,6 +589,10 @@ try {
   check('about: version + OFL licenses linked locally', await page.evaluate(() => {
     const s = document.querySelector('.st-page-about');
     return /Version \d/.test(s.textContent) && !!s.querySelector('a[href="fonts/OFL-Nunito.txt"]') && !!s.querySelector('a[href="fonts/OFL-Fraunces.txt"]') && /MIT License/.test(s.textContent);
+  }));
+  check('FLOW-06: about: feedback row is not a blank mailto', await page.evaluate(() => {
+    const li = document.querySelector('.st-page-about li[data-key="feedback"]');
+    return !!li && !li.querySelector('a[href^="mailto:"]') && /not set up yet/.test(li.textContent);
   }));
   await auditTargets(page, 'about');
   await shotTop(page, 'about-light');
@@ -584,6 +649,41 @@ try {
     check('a baby added elsewhere appears live in Settings', await p2.evaluate(() => document.querySelectorAll('[data-view="settings"] .st-babies [data-action="baby"]').length === 2));
     await p2.evaluate(() => document.querySelector('[data-view="settings"]').scrollTo(0, 0));
     await shot(p2, 'root-two-babies-night');
+    // FLOW-05 / MAV-3 / DI-06: a baby can be removed (never the last one).
+    const theoId = await S(p2, 'return settings.babies().find((b) => b.name === "Theo").id;');
+    await p2.evaluate(async ([u, id]) => { const { events } = await import(u); await events.add({ type: 'diaper', startTime: Date.now() - 600000, babyId: id, data: { kind: 'wet' } }); }, [mod('/js/core/store.js'), theoId]);
+    await goSub(p2, `[data-action="baby"][data-arg="${theoId}"]`);
+    check('FLOW-05: with two babies, the baby page offers "Remove Theo"', await p2.evaluate(() => /Remove Theo/.test((document.querySelector('[data-view="settings"]:not(.is-leaving-right) [data-action="remove-baby"]') || {}).textContent || '')));
+    await clickTop(p2, '[data-action="remove-baby"]');
+    await p2.waitForSelector('.sheet-confirm[data-state="open"]', { timeout: 3000 }).catch(() => {});
+    await settle(p2, 400);
+    check('FLOW-05: confirm sheet "Remove Theo and their entries?" says what goes', await p2.evaluate(() => {
+      const c = document.querySelector('.sheet-confirm');
+      return !!c && /Remove Theo and their entries\?/.test(c.textContent) && /1 entry/.test(c.textContent) && /safety backup/.test(c.textContent) && !!c.querySelector('.btn-danger');
+    }));
+    const [rmSafety] = await Promise.all([p2.waitForEvent('download', { timeout: 6000 }).catch(() => null), p2.click('.sheet-confirm [data-confirm]')]);
+    check('FLOW-05: a safety backup is saved first', !!rmSafety && /before-removing/.test(rmSafety.suggestedFilename()), rmSafety && rmSafety.suggestedFilename());
+    const rmToast = await waitToast(p2, /Theo removed/);
+    check('FLOW-05: "Theo removed" with Undo; Theo and the entry are gone; back on Settings', !!rmToast
+      && (await S(p2, 'return settings.babies().map((b) => b.name).join(",");')) === 'Clara'
+      && await p2.evaluate(async (u) => (await (await import(u)).events.query({ type: 'diaper' })).length === 0, mod('/js/core/store.js'))
+      && (await top(p2)).page === 'st-page-root', JSON.stringify(await top(p2)));
+    await settle(p2, 400); // past the toast's enter-tap guard
+    await p2.click('#toastRoot .toast-action', { timeout: 3000 });
+    await settle(p2, 1500);
+    await p2.waitForFunction(async (u) => (await import(u)).settings.babies().length === 2, mod('/js/core/settings.js'), { timeout: 4000 }).catch(() => {});
+    check('FLOW-05: Undo puts Theo and the entry back', (await S(p2, 'return settings.babies().map((b) => b.name).join(",");')) === 'Clara,Theo'
+      && await p2.evaluate(async (u) => (await (await import(u)).events.query({ type: 'diaper' })).length === 1, mod('/js/core/store.js')));
+    // Remove Theo again (core API), then the only baby left has no Remove row.
+    await p2.evaluate(async ([u, id]) => { const { removeBaby } = await import(u); await removeBaby(id, { safetyBackup: null }); }, [mod('/js/core/backup.js'), theoId]);
+    await settle(p2, 600);
+    await goSub(p2, '[data-action="baby"]');
+    check('FLOW-05: the last baby can\'t be removed (no Remove row)', !(await p2.$('[data-view="settings"]:not(.is-leaving-right) [data-action="remove-baby"]')));
+    check('FLOW-05: …and the core refuses it too', await p2.evaluate(async ([u, s]) => {
+      const { removeBaby } = await import(u); const { settings } = await import(s);
+      try { await removeBaby(settings.babies()[0].id, { safetyBackup: null }); return false; } catch (e) { return e.name === 'BackupError'; }
+    }, [mod('/js/core/backup.js'), mod('/js/core/settings.js')]));
+    await back(p2);
     check('night: no CSP violations', (await p2.evaluate(() => window.__csp)).length === 0);
     await c2.close();
   }

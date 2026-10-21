@@ -1,10 +1,10 @@
 {
   "app": "nurture",
   "schema": 2,
-  "exportedAt": "2026-10-20T15:30:13.412Z",
+  "exportedAt": "2026-10-20T15:30:15.496Z",
   "events": [
     {
-      "id": "evt_ad273576-9c67-402a-8905-e21dc91f9ca7",
+      "id": "evt_2458f2c9-37cf-4b2a-b5ab-f3f2a7db72cf",
       "type": "feed",
       "startTime": 1792506600000,
       "endTime": 1792507200000,
@@ -15,31 +15,31 @@
         "amount": 4,
         "unit": "oz"
       },
-      "createdAt": 1792510202679,
-      "updatedAt": 1792510202679,
-      "babyId": "baby_c189b83c-3ae8-4f46-8880-0e54395abd9d",
-      "deviceId": "dev_7d2fa8ea-80d7-48e3-8299-528f7dda4fdb"
+      "createdAt": 1792510204662,
+      "updatedAt": 1792510204662,
+      "babyId": "baby_12e2f984-a954-4d94-af3f-1721bb1c407f",
+      "deviceId": "dev_1c4ad4bf-0f0c-4dca-88a6-b0ad225adbc8"
     }
   ],
   "inventory": [],
   "settings": {
     "babies": [
       {
-        "id": "baby_c189b83c-3ae8-4f46-8880-0e54395abd9d",
+        "id": "baby_12e2f984-a954-4d94-af3f-1721bb1c407f",
         "name": "Robin",
         "birthDate": "2026-09-02",
         "photoId": null,
-        "createdAt": 1792510200135
+        "createdAt": 1792510202171
       },
       {
-        "id": "baby_3a57eb2e-d76a-4025-bf58-bb05645e14ee",
+        "id": "baby_4a52a07b-9752-47c2-8804-5d247113560a",
         "name": "Sam",
         "birthDate": null,
         "photoId": null,
-        "createdAt": 1792510204805
+        "createdAt": 1792510206833
       }
     ],
-    "activeBabyId": "baby_3a57eb2e-d76a-4025-bf58-bb05645e14ee",
+    "activeBabyId": "baby_4a52a07b-9752-47c2-8804-5d247113560a",
     "parentName": "",
     "units": "oz",
     "theme": "light",

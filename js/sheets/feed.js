@@ -243,6 +243,40 @@ async function finishBreast(ctx, event) {
 
 // ================================================================ sheet
 
+/** A duration token in ms (e.g. --dur-morph), with a fallback. */
+function cssDur(name, fallback) {
+  if (typeof document === 'undefined') return fallback;
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const n = parseFloat(v);
+  if (!Number.isFinite(n)) return fallback;
+  return v.endsWith('ms') ? n : v.endsWith('s') ? n * 1000 : n;
+}
+
+/**
+ * "Thaw & feed" closed without a bottle from that pouch (FLOW-01): put the
+ * pouch back exactly as it was before the thaw — but only if it is still the
+ * untouched thawed pouch (nothing poured from it, not discarded meanwhile).
+ * @param {object} ctx
+ * @param {object} before the pouch snapshot taken before thawing
+ * @returns {Promise<boolean>} whether it went back
+ */
+export async function refreezePouch(ctx, before) {
+  try {
+    if (!before || !before.id) return false;
+    const now = await ctx.stash.get(before.id);
+    if (!now || now.status !== 'active' || now.location !== 'thawed') return false;
+    const poured = (Array.isArray(now.consumedBy) ? now.consumedBy.length : 0) > (Array.isArray(before.consumedBy) ? before.consumedBy.length : 0);
+    if (poured || now.quantity !== before.quantity) return false;
+    await ctx.stash.restore(before);
+    const where = before.location === 'deepFreezer' ? 'deep freezer' : 'freezer';
+    ctx.toast({ message: `Pouch put back in the ${where}` });
+    return true;
+  } catch (err) {
+    console.warn('feed sheet: pouch not put back', err);
+    return false;
+  }
+}
+
 /**
  * Open the feed sheet.
  * @param {object} ctx app ctx (ARCHITECTURE §5.2)
@@ -252,9 +286,13 @@ async function finishBreast(ctx, event) {
  *   startTime: a back-dated time (e.g. from the quick-log time chip); side: the suggested breast side
  * @param {object} [opts.resume] a running feed event → its live view
  * @param {boolean} [opts.finishing] (with resume) open on "How much did <name> drink?"
+ * @param {object} [opts.refreeze] "Thaw & feed": the pouch as it was BEFORE it
+ *   was thawed for this sheet. If the sheet closes without a bottle logged or
+ *   started from that pouch, the pouch goes back in the freezer (FLOW-01) — a
+ *   mis-tap never starts a 24 h clock on frozen milk.
  * @returns {object} sheet api
  */
-export function openFeedSheet(ctx, { origin = null, preset = null, resume = null, finishing = false } = {}) {
+export function openFeedSheet(ctx, { origin = null, preset = null, resume = null, finishing = false, refreeze = null } = {}) {
   const { html, raw, render } = ctx.html;
   const I = (name, size = 20) => raw(ctx.icons.icon(name, { size }));
   const p = preset && typeof preset === 'object' ? preset : {};
@@ -346,6 +384,12 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
     }
   });
 
+  // "Thaw & feed": did a bottle from the thawed pouch get logged or started?
+  let refreezeUsed = false;
+  const markRefreezeUsed = (ev) => {
+    if (refreeze && ev && ev.data && ev.data.sourceInventoryId === refreeze.id) refreezeUsed = true;
+  };
+
   api = ctx.openSheet({
     title: firstTitle,
     origin,
@@ -354,6 +398,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
     onClose() {
       clearInterval(chipTimer);
       offSettings();
+      if (refreeze && !refreezeUsed) refreezePouch(ctx, refreeze);
     },
     render(body, a) {
       api = a;
@@ -691,7 +736,9 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
       const from = hero ? hero.getBoundingClientRect() : null;
       try {
         const ev = await ctx.events.start('feed', data, { startTime: st.when ?? Date.now(), babyId });
-        go({ view: 'liveBottle', event: ev, morphFrom: from });
+        markRefreezeUsed(ev);
+        // #5: the hero carries over (FLIP) and the content cross-fades, no slide.
+        go({ view: 'liveBottle', event: ev, morphFrom: from }, from && !ctx.motionReduced() ? 'morph' : 'forward');
       } catch (err) {
         busy = false;
         setBusy(startBtn, false);
@@ -699,7 +746,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
         paintButtons();
         if (isRunningError(ctx, err) && err.running) { go({ view: methodOf(err.running) === 'breast' ? 'liveBreast' : 'liveBottle', event: err.running }); return; }
         console.warn('feed sheet: bottle not started', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     });
 
@@ -710,6 +757,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
       lockFooter(body, true);
       try {
         const ev = await ctx.events.add({ type: 'feed', startTime: st.when ?? Date.now(), babyId, data: bottleData() });
+        markRefreezeUsed(ev);
         if (ev.data.sourceInventoryId) {
           try { await ctx.stash.consumeForFeed(ev); } catch (err) { console.warn('feed sheet: pouch not updated', err); }
         }
@@ -720,7 +768,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
         lockFooter(body, false);
         paintButtons();
         console.warn('feed sheet: bottle not logged', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     });
 
@@ -748,7 +796,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
 
     render(body, html`<div class="fd fd-live">
         <div class="fd-hero cat-feed">
-          <span class="fd-timer num" aria-hidden="true" data-timer>00:00</span>
+          <span class="fd-timer num" aria-hidden="true" data-timer data-pill-for="${ev.id}">00:00</span>
           <span class="fd-hero-sub">${milkWord}${madeAmt !== null ? html` · <b class="num">${ctx.format.amount(madeAmt, evUnit(), st.unit)}</b> made` : ''}${d.sourceInventoryId ? ' · from the stash' : ''}</span>
           <span class="badge fd-safety" data-safety></span>
           <span class="goal-bar fd-safety-bar" aria-hidden="true"><i data-safety-bar></i></span>
@@ -844,15 +892,19 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
     };
     loop();
 
-    // FLIP (#5): the amount hero shrinks into the timer header.
+    // FLIP (#5): the amount hero shrinks into the timer header. Measured in a
+    // microtask — after api.step() has set up the height animation, before the
+    // next paint — so the numeral starts exactly on the hero (no one-frame
+    // flash at the header, MAV-10), cross-fading with it as the steps do.
     if (morphFrom && !ctx.motionReduced() && typeof timerEl.animate === 'function') {
-      requestAnimationFrame(() => {
+      queueMicrotask(() => {
+        if (!timerEl.isConnected) return;
         const to = timerEl.getBoundingClientRect();
         if (!to.width || !morphFrom.width) return;
         const dx = (morphFrom.left + morphFrom.width / 2) - (to.left + to.width / 2);
         const dy = (morphFrom.top + morphFrom.height / 2) - (to.top + to.height / 2);
         const s = Math.max(0.5, Math.min(1.6, morphFrom.height / to.height));
-        timerEl.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${s})` }, { transform: 'none' }], { duration: 320, easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });
+        timerEl.animate([{ transform: `translate(${dx}px, ${dy}px) scale(${s})` }, { transform: 'none' }], { duration: cssDur('--dur-morph', 320), easing: 'cubic-bezier(0.4, 0, 0.2, 1)' });
       });
     }
 
@@ -899,7 +951,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
         setBusy(btn, false);
         lockFooter(body, false);
         console.warn('feed sheet: bottle not finished', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     }
 
@@ -969,7 +1021,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
           lockFooter(body, false);
           if (isRunningError(ctx, err) && err.running) { go({ view: methodOf(err.running) === 'breast' ? 'liveBreast' : 'liveBottle', event: err.running }); return; }
           console.warn('feed sheet: breastfeed not started', err);
-          showError(body);
+          showError(body, ctx.format.saveError(err));
         }
       });
     }
@@ -1034,7 +1086,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
         setBusy(logBtn, false);
         lockFooter(body, false);
         console.warn('feed sheet: breastfeed not logged', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     });
     return () => { sl.destroy(); sr.destroy(); };
@@ -1150,7 +1202,7 @@ export function openFeedSheet(ctx, { origin = null, preset = null, resume = null
         setBusy(btn, false);
         lockFooter(body, false);
         console.warn('feed sheet: breastfeed not finished', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     });
     body.querySelector('[data-discard]').addEventListener('click', async () => {
@@ -1757,7 +1809,7 @@ async function logBottle(ctx, { babyId, milk, amount, unit, forName = '' }) {
     });
   } catch (err) {
     console.warn('feed sheet: express bottle not logged', err);
-    ctx.toast({ message: 'That didn’t save. Try again.', tone: 'warn' });
+    ctx.toast({ message: ctx.format.saveError(err), tone: 'warn' });
   }
 }
 

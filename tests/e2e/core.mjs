@@ -31,6 +31,7 @@ const SUITES = [
   ['import-guards'],
   ['migration-v1-edits'],
   ['data-invariants-r2'],
+  ['qa-fixes'],
 ];
 
 // Files each suite must have actually downloaded (checked from disk, not

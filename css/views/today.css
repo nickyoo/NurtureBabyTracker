@@ -42,6 +42,15 @@
 .note-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-2); margin-top: var(--s-2); margin-left: -2px; }
 .note-actions .btn-ghost { padding: 0 var(--s-3); }
 .note-actions .btn .ic { width: 20px; height: 20px; }
+/* FLOW-08: the backup nudge's actions sit under the icon and text, across the
+   card's full width, so "Save a backup to Files" + "Not now" share one row on
+   a 390 px phone; narrower, the label drops "to Files"; and a button can
+   never run past the card edge (it wraps its text instead). */
+.note-card { flex-wrap: wrap; row-gap: 0; }
+.note-card > .note-actions.is-wide { flex: 1 1 100%; min-width: 0; }
+.note-actions .btn { min-width: 0; max-width: 100%; white-space: normal; text-align: center; }
+@media (max-width: 379px) { .note-files { display: none; } }
+@media (max-width: 340px) { .note-actions.is-wide { column-gap: var(--s-1); } .note-actions.is-wide .btn-ghost { padding: 0 10px; } }
 /* Leaving: collapse to nothing so what's below slides up instead of jumping. */
 .note-card.is-leaving {
   transition: max-height var(--dur-fast) var(--ease-in), opacity var(--dur-fast) var(--ease-in),
@@ -63,6 +72,11 @@
 /* A live card whose label + chip don't fit (narrow phones): the label's icon
    steps aside (set by fitTop in views/today.js), and as a last resort the
    label clips rather than pushing the chip out of the card. */
+/* MAV-7: a live card's top row runs a little tighter, so the most common
+   running state ("☾ Asleep ● Nap") keeps its icon on a 390 px phone; only
+   longer labels (Pumping, Feeding) fall back to is-tight. */
+.today .ql.is-live .ql-top { gap: 6px; }
+.today .ql.is-live .ql-label { gap: 5px; }
 .today .ql.is-tight .ql-label .ic { display: none; }
 .today .ql-top > .ql-label { min-width: 0; overflow: hidden; white-space: nowrap; }
 .today .ql-top > .live-chip { flex: none; }

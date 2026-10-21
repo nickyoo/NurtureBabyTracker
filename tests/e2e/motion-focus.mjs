@@ -488,6 +488,37 @@ try {
     await context.close();
   }
 
+  // ======================================================== MAV-9
+  console.log('\nMAV-9 a replaced toast fades out under the new one');
+  {
+    const { context, page } = await freshPage();
+    const frames = await page.evaluate(async (u) => {
+      const { toast } = await import(u);
+      toast({ message: 'Bottle deleted', action: { label: 'Undo', run: () => {} } });
+      await new Promise((r) => setTimeout(r, 450));
+      toast({ message: 'Pump deleted', action: { label: 'Undo', run: () => {} } });
+      const out = [];
+      const t0 = performance.now();
+      while (performance.now() - t0 < 420) {
+        await new Promise((r) => requestAnimationFrame(r));
+        const all = [...document.querySelectorAll('#toastRoot .toast')];
+        out.push({
+          t: Math.round(performance.now() - t0),
+          first: all[0] ? all[0].querySelector('.toast-msg').textContent : null,
+          old: all.filter((x) => /Bottle/.test(x.textContent)).map((x) => ({ op: Number(getComputedStyle(x).opacity), y: Math.round(x.getBoundingClientRect().top), rep: x.classList.contains('is-replaced') }))[0] || null,
+          newY: (all.find((x) => /Pump/.test(x.textContent)) || { getBoundingClientRect: () => ({ top: -1 }) }).getBoundingClientRect().top,
+        });
+      }
+      return out;
+    }, mod('/js/ui/toast.js'));
+    const mid = frames.filter((f) => f.old && f.old.op > 0.05 && f.old.op < 0.95);
+    check('the old toast fades (in-between opacities seen), not removed between two frames', mid.length >= 2, JSON.stringify(frames.slice(0, 6)));
+    check('…in place, under the new one (no second slot in the column)', frames.every((f) => !f.old || f.old.rep) && frames.filter((f) => f.old).every((f) => Math.abs(f.old.y - f.newY) < 24), JSON.stringify(frames.slice(0, 4)));
+    check('…the new toast is the region\'s first (what readers see)', frames.every((f) => f.first === 'Pump deleted'));
+    check('…and the old one is gone after its 160 ms exit', !frames[frames.length - 1].old);
+    await context.close();
+  }
+
   check('zero console errors', consoleErrors.length === 0, consoleErrors.join(' | '));
 } catch (err) {
   failures.push(`crashed: ${err && err.stack ? err.stack : err}`);

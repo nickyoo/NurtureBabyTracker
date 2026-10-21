@@ -172,6 +172,34 @@ export function pastSleepProblem({ start, end, now, running = null, others = [],
 }
 
 /**
+ * Default window for "Log a past sleep" (FLOW-10): woke up now (to the 5
+ * minutes), asleep an hour before — moved so it never overlaps a logged
+ * sleep. If a sleep ended inside the hour (with 10+ min to spare), it starts
+ * right after it; otherwise the whole hour moves back to end where that sleep
+ * began. Pure.
+ * @param {{ now: number, sleeps?: object[] }} opts finished sleeps of this baby
+ * @returns {{ start: number, end: number }}
+ */
+export function defaultPastWindow({ now, sleeps = [] }) {
+  const FIVE = 5 * MINUTE;
+  let end = Math.floor(now / FIVE) * FIVE;
+  let start = end - HOUR;
+  const list = (sleeps || []).filter((x) => x && Number.isFinite(x.startTime) && Number.isFinite(x.endTime));
+  for (let i = 0; i < 24; i += 1) {
+    const hit = list.filter((x) => x.startTime < end && x.endTime > start).sort((a, b) => b.endTime - a.endTime)[0];
+    if (!hit) return { start, end };
+    const after = Math.ceil(hit.endTime / FIVE) * FIVE;
+    if (after <= end - 10 * MINUTE && !list.some((x) => x !== hit && x.startTime < end && x.endTime > after)) {
+      start = after;
+    } else {
+      end = Math.floor(hit.startTime / FIVE) * FIVE;
+      start = end - HOUR;
+    }
+  }
+  return { start, end };
+}
+
+/**
  * Time picker sheet behind a time chip (DESIGN §6.6): one tap on "Now / 5 /
  * 15 / 30 min / 1 / 2 hours ago", or Today | Yesterday + a time. Never in the
  * future, never before `min`. Resolves { ts } (ts null = now) or undefined.
@@ -255,7 +283,7 @@ async function wakeWithUndo(ctx, event) {
     await ctx.events.stop(event.id);
   } catch (err) {
     console.error('sleep sheet: wake-up not logged', err);
-    ctx.toast({ message: 'That didn’t save. Try again.', tone: 'warn' });
+    ctx.toast({ message: ctx.format.saveError(err), tone: 'warn' });
     return;
   }
   ctx.toast({ message: 'Wake-up logged', action: { label: 'Undo', run: () => ctx.events.update(event.id, { endTime: null }) } });
@@ -549,7 +577,7 @@ export function openSleepSheet(ctx, { origin = null, preset = null, resume = nul
         lock(body, false);
         if (isRunningError(ctx, err) && err.running) { go({ view: 'live', event: err.running }); return; }
         console.warn('sleep sheet: sleep not started', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     });
     return () => { clearInterval(tick); whenHook = null; };
@@ -568,7 +596,7 @@ export function openSleepSheet(ctx, { origin = null, preset = null, resume = nul
 
     render(body, html`<div class="nb sl sl-live">
         <div class="nb-hero cat-sleep">
-          <span class="nb-timer num" data-timer aria-hidden="true">00:00</span>
+          <span class="nb-timer num" data-timer data-pill-for="${ev.id}" aria-hidden="true">00:00</span>
           <span class="nb-hero-sub"><span class="dot" aria-hidden="true"></span><span data-since></span></span>
         </div>
         ${kindSeg(kindOf(), 'Nap or night sleep')}
@@ -626,7 +654,7 @@ export function openSleepSheet(ctx, { origin = null, preset = null, resume = nul
         setBusy(btn, false);
         lock(body, false);
         console.warn('sleep sheet: wake-up not logged', err);
-        showError(body);
+        showError(body, ctx.format.saveError(err));
       }
     }
 
@@ -680,12 +708,11 @@ export function openSleepSheet(ctx, { origin = null, preset = null, resume = nul
     const ids = { start: uid(), end: uid(), sum: uid() };
     const now = Date.now();
     // Defaults: woke up now (to the 5 minutes), asleep an hour before — but
-    // never reaching back into the last logged sleep.
-    const FIVE = 5 * MINUTE;
-    let end = Math.floor(now / FIVE) * FIVE;
-    let start = end - HOUR;
+    // never overlapping a logged sleep, so a fresh open never starts on an
+    // error (FLOW-10). The cached last sleep now; all recent ones once loaded.
     const last = cache.last.get(babyId);
-    if (last && Number.isFinite(last.endTime) && last.endTime > start && last.endTime < end - 10 * MINUTE) start = Math.ceil(last.endTime / FIVE) * FIVE;
+    let { start, end } = defaultPastWindow({ now, sleeps: last ? [last] : [] });
+    let touched = false;             // the parent changed a time or day: keep their values
     let kind = st.kind;              // picked by hand in this sheet; null = follow the start time
     let recent = [];                 // this baby's sleeps of the last few days (overlap check)
     let busy = false;
@@ -759,7 +786,7 @@ export function openSleepSheet(ctx, { origin = null, preset = null, resume = nul
       return problem ? null : { start, end, kind: k };
     }
 
-    const onInput = () => validate();
+    const onInput = () => { touched = true; validate(); };
     startIn.addEventListener('input', onInput);
     startIn.addEventListener('change', onInput);
     endIn.addEventListener('input', onInput);
@@ -771,7 +798,23 @@ export function openSleepSheet(ctx, { origin = null, preset = null, resume = nul
 
     // Earlier sleeps for the overlap check (a night that began 2 days ago still counts).
     ctx.events.query({ type: 'sleep', babyId, from: Date.now() - 4 * DAY, running: false })
-      .then((list) => { recent = list.filter((e) => (e.babyId ?? null) === (babyId ?? null)); if (body.isConnected) validate(); })
+      .then((list) => {
+        recent = list.filter((e) => (e.babyId ?? null) === (babyId ?? null));
+        if (!body.isConnected) return;
+        if (!touched) {
+          // Re-default against every recent sleep, not just the cached last one.
+          const w = defaultPastWindow({ now: Date.now(), sleeps: recent });
+          if (w.start !== start || w.end !== end) {
+            startDay = Math.max(-1, Math.min(0, dayOffset(ctx, w.start)));
+            endDay = Math.max(-1, Math.min(0, dayOffset(ctx, w.end)));
+            startIn.value = timeValue(w.start);
+            endIn.value = timeValue(w.end);
+            setRadio(startSeg, startDay);
+            setRadio(endSeg, endDay);
+          }
+        }
+        validate();
+      })
       .catch((err) => console.warn('sleep sheet: recent sleeps not loaded', err));
     validate();
 

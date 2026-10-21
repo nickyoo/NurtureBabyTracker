@@ -330,11 +330,75 @@ function bindGlobals() {
   });
 }
 
+// ------------------------------------------------ shared-element flights
+//
+// #16 (card / row → its sheet): the header icon chip FLIPs from the tapped
+// card's icon (or row's chip) as the sheet rises, and back on close.
+// #6 (running-timer sheet → its live pill): on dismiss, the timer numeral
+// flies into the pill's time while the sheet slides away; the pill, hidden
+// meanwhile, appears as it lands.
+// Both fly a fixed-position copy in #sheetRoot (above every layer), so the
+// real element's own layout — and the sheet's slide — are untouched. Never
+// under reduced motion.
+
+/** The icon a card or row carries: a row's chip, a card's label icon. */
+function originIcon(el) {
+  return el.querySelector('.chip-ic') || el.querySelector('.ql-label .ic') || null;
+}
+
+/**
+ * Fly a copy of `el` between two viewport rects (translate + scale, transform
+ * origin top-left), then remove it. Resolves when done (or after a fallback).
+ * @param {Element} el what the copy looks like
+ * @param {DOMRect|object} from start rect
+ * @param {DOMRect|object} to end rect (the copy's own box)
+ * @param {{ duration: number, easing: string, fadeOut?: boolean, fadeIn?: boolean, color?: [string, string] }} o
+ * @returns {Promise<void>}
+ */
+function flyCopy(el, from, to, o) {
+  return new Promise((resolve) => {
+    const c = el.cloneNode(true);
+    c.removeAttribute('id');
+    c.setAttribute('aria-hidden', 'true');
+    c.classList.add('sheet-flight');
+    c.style.setProperty('left', `${to.left}px`);
+    c.style.setProperty('top', `${to.top}px`);
+    c.style.setProperty('width', `${to.width}px`);
+    c.style.setProperty('height', `${to.height}px`);
+    sheetRoot().appendChild(c);
+    const sx = to.width ? from.width / to.width : 1;
+    const sy = to.height ? from.height / to.height : 1;
+    const start = `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${sx}, ${sy})`;
+    const k0 = { transform: start, opacity: o.fadeIn ? 0.4 : 1 };
+    const k1 = { transform: 'none', opacity: o.fadeOut ? 0 : 1 };
+    if (o.color) { k0.color = o.color[0]; k1.color = o.color[1]; }
+    let done = false;
+    const end = () => { if (done) return; done = true; c.remove(); resolve(); };
+    try {
+      const a = c.animate([k0, k1], { duration: o.duration, easing: o.easing, fill: 'forwards' });
+      a.onfinish = end;
+      a.oncancel = end;
+    } catch { end(); return; }
+    setTimeout(end, o.duration + 400);
+  });
+}
+
+function cssVar(name, fallback) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return v || fallback;
+}
+
+function onScreen(el) {
+  if (!el || !el.isConnected) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+}
+
 /**
  * @typedef {object} SheetApi
  * @property {(result?: any) => Promise<any>} close   close (animated); resolves after removal
  * @property {(title: string) => void} setTitle
- * @property {(renderFn: (body: HTMLElement, api: SheetApi) => (void|(() => void)), opts?: { direction?: 'forward'|'back' }) => HTMLElement} step
+ * @property {(renderFn: (body: HTMLElement, api: SheetApi) => (void|(() => void)), opts?: { direction?: 'forward'|'back'|'morph' }) => HTMLElement} step
  * @property {(on: boolean) => void} setDismissible
  * @property {HTMLElement} el        the <section role="dialog">
  * @property {HTMLElement} layer     the layer (scrim + sheet + optional ×)
@@ -496,6 +560,25 @@ export function openSheet(opts = {}) {
     sheet.style.setProperty('--rg-rad', `${radius}px`);
   }
 
+  // ---- card / row → sheet: the icon chip flies in (#16) ----
+  let chipFlight = null; // { chip, icon } once set up
+  if (!reduced && !fabOrigin && growMode === null && originEl && originEl.matches('.ql, .row') && typeof Element.prototype.animate === 'function') {
+    const icon = originIcon(originEl);
+    const s0 = sheet.getBoundingClientRect();
+    // The sheet's own chip if its first view leads with one (entry sheet),
+    // else a header chip carrying the card's icon.
+    let chip = currentStep.querySelector('.chip-ic');
+    if (chip && chip.getBoundingClientRect().top - s0.top > 160) chip = null;
+    if (!chip && icon && title) {
+      const cat = [...originEl.classList].find((c) => /^cat-[\w-]+$/.test(c)) || '';
+      chip = element(html`<span class="chip-ic sheet-hd-chip ${cat}" aria-hidden="true"></span>`);
+      const svg = (icon.matches('svg') ? icon : icon.querySelector('svg'));
+      if (svg) chip.appendChild(svg.cloneNode(true));
+      layer.querySelector('.sheet-hd').insertBefore(chip, titleEl);
+    }
+    if (chip && icon) chipFlight = { chip, icon };
+  }
+
   // ---- enter ----
   // Commit the pre state WITH the --grow-* / --rg-* geometry while
   // transitions are still off (.is-measuring): the measuring pass above
@@ -513,6 +596,22 @@ export function openSheet(opts = {}) {
       // and would clip the sheet's own shadow.
       if (layer.getAttribute('data-state') === 'open') layer.classList.add('is-settled');
     }, { property: 'clip-path' });
+  }
+  if (chipFlight) {
+    // Where the chip will rest: measured now (sheet at translateY(100%) in
+    // the pre state), minus that offset. It flies there from the icon.
+    const { chip, icon } = chipFlight;
+    const r = chip.getBoundingClientRect();
+    const sheetH = sheet.offsetHeight;
+    const rest = { left: r.left, top: r.top - sheetH, width: r.width, height: r.height };
+    const from = icon.getBoundingClientRect();
+    if (from.width && r.width) {
+      chip.style.setProperty('visibility', 'hidden');
+      flyCopy(chip, from, rest, { duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-std', 'ease'), fadeIn: true })
+        .then(() => chip.style.removeProperty('visibility'));
+    } else {
+      chipFlight = null;
+    }
   }
   focusInitial();
   notifyChange();
@@ -544,7 +643,9 @@ export function openSheet(opts = {}) {
   function step(renderFn, { direction = 'forward' } = {}) {
     if (!stack.includes(entry)) return currentStep;
     entry.stepped = true;
-    const dir = direction === 'back' ? 'is-back' : 'is-fwd';
+    // 'morph': cross-fade only, no slide — for a step where one element
+    // FLIPs from the old step into the new one (#5).
+    const dir = direction === 'back' ? 'is-back' : direction === 'morph' ? 'is-morph' : 'is-fwd';
     const old = currentStep;
     const oldH = viewport.offsetHeight;
     const scrolled = viewport.scrollTop;
@@ -632,9 +733,24 @@ export function openSheet(opts = {}) {
     sheet.addEventListener('pointercancel', onUp);
   }
 
+  // A dismissed running-timer sheet: its timer and the matching live pill.
+  function pillFlightTarget(result) {
+    if (reduced || result !== undefined || typeof Element.prototype.animate !== 'function') return null;
+    const timer = currentStep.querySelector('[data-timer][data-pill-for]');
+    if (!timer || !onScreen(timer)) return null;
+    const id = timer.getAttribute('data-pill-for');
+    const pill = [...document.querySelectorAll('#livePills .lpill')].find((p) => p.getAttribute('data-event-id') === id && !p.inert);
+    const time = pill && pill.querySelector('.lpill-time');
+    if (!time || !onScreen(pill)) return null;
+    return { timer, pill, time };
+  }
+
   function close(result) {
     if (entry.closing) return closed;
     entry.closing = true;
+    // Measure the shared elements before anything changes (#6, #16).
+    const toPill = pillFlightTarget(result);
+    const chipBack = !toPill && chipFlight && onScreen(chipFlight.icon) && chipFlight.chip.isConnected ? chipFlight : null;
     const i = stack.indexOf(entry);
     if (i !== -1) stack.splice(i, 1);
     closingCount += 1;
@@ -657,6 +773,28 @@ export function openSheet(opts = {}) {
     if ((layer.classList.contains('is-grow') || layer.classList.contains('is-rect')) && layer.classList.contains('is-settled')) {
       layer.classList.remove('is-settled');
       reflow(sheet);
+    }
+    if (toPill) {
+      // #6: the sheet slides away (#1) — not the + collapse or the pill
+      // rect — while the timer flies into the pill, which appears as it lands.
+      layer.classList.remove('is-grow', 'is-rect', 'is-settled');
+      const from = toPill.timer.getBoundingClientRect();
+      const to = restingRect(toPill.time);
+      const pill = toPill.pill;
+      pill.classList.add('is-flight-target');
+      toPill.timer.style.setProperty('visibility', 'hidden');
+      flyCopy(toPill.timer, from, to, {
+        duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-spring', 'ease'),
+        color: [getComputedStyle(toPill.timer).color, getComputedStyle(toPill.time).color],
+      }).then(() => { pill.classList.remove('is-flight-target'); });
+    } else if (chipBack) {
+      // #16 reverse: the chip flies back to the card / row it came from.
+      const from = chipBack.chip.getBoundingClientRect();
+      const to = restingRect(chipBack.icon);
+      chipBack.chip.style.setProperty('visibility', 'hidden');
+      chipBack.icon.style.setProperty('visibility', 'hidden');
+      flyCopy(chipBack.chip, from, to, { duration: cssMs('--dur-morph', 320), easing: cssVar('--ease-std', 'ease'), fadeOut: true })
+        .then(() => chipBack.icon.style.removeProperty('visibility'));
     }
     layer.setAttribute('data-state', 'closing');
     layer.inert = true;

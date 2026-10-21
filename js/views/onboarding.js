@@ -165,6 +165,11 @@ export default {
       // The last step's own buttons finish; a Skip there would be a duplicate.
       // It fades and keeps its place, so the dots don't jump sideways.
       skipBtn.classList.toggle('is-off', stepKey === 'install');
+      // System / Android Back goes one step back (FLOW-02), like the in-page
+      // Back; on the first step it leaves, as before.
+      if (ctx.router && typeof ctx.router.setRootBack === 'function') {
+        ctx.router.setRootBack(first ? null : () => { if (alive) { flushName(); stepBy(-1); } });
+      }
     }
 
     // ------------------------------------------------------------ steps
@@ -539,7 +544,7 @@ export default {
         try {
           rec = await ctx.photos.add(file);
         } catch (err) {
-          ctx.toast({ message: err && err.name === 'PhotoDecodeError' ? 'That photo couldn’t be read. Try another one.' : 'Couldn’t save that photo. Try another one.', tone: 'warn' });
+          ctx.toast({ message: err && err.name === 'PhotoDecodeError' ? 'That photo couldn’t be read. Try another one.' : ctx.format.saveError(err, 'Couldn’t save that photo. Try another one.'), tone: 'warn' });
           if (!(err && err.name === 'PhotoDecodeError')) console.warn('onboarding: photo not saved', err);
           return;
         }
@@ -657,7 +662,10 @@ export default {
       if (ev) parts.push(F.plural(ev, 'entry', 'entries'));
       if (inv) parts.push(F.plural(inv, 'pouch', 'pouches'));
       if (ph) parts.push(F.plural(ph, 'photo'));
-      return parts.length ? `Welcome back · ${parts.join(', ')} restored` : 'Welcome back · that file had nothing new';
+      const rej = s.rejected || {};
+      const skipped = (rej.events || 0) + (rej.inventory || 0);
+      const tail = skipped ? ` · ${F.plural(skipped, 'entry', 'entries')} skipped` : '';
+      return parts.length ? `Welcome back · ${parts.join(', ')} restored${tail}` : `Welcome back · that file had nothing new${tail}`;
     }
 
     async function adoptPrefs(parsed) {
@@ -687,7 +695,15 @@ export default {
         if (file.size > MAX_IMPORT_BYTES) throw new BackupError('That file is too large to be a Nurture backup.');
         let parsed;
         try { parsed = JSON.parse(await file.text()); } catch { throw new BackupError('This file isn’t a Nurture backup (it isn’t valid JSON).'); }
-        const res = await importBackup(parsed, { mode: 'merge' });
+        // The file's storage windows are adopted below (adoptPrefs) when this
+        // phone still has the defaults: its pouches are dated by them (DI-02).
+        let windows = null;
+        try {
+          const pv = validateBackup(parsed, { defaultBabyId: babyId() || undefined });
+          if (pv.ok && pv.data.settings.storageWindows
+            && JSON.stringify(S.get('storageWindows')) === JSON.stringify(SETTING_DEFAULTS.storageWindows)) windows = pv.data.settings.storageWindows;
+        } catch { /* importBackup reports a bad file */ }
+        const res = await importBackup(parsed, { mode: 'merge', storageWindows: windows });
         await adoptPrefs(parsed);
         // The restored baby's photo becomes the iPhone icon, as if picked here.
         const b = S.activeBaby();
@@ -905,6 +921,7 @@ export default {
         offSettings();
         for (const t of timers) clearTimeout(t);
         timers.clear();
+        if (ctx.router && typeof ctx.router.setRootBack === 'function') ctx.router.setRootBack(null);
         // Never drop what was typed: write anything still pending.
         flushName();
         flushGoal();
