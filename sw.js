@@ -48,6 +48,7 @@ const ASSETS = [
   './js/theme-boot.js',
   './js/core/audio.js',
   './js/core/backup.js',
+  './js/core/foreignImport.js',
   './js/core/db.js',
   './js/core/ics.js',
   './js/core/migrate.js',

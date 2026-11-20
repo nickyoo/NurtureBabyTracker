@@ -24,6 +24,7 @@
 // an import or an erase.
 
 import { backup } from '../core/backup.js';
+import { foreignImport } from '../core/foreignImport.js';
 import { shareIcs } from '../core/ics.js';
 import { sound } from '../core/audio.js';
 import { DEFAULT_STORAGE_WINDOWS, MAX_STORAGE_WINDOWS } from '../domain/inventory.js';
@@ -585,7 +586,7 @@ export default {
           <button type="button" class="btn btn-secondary btn-block" data-action="csv" ${busyAction === 'csv' ? html`aria-busy="true"` : ''}>${I('download', 22)}Export CSV</button>
           <p class="st-help">${`A spreadsheet of every entry, in ${unit() === 'mL' ? 'milliliters' : 'ounces'}.`}</p>
           <label class="btn btn-secondary btn-block st-file" data-key="import">
-            <input type="file" class="sr-only" accept=".json,application/json" data-import>
+            <input type="file" class="sr-only" accept=".json,.csv,application/json,text/csv" data-import>
             ${I('upload', 22)}<span>Import a backup</span>
           </label>
           <p class="st-help">Merge a partner’s backup into this phone, or restore everything from a file.</p>
@@ -1147,6 +1148,77 @@ export default {
             if (!(ex && ex.name === 'BackupError')) console.warn('settings: replace failed', ex);
             ctx.toast({ message: ex && ex.name === 'BackupError' ? ex.message : 'That file couldn’t be imported. Nothing was changed.', tone: 'warn' });
           }
+        },
+      });
+    }
+
+    // Another app's export (CSV, or a JSON record list that isn't a
+    // Nurture backup): convert it here, preview what would come over, and
+    // merge the candidate through the same trust boundary as a backup.
+    // Replace is not offered — a foreign export is partial by nature
+    // (no stash, no photos), so swapping everything for it would lose data.
+    async function routeImport(file, origin) {
+      const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';
+      let text;
+      try { text = await file.text(); } catch { openImport(file, origin); return; }
+      if (!isCsv && foreignImport.isNurtureBackupText(text)) { openImport(file, origin); return; }
+      const conv = foreignImport.convertForeignText(text);
+      if (!conv.ok) {
+        if (isCsv) { ctx.toast({ message: conv.error || 'That file couldn’t be imported.', tone: 'warn' }); return; }
+        openImport(file, origin); // a Nurture-shaped failure gets the backup path's own error
+        return;
+      }
+      openForeignImport(file, conv, origin);
+    }
+
+    function openForeignImport(file, conv, origin) {
+      const sourceLabel = { nara: 'Nara Baby', huckleberry: 'Huckleberry', generic: 'another tracker' }[conv.source] || 'another tracker';
+      const babyName = (conv.backup.settings.babies[0] || {}).name || '';
+      const skippedCount = conv.report.skipped.length;
+      const skipReasons = [...new Set(conv.report.skipped.map(s2 => s2.reason))].slice(0, 3);
+      ctx.openSheet({
+        title: `Import from ${sourceLabel}?`,
+        origin,
+        className: 'sheet-st-import',
+        render(body, api) {
+          render(body, html`
+            <p class="st-file-name">${I('upload', 18)}<span>${file.name}</span>${Number.isFinite(file.size) ? html`<small>${bytesText(file.size)}</small>` : ''}</p>
+            <div class="st-choice">
+              <p>This file holds <b>${foreignImport.describeConversion(conv.report)}</b>${babyName ? html` for <b>${babyName}</b>` : ''}. Merging adds what's new and keeps everything already here — importing the same file twice changes nothing.</p>
+              ${conv.report.warnings.map(w => html`<p>${w}</p>`)}
+              ${skippedCount ? html`<p><b>${skippedCount} ${skippedCount === 1 ? 'entry' : 'entries'} can't come over:</b> ${skipReasons.join(' · ')}</p>` : ''}
+            </div>
+            <p class="field-error" data-error hidden></p>
+            <div class="sheet-footer">
+              <button type="button" class="btn btn-primary btn-block" data-choice="merge">${I('download', 22)}Merge into this phone</button>
+            </div>`);
+          const err = body.querySelector('[data-error]');
+          let working = false;
+          const onClick = async (e) => {
+            const b = e.target.closest('[data-choice]');
+            if (!b || working) return;
+            working = true;
+            b.setAttribute('aria-busy', 'true');
+            err.hidden = true;
+            try {
+              const res = await backup.importBackup(conv.backup, { mode: 'merge' });
+              b.removeAttribute('aria-busy');
+              b.classList.add('is-success');
+              render(b, html`${I('check', 22)}Merged`);
+              setTimeout(() => api.close({ done: res }), SUCCESS_HOLD_MS);
+            } catch (ex) {
+              working = false;
+              b.removeAttribute('aria-busy');
+              err.hidden = false;
+              render(err, html`${I('info', 16)}${ex && ex.name === 'BackupError' ? ex.message : 'That file couldn’t be imported.'}`);
+              if (!(ex && ex.name === 'BackupError')) console.warn('settings: foreign import failed', ex);
+            }
+          };
+          body.addEventListener('click', onClick);
+          return () => body.removeEventListener('click', onClick);
+        },
+        onClose: (result) => {
+          if (result && result.done) ctx.toast({ message: importSummary(result.done) });
         },
       });
     }
@@ -1744,7 +1816,7 @@ export default {
         const file = t.files && t.files[0];
         const label = t.closest('label');
         t.value = '';
-        if (file) openImport(file, label);
+        if (file) routeImport(file, label);
         return;
       }
       if (t.matches('[data-photo]')) {
